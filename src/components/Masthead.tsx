@@ -18,45 +18,35 @@ const drugPrices = [
 
 /******************* ICONS ***********************/
 
-const SearchIcon: React.FC<{ className?: string }> = React.memo(function SearchIcon({ className }) {
+const SearchIcon: React.FC = React.memo(function SearchIcon() {
   return (
-    <svg className={className} style={{ width: '18px', height: '18px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
     </svg>
   )
 })
 
-const HamburgerIcon: React.FC<{ className?: string }> = React.memo(function HamburgerIcon({ className }) {
+const HamburgerIcon: React.FC = React.memo(function HamburgerIcon() {
   return (
-    <svg className={className} style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
     </svg>
   )
 })
 
-const CloseIcon: React.FC<{ className?: string }> = React.memo(function CloseIcon({ className }) {
+const CloseIcon: React.FC = React.memo(function CloseIcon() {
   return (
-    <svg className={className} style={{ width: '24px', height: '24px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
     </svg>
-  )
-})
-
-const ArrowUpIcon: React.FC = React.memo(function ArrowUpIcon() {
-  return (
-    <span style={{ marginLeft: '4px', fontSize: '10px', lineHeight: 1 }}>&#9650;</span>
-  )
-})
-
-const ArrowDownIcon: React.FC = React.memo(function ArrowDownIcon() {
-  return (
-    <span style={{ marginLeft: '4px', fontSize: '10px', lineHeight: 1 }}>&#9660;</span>
   )
 })
 
 /******************* DRUG TICKER ***********************/
 
 const DrugTicker: React.FC = React.memo(function DrugTicker() {
+  /******************* STATE ***********************/
+
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isVisible, setIsVisible] = useState(true)
 
@@ -64,46 +54,33 @@ const DrugTicker: React.FC = React.memo(function DrugTicker() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Fade out
       setIsVisible(false)
-      
-      // After fade out, change drug and fade in
       setTimeout(() => {
         setCurrentIndex((prev) => (prev + 1) % drugPrices.length)
         setIsVisible(true)
       }, 500)
     }, 4000)
-
     return () => clearInterval(interval)
   }, [])
 
-  /******************* RENDER ***********************/
+  /******************* COMPUTED ***********************/
 
   const currentDrug = drugPrices[currentIndex]
 
+  /******************* RENDER ***********************/
+
   return (
     <div
-      className="drug-ticker-item"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        fontFamily: 'var(--font-sans)',
-        fontSize: '14px',
-        opacity: isVisible ? 1 : 0,
-        transition: 'opacity 0.5s ease-in-out',
-      }}
+      className={`flex items-center font-sans text-lg transition-opacity duration-500 ${
+        isVisible ? 'opacity-100' : 'opacity-0'
+      }`}
     >
-      <span style={{ color: 'var(--color-ink)', marginRight: '6px' }}>{currentDrug.name}</span>
-      <span
-        style={{
-          color: currentDrug.isUp ? '#0a7c00' : '#d32f2f',
-          display: 'flex',
-          alignItems: 'center',
-          fontWeight: 500,
-        }}
-      >
+      <span className="text-[#666] mr-2">{currentDrug.name}</span>
+      <span className={`font-semibold text-xl ${currentDrug.isUp ? 'text-[#0a7c00]' : 'text-[#d32f2f]'}`}>
         {currentDrug.price}
-        {currentDrug.isUp ? <ArrowUpIcon /> : <ArrowDownIcon />}
+      </span>
+      <span className={`ml-1 text-xs ${currentDrug.isUp ? 'text-[#0a7c00]' : 'text-[#d32f2f]'}`}>
+        {currentDrug.isUp ? '▲' : '▼'}
       </span>
     </div>
   )
@@ -117,12 +94,15 @@ interface SearchOverlayProps {
 }
 
 const SearchOverlay: React.FC<SearchOverlayProps> = React.memo(function SearchOverlay({ isOpen, onClose }) {
+  /******************* STATE ***********************/
+
   const [searchQuery, setSearchQuery] = useState('')
+
+  /******************* FUNCTIONS ***********************/
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault()
     if (searchQuery.trim()) {
-      console.log('Searching for:', searchQuery)
       alert(`Search functionality coming soon! You searched for: "${searchQuery}"`)
     }
   }, [searchQuery])
@@ -131,66 +111,29 @@ const SearchOverlay: React.FC<SearchOverlayProps> = React.memo(function SearchOv
     setSearchQuery(e.target.value)
   }, [])
 
+  /******************* RENDER ***********************/
+
   if (!isOpen) return null
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(255, 255, 255, 0.98)',
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: '120px',
-      }}
-    >
+    <div className="fixed inset-0 bg-white/[0.98] z-[9999] flex flex-col items-center pt-[120px]">
       <button
         onClick={onClose}
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '8px',
-        }}
+        className="absolute top-5 right-5 bg-transparent border-none cursor-pointer p-2"
         type="button"
         aria-label="Close search"
       >
         <CloseIcon />
       </button>
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '600px', padding: '0 20px' }}>
+      <form onSubmit={handleSubmit} className="w-full max-w-[600px] px-5">
         <input
           type="text"
           value={searchQuery}
           onChange={handleInputChange}
           placeholder="Search The Wedding Times..."
           autoFocus
-          style={{
-            width: '100%',
-            fontSize: '24px',
-            fontFamily: 'var(--font-sans)',
-            padding: '16px 0',
-            border: 'none',
-            borderBottom: '2px solid var(--color-ink)',
-            outline: 'none',
-            background: 'transparent',
-          }}
+          className="w-full text-2xl font-sans py-4 border-0 border-b-2 border-[#121212] outline-none bg-transparent"
         />
-        <p style={{
-          fontFamily: 'var(--font-sans)',
-          fontSize: '13px',
-          color: 'var(--color-ink-lighter)',
-          marginTop: '12px',
-        }}>
-          Press Enter to search
-        </p>
       </form>
     </div>
   )
@@ -205,11 +148,11 @@ interface MobileMenuProps {
 
 const mobileMenuCategories = [
   { name: 'Bureaucracy', slug: 'bureaucracy' },
-  { name: 'Reception', slug: 'reception' },
+  { name: 'Leopoldplatz', slug: 'leopoldplatz' },
   { name: 'Nightlife', slug: 'nightlife' },
   { name: 'Opinion', slug: 'opinion' },
   { name: 'Doener & Drinks', slug: 'food-drink' },
-  { name: 'Family Drama', slug: 'family' },
+  { name: 'Crime', slug: 'crime' },
   { name: 'Techno', slug: 'techno' },
   { name: 'Kiez News', slug: 'kiez' },
 ]
@@ -218,24 +161,13 @@ const MobileMenu: React.FC<MobileMenuProps> = React.memo(function MobileMenu({ i
   if (!isOpen) return null
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'white',
-        zIndex: 9998,
-        overflowY: 'auto',
-      }}
-    >
-      <div style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-          <span style={{ fontFamily: 'var(--font-masthead)', fontSize: '1.5rem' }}>The Wedding Times</span>
+    <div className="fixed inset-0 bg-white z-[9998] overflow-y-auto">
+      <div className="p-5">
+        <div className="flex justify-between items-center mb-8">
+          <span className="font-masthead text-2xl">The Wedding Times</span>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px' }}
+            className="bg-transparent border-none cursor-pointer p-2"
             type="button"
             aria-label="Close menu"
           >
@@ -248,15 +180,7 @@ const MobileMenu: React.FC<MobileMenuProps> = React.memo(function MobileMenu({ i
               key={category.slug}
               href={`/section/${category.slug}`}
               onClick={onClose}
-              style={{
-                display: 'block',
-                fontFamily: 'var(--font-sans)',
-                fontSize: '18px',
-                fontWeight: 600,
-                padding: '16px 0',
-                borderBottom: '1px solid var(--color-rule)',
-                color: 'var(--color-ink)',
-              }}
+              className="block font-sans text-lg font-semibold py-4 border-b border-[#e2e2e2] text-[#121212]"
             >
               {category.name}
             </Link>
@@ -317,170 +241,64 @@ export const Masthead: React.FC = observer(function Masthead() {
       <SearchOverlay isOpen={isSearchOpen} onClose={handleSearchClose} />
       <MobileMenu isOpen={isMobileMenuOpen} onClose={handleMobileMenuClose} />
       
-      <header style={{ padding: '0 20px' }}>
-        {/* Top bar - full width with date on left */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '10px 0',
-            borderBottom: '1px solid var(--color-rule)',
-            width: '100%',
-          }}
-        >
-          {/* Left - Date and Today's Paper */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-sans)',
-                fontSize: '11px',
-                color: 'var(--color-ink)',
-              }}
-            >
-              {formattedDate}
-            </span>
-            <Link
-              href="/todays-paper"
-              style={{
-                fontFamily: 'var(--font-sans)',
-                fontSize: '11px',
-                color: 'var(--color-ink)',
-                textDecoration: 'underline',
-              }}
-            >
-              Today&apos;s Paper
-            </Link>
-          </div>
+      <header className="px-5">
+        {/* Row 1: Search left, Account right */}
+        <div className="flex items-center justify-between py-2">
+          <button
+            onClick={handleSearchOpen}
+            className="bg-transparent border-none cursor-pointer p-1 flex items-center"
+            aria-label="Search"
+            type="button"
+          >
+            <SearchIcon />
+          </button>
 
-          {/* Right - Search and Account */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <button
-              onClick={handleSearchOpen}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-              aria-label="Search"
-              type="button"
-            >
-              <SearchIcon />
-            </button>
-            
-            {/* Hamburger menu - mobile only */}
+          <div className="flex items-center gap-4">
             <button
               onClick={handleMobileMenuOpen}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-              className="mobile-menu-button"
+              className="bg-transparent border-none cursor-pointer p-1 flex items-center md:hidden"
               aria-label="Open menu"
               type="button"
             >
               <HamburgerIcon />
             </button>
-            
             <Link
               href="/admin"
-              className="desktop-only"
-              style={{
-                fontFamily: 'var(--font-sans)',
-                fontSize: '11px',
-                fontWeight: 600,
-              }}
+              className="hidden md:block font-sans text-[13px] font-medium text-[#121212]"
             >
-              Log In
+              Account
             </Link>
           </div>
         </div>
 
-        {/* Masthead row - Title on left/center, Drug ticker on right */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 0',
-          }}
-        >
-          {/* Spacer for centering on desktop */}
-          <div className="masthead-spacer" style={{ flex: 1 }} />
-          
-          {/* Title - centered */}
-          <Link href="/">
-            <h1 className="masthead-title">
-              The Wedding Times
-            </h1>
-          </Link>
-          
-          {/* Drug ticker - right side */}
-          <div className="masthead-ticker" style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Row 2: Date left, Masthead center, Ticker right */}
+        <div className="flex items-center justify-between py-3 pb-5">
+          {/* Left - Date and Today's Paper */}
+          <div className="hidden md:flex flex-col flex-1">
+            <div className="font-sans text-[13px] text-[#121212]">{formattedDate}</div>
+            <Link
+              href="/todays-paper"
+              className="font-sans text-[13px] text-[#121212] underline"
+            >
+              Today&apos;s Paper
+            </Link>
+          </div>
+
+          {/* Center - Masthead */}
+          <div className="text-center">
+            <Link href="/">
+              <h1 className="font-masthead font-normal tracking-tight text-[#121212] leading-none whitespace-nowrap text-[2.5rem] md:text-[5rem] lg:text-[6.5rem] xl:text-[7.5rem]">
+                The Wedding Times
+              </h1>
+            </Link>
+          </div>
+
+          {/* Right - Drug ticker */}
+          <div className="hidden md:flex flex-1 justify-end items-center">
             <DrugTicker />
           </div>
         </div>
       </header>
-
-      {/* CSS for responsive elements */}
-      <style jsx global>{`
-        .masthead-title {
-          font-family: var(--font-masthead);
-          font-weight: 400;
-          letter-spacing: -0.01em;
-          color: var(--color-ink);
-          line-height: 1;
-          margin: 0;
-          white-space: nowrap;
-          font-size: 2.2rem;
-        }
-        
-        .masthead-spacer {
-          display: none;
-        }
-        
-        .masthead-ticker {
-          display: none !important;
-        }
-        
-        .mobile-menu-button {
-          display: flex;
-        }
-        .desktop-only {
-          display: none;
-        }
-        .desktop-nav {
-          display: none;
-        }
-        
-        @media (min-width: 768px) {
-          .masthead-title {
-            font-size: 8rem;
-          }
-          .masthead-spacer {
-            display: block;
-          }
-          .masthead-ticker {
-            display: flex !important;
-          }
-          .mobile-menu-button {
-            display: none !important;
-          }
-          .desktop-only {
-            display: flex !important;
-          }
-          .desktop-nav {
-            display: flex !important;
-          }
-        }
-      `}</style>
     </>
   )
 })

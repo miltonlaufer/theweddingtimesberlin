@@ -1,129 +1,56 @@
 'use client'
 
-import React, { useCallback } from 'react'
+import React from 'react'
 import { observer } from 'mobx-react-lite'
 import Link from 'next/link'
-import { useArticleStore, useUIStore } from '@/stores'
 
-/******************* DEFAULT CATEGORIES ***********************/
+/******************* ICONS ***********************/
 
-const defaultCategories = [
-  { id: 'bureaucracy', name: 'Bureaucracy', slug: 'bureaucracy', order: 1 },
-  { id: 'reception', name: 'Reception', slug: 'reception', order: 2 },
-  { id: 'nightlife', name: 'Nightlife', slug: 'nightlife', order: 3 },
-  { id: 'opinion', name: 'Opinion', slug: 'opinion', order: 4 },
-  { id: 'food-drink', name: 'Doener & Drinks', slug: 'food-drink', order: 5 },
-  { id: 'family', name: 'Family Drama', slug: 'family', order: 6 },
-  { id: 'techno', name: 'Techno', slug: 'techno', order: 7 },
-  { id: 'kiez', name: 'Kiez News', slug: 'kiez', order: 8 },
-  { id: 'gentrification', name: 'Gentrification', slug: 'gentrification', order: 9 },
-]
-
-/******************* CARET ICON ***********************/
-
-const CaretIcon: React.FC = React.memo(function CaretIcon() {
+const CaretDownIcon: React.FC = React.memo(function CaretDownIcon() {
   return (
-    <svg
-      style={{ width: '10px', height: '10px', marginLeft: '4px', opacity: 0.6 }}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    <svg className="w-[7px] h-[4px]" viewBox="0 0 7 4" fill="currentColor">
+      <path d="M3.5 4L0 0h7L3.5 4z" />
     </svg>
   )
 })
 
+/******************* DATA ***********************/
+
+const categories = [
+  { name: 'Bureaucracy', slug: 'bureaucracy' },
+  { name: 'Leopoldplatz', slug: 'leopoldplatz' },
+  { name: 'Nightlife', slug: 'nightlife' },
+  { name: 'Opinion', slug: 'opinion' },
+  { name: 'Doener & Drinks', slug: 'food-drink' },
+  { name: 'Crime', slug: 'crime' },
+  { name: 'Techno', slug: 'techno' },
+  { name: 'Kiez News', slug: 'kiez' },
+  { name: 'Gentrification', slug: 'gentrification' },
+]
+
 /******************* MAIN COMPONENT ***********************/
 
 export const Navigation: React.FC = observer(function Navigation() {
-  /******************* STORE ***********************/
-
-  const articleStore = useArticleStore()
-  const uiStore = useUIStore()
-
-  /******************* COMPUTED ***********************/
-
-  const categories = articleStore.sortedCategories.length > 0
-    ? articleStore.sortedCategories
-    : defaultCategories
-
-  /******************* FUNCTIONS ***********************/
-
-  const handleCategoryClick = useCallback(
-    (slug: string) => {
-      articleStore.setSelectedCategory(slug)
-      uiStore.setActiveSection(slug)
-    },
-    [articleStore, uiStore]
-  )
-
-  /******************* RENDER ***********************/
-
   return (
-    <>
-      {/* Desktop Navigation - hidden on mobile */}
-      <nav className="desktop-nav" style={{ padding: '0 20px' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '20px',
-            padding: '12px 0',
-            overflowX: 'auto',
-          }}
-        >
-          {categories.map((category) => (
-            <Link
-              key={category.id}
-              href={`/section/${category.slug}`}
-              onClick={() => handleCategoryClick(category.slug)}
-              style={{
-                fontFamily: 'var(--font-sans)',
-                fontSize: '14px',
-                fontWeight: 500,
-                color: 'var(--color-ink)',
-                whiteSpace: 'nowrap',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '4px 0',
-              }}
-            >
-              {category.name}
-              <CaretIcon />
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      {/* Double line separator */}
-      <div style={{ padding: '0 20px' }}>
-        <div
-          style={{
-            borderTop: '1px solid var(--color-ink)',
-            marginBottom: '3px',
-          }}
-        />
-        <div
-          style={{
-            borderTop: '3px solid var(--color-ink)',
-          }}
-        />
+    <nav>
+      {/* Navigation links */}
+      <div className="flex justify-center items-center gap-6 py-2 px-5 flex-wrap overflow-x-auto">
+        {categories.map((category) => (
+          <Link
+            key={category.slug}
+            href={`/section/${category.slug}`}
+            className="font-sans text-[15px] font-semibold text-[#121212] flex items-center gap-[5px] whitespace-nowrap leading-none"
+          >
+            {category.name}
+            <CaretDownIcon />
+          </Link>
+        ))}
       </div>
-
-      {/* CSS for responsive elements */}
-      <style jsx global>{`
-        .desktop-nav {
-          display: none;
-        }
-        
-        @media (min-width: 768px) {
-          .desktop-nav {
-            display: block !important;
-          }
-        }
-      `}</style>
-    </>
+      
+      {/* Double line - aligned with content columns */}
+      <div className="px-5">
+        <div className="double-rule" />
+      </div>
+    </nav>
   )
 })

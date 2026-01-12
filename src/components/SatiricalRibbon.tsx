@@ -2,14 +2,12 @@
 
 import React from 'react'
 
-/******************* COMPONENT ***********************/
-
 export const SatiricalRibbon: React.FC = React.memo(function SatiricalRibbon() {
-  /******************* RENDER ***********************/
-
   return (
-    <div className="satirical-ribbon" aria-label="This is a satirical publication">
-      Satirical
+    <div className="fixed top-3 -right-7 z-[100] pointer-events-none">
+      <div className="bg-[#d32f2f] text-white font-sans text-[9px] font-bold uppercase tracking-wider py-1 px-9 rotate-45 shadow-md">
+        Satirical
+      </div>
     </div>
   )
 })

@@ -12,19 +12,19 @@ import type { IArticle } from '@/types/article'
 const mockArticles: IArticle[] = [
   {
     id: '1',
-    headline: 'Standesamt Appointment Secured for 2027; Couple "Cautiously Optimistic"',
-    subheadline: 'After 18 months on the waiting list, Berlin bureaucracy delivers another victory for patience',
-    slug: 'standesamt-appointment-2027',
-    featuredImageUrl: 'https://picsum.photos/seed/berlin1/800/600',
-    imageCaption: 'Klaus Weber/The Wedding Times',
+    headline: 'Buergeramt Appointment Secured for 2027 After 3-Year Wait',
+    subheadline: 'Local resident celebrates bureaucratic victory, plans to finally register address',
+    slug: 'buergeramt-2027',
+    featuredImageUrl: 'https://picsum.photos/seed/bureaucracy1/800/600',
+    imageCaption: 'Photo by Wedding Bureaucracy Watch',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'Local couple Stefan and Maria have finally received confirmation of their civil wedding appointment at Standesamt Mitte, scheduled for March 2027. "We started dating in 2019, so really this is moving quite fast by Berlin standards," said Stefan, visibly emotional.',
+      'In a landmark achievement for patience and perseverance, a Wedding resident has finally secured an appointment at the local Buergeramt for their Anmeldung, scheduled for the spring of 2027. The resident, who began their application process in 2024, expressed "cautious optimism" about the upcoming registration.',
     category: { id: 'c1', name: 'Bureaucracy', slug: 'bureaucracy', description: '', order: 0 },
     author: {
       id: 'a1',
-      name: 'Helga Zimmermann',
-      slug: 'helga-zimmermann',
+      name: 'Greta Schmidt',
+      slug: 'greta-schmidt',
       title: 'Bureaucracy Correspondent',
     },
     publishedAt: new Date().toISOString(),
@@ -35,15 +35,15 @@ const mockArticles: IArticle[] = [
   },
   {
     id: '2',
-    headline: 'Wedding Guest From Schwabia Complains Berlin "Too Dirty" While Standing in Own Vomit',
-    subheadline: 'Incident occurred at 4 AM outside Berghain after guest was denied entry for the third time',
-    slug: 'schwabian-guest-dirty',
-    featuredImageUrl: 'https://picsum.photos/seed/berlin2/800/600',
+    headline: 'Schwabian Tourist Complains Wedding Too Dirty While Standing in Own Vomit',
+    subheadline: 'Incident outside Spaeti sparks debate on urban hygiene standards',
+    slug: 'schwabian-dirty-wedding',
+    featuredImageUrl: 'https://picsum.photos/seed/dirtyberlin/800/600',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'A wedding guest from Stuttgart spent forty-five minutes lecturing locals about Berlin\'s cleanliness standards while standing ankle-deep in his own Jaegermeister-induced emissions. "In Schwabia, we would never tolerate this," he reportedly said, gesturing at a nearby kebab wrapper.',
-    category: { id: 'c2', name: 'Reception', slug: 'reception', description: '', order: 1 },
-    author: { id: 'a2', name: 'Hans-Peter Mueller', slug: 'hans-peter-mueller', title: 'Society Editor' },
+      'A recent visitor from Stuttgart, identified only as "Klaus," was overheard loudly lamenting the perceived filth of Wedding streets, moments before slipping into a puddle of his own making outside a popular Spaeti on Muellerstrasse.',
+    category: { id: 'c2', name: 'Nightlife', slug: 'nightlife', description: '', order: 1 },
+    author: { id: 'a2', name: 'Hans Muller', slug: 'hans-muller', title: 'Kiez Reporter' },
     publishedAt: new Date().toISOString(),
     status: 'published',
     isFeatured: true,
@@ -52,14 +52,14 @@ const mockArticles: IArticle[] = [
   },
   {
     id: '3',
-    headline: "Bride's Uncle From Neukoelln Offers to 'Handle' Groom's Family Dispute",
-    slug: 'uncle-neukoelln-handle',
-    featuredImageUrl: 'https://picsum.photos/seed/berlin3/800/600',
+    headline: "Neukoelln Man Offers to 'Handle' Neighbour's Parking Dispute",
+    slug: 'neukoelln-parking-dispute',
+    featuredImageUrl: 'https://picsum.photos/seed/familydrama/800/600',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'Tensions rose during the rehearsal dinner when the bride\'s uncle, a long-time Neukoelln resident, offered to resolve a seating arrangement disagreement "the old-fashioned way." He was later seen making phone calls in the parking lot.',
-    category: { id: 'c3', name: 'Family Drama', slug: 'family', description: '', order: 2 },
-    author: { id: 'a3', name: 'Fatima El-Rashid', slug: 'fatima-rashid', title: 'Family Affairs Analyst' },
+      'Tensions flared on Seestrasse when a local man, a prominent figure from Neukoelln visiting his cousin in Wedding, reportedly offered to "have a chat" with a neighbour over a contested parking spot.',
+    category: { id: 'c3', name: 'Kiez News', slug: 'kiez', description: '', order: 2 },
+    author: { id: 'a3', name: 'Lena Richter', slug: 'lena-richter', title: 'Social Observer' },
     publishedAt: new Date().toISOString(),
     status: 'published',
     isFeatured: true,
@@ -68,13 +68,13 @@ const mockArticles: IArticle[] = [
   },
   {
     id: '4',
-    headline: 'Prenzlauer Berg Mother Insists Her Child Is "Too Gifted" for Ring Bearer Role',
-    slug: 'prenzlauer-berg-gifted-child',
+    headline: 'Prenzlauer Berg Mother Refuses to Let Child Play in Leopoldplatz',
+    slug: 'prenzlauer-berg-leopoldplatz',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'Local mother of a 4-year-old has declined the ring bearer position, explaining that little Konstantin-Amadeus is "already reading Nietzsche in the original German" and would find the task "intellectually unstimulating."',
+      'A visiting mother from Prenzlauer Berg has refused to let her child use the playground at Leopoldplatz, citing concerns about "the wrong kind of diversity" and insufficient organic snack options.',
     category: { id: 'c4', name: 'Opinion', slug: 'opinion', description: '', order: 3 },
-    author: { id: 'a4', name: 'Friedrich Schulze', slug: 'friedrich-schulze', title: 'Opinion Columnist' },
+    author: { id: 'a4', name: 'Dr. Klaus Weber', slug: 'klaus-weber', title: 'Opinion Columnist' },
     publishedAt: new Date().toISOString(),
     status: 'published',
     isFeatured: false,
@@ -83,14 +83,14 @@ const mockArticles: IArticle[] = [
   },
   {
     id: '5',
-    headline: "DJ's 6-Hour Techno Set Leaves Elderly Guests 'Forever Changed'",
-    slug: 'techno-dj-elderly',
-    featuredImageUrl: 'https://picsum.photos/seed/berlin5/800/600',
+    headline: "Spaeti DJ's 6-Hour Techno Set Leaves Elderly Neighbours 'Forever Changed'",
+    slug: 'spaeti-techno-set',
+    featuredImageUrl: 'https://picsum.photos/seed/techno/800/600',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'What began as a traditional wedding reception transformed into an impromptu Tresor tribute when the DJ refused to play anything recorded after 1997. Grandmother Ingrid, 84, was last seen demanding "more bass."',
-    category: { id: 'c2', name: 'Reception', slug: 'reception', description: '', order: 1 },
-    author: { id: 'a1', name: 'Helga Zimmermann', slug: 'helga-zimmermann' },
+      'What started as a quiet Thursday evening at a Reinickendorfer Strasse Spaeti quickly escalated into a six-hour odyssey of pulsating rhythms, leaving several elderly residents of the adjacent building questioning their life choices.',
+    category: { id: 'c5', name: 'Techno', slug: 'techno', description: '', order: 4 },
+    author: { id: 'a1', name: 'Greta Schmidt', slug: 'greta-schmidt' },
     publishedAt: new Date().toISOString(),
     status: 'published',
     isFeatured: false,
@@ -99,14 +99,14 @@ const mockArticles: IArticle[] = [
   },
   {
     id: '6',
-    headline: 'Man Found Unconscious in Wedding Venue Bathroom Claims He "Just Got Here"',
-    slug: 'bathroom-unconscious-guest',
-    featuredImageUrl: 'https://picsum.photos/seed/berlin6/800/600',
+    headline: 'Man Found at Leopoldplatz Claims He "Just Got Here"',
+    slug: 'man-leopoldplatz',
+    featuredImageUrl: 'https://picsum.photos/seed/party/800/600',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'A guest discovered passed out in the bathroom stall at 3 AM insisted he had "only just arrived" and "barely had anything to drink." Security footage shows him entering the venue at 6 PM with two bottles of Sternburg.',
-    category: { id: 'c3', name: 'Reception', slug: 'reception', description: '', order: 2 },
-    author: { id: 'a3', name: 'Fatima El-Rashid', slug: 'fatima-rashid' },
+      'Emergency services were called to Leopoldplatz where a man was found unresponsive on a bench. Upon regaining consciousness, he insisted he had "just arrived" despite witnesses confirming he had been there since Tuesday.',
+    category: { id: 'c2', name: 'Nightlife', slug: 'nightlife', description: '', order: 1 },
+    author: { id: 'a3', name: 'Lena Richter', slug: 'lena-richter' },
     publishedAt: new Date().toISOString(),
     status: 'published',
     isFeatured: false,
@@ -115,13 +115,13 @@ const mockArticles: IArticle[] = [
   },
   {
     id: '7',
-    headline: 'Caterer Insists Doener Kebab Tower Is "Elevated German Cuisine"',
-    slug: 'doener-tower-cuisine',
+    headline: 'New Doener Shop on Muellerstrasse Declared "Elevated German Cuisine"',
+    slug: 'doener-elevated',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'The wedding caterer defended his decision to replace the traditional wedding cake with a 12-tier Doener construction, calling it "a commentary on Berlin\'s multicultural identity and also really delicious at 4 AM."',
-    category: { id: 'c5', name: 'Food & Drink', slug: 'food-drink', description: '', order: 4 },
-    author: { id: 'a2', name: 'Hans-Peter Mueller', slug: 'hans-peter-mueller' },
+      'A newly opened Doener shop on Muellerstrasse has sparked controversy by charging 12 euros for a "deconstructed Doener experience" and referring to their garlic sauce as "artisanal aioli".',
+    category: { id: 'c6', name: 'Doener & Drinks', slug: 'food-drink', description: '', order: 5 },
+    author: { id: 'a2', name: 'Hans Muller', slug: 'hans-muller' },
     publishedAt: new Date().toISOString(),
     status: 'published',
     isFeatured: false,
@@ -130,14 +130,14 @@ const mockArticles: IArticle[] = [
   },
   {
     id: '8',
-    headline: 'Wedding Officiant Still Waiting for Anmeldung Appointment to Legally Exist',
-    slug: 'officiant-anmeldung',
-    featuredImageUrl: 'https://picsum.photos/seed/berlin8/800/600',
+    headline: 'Local Resident Still Waiting for Anmeldung to Legally Exist',
+    slug: 'anmeldung-waiting',
+    featuredImageUrl: 'https://picsum.photos/seed/bureaucracy2/800/600',
     content: '<p>Full article content here...</p>',
     excerpt:
-      'The wedding has been postponed indefinitely after it emerged the officiant, a recent Berlin transplant, has been unable to register his address since moving here in 2021. "I\'ve tried 47 times," he said, refreshing the Buergeramt website.',
-    category: { id: 'c6', name: 'Bureaucracy', slug: 'bureaucracy', description: '', order: 5 },
-    author: { id: 'a4', name: 'Friedrich Schulze', slug: 'friedrich-schulze' },
+      'A Wedding resident entering their third year without an Anmeldung appointment has begun to question whether they legally exist, as they remain unable to open a bank account, sign a phone contract, or prove their identity.',
+    category: { id: 'c1', name: 'Bureaucracy', slug: 'bureaucracy', description: '', order: 0 },
+    author: { id: 'a4', name: 'Dr. Klaus Weber', slug: 'klaus-weber' },
     publishedAt: new Date().toISOString(),
     status: 'published',
     isFeatured: false,
@@ -146,117 +146,9 @@ const mockArticles: IArticle[] = [
   },
 ]
 
-/******************* STYLES ***********************/
-
-const styles = {
-  headlineImage: {
-    position: 'relative' as const,
-    aspectRatio: '16/10',
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-  },
-  imageCaption: {
-    fontFamily: 'var(--font-sans)',
-    fontSize: '11px',
-    color: 'var(--color-ink-lighter)',
-    textAlign: 'right' as const,
-    marginTop: '4px',
-  },
-  mainHeadline: {
-    fontFamily: 'var(--font-headline)',
-    fontSize: '28px',
-    fontWeight: 700,
-    color: 'var(--color-ink)',
-    lineHeight: 1.15,
-    margin: '12px 0 0 0',
-  },
-  mainSubheadline: {
-    fontFamily: 'var(--font-body)',
-    fontSize: '16px',
-    color: 'var(--color-ink-light)',
-    lineHeight: 1.5,
-    marginTop: '8px',
-  },
-  articleHeadline: {
-    fontFamily: 'var(--font-headline)',
-    fontSize: '18px',
-    fontWeight: 700,
-    color: 'var(--color-ink)',
-    lineHeight: 1.2,
-    margin: 0,
-  },
-  articleExcerpt: {
-    fontFamily: 'var(--font-body)',
-    fontSize: '15px',
-    color: 'var(--color-ink-light)',
-    lineHeight: 1.5,
-    marginTop: '8px',
-  },
-  readTime: {
-    fontFamily: 'var(--font-sans)',
-    fontSize: '11px',
-    color: 'var(--color-ink-lighter)',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em',
-    marginTop: '8px',
-  },
-  articleItem: {
-    paddingBottom: '20px',
-    marginBottom: '20px',
-    borderBottom: '1px solid var(--color-rule)',
-  },
-  articleItemLast: {
-    paddingBottom: '20px',
-    marginBottom: '0',
-  },
-  articleHeadlineSmall: {
-    fontFamily: 'var(--font-headline)',
-    fontSize: '16px',
-    fontWeight: 700,
-    color: 'var(--color-ink)',
-    lineHeight: 1.2,
-    margin: 0,
-  },
-  articleExcerptSmall: {
-    fontFamily: 'var(--font-body)',
-    fontSize: '14px',
-    color: 'var(--color-ink-light)',
-    lineHeight: 1.5,
-    marginTop: '6px',
-  },
-  thumbnailWrapper: {
-    position: 'relative' as const,
-    width: '100px',
-    height: '70px',
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-    flexShrink: 0,
-  },
-  opinionSection: {
-    marginTop: '32px',
-    paddingTop: '16px',
-    borderTop: '2px solid var(--color-ink)',
-  },
-  sectionTitle: {
-    fontFamily: 'var(--font-headline)',
-    fontSize: '18px',
-    fontWeight: 700,
-    color: 'var(--color-ink)',
-    marginBottom: '16px',
-  },
-  authorName: {
-    fontFamily: 'var(--font-sans)',
-    fontSize: '12px',
-    fontWeight: 700,
-    color: 'var(--color-ink)',
-    textTransform: 'uppercase' as const,
-    marginBottom: '4px',
-  },
-}
-
 /******************* HOMEPAGE COMPONENT ***********************/
 
-const HomePage: React.FC = observer(function HomePage() {
+export default observer(function HomePage() {
   /******************* STORE ***********************/
 
   const articleStore = useArticleStore()
@@ -264,9 +156,9 @@ const HomePage: React.FC = observer(function HomePage() {
   /******************* COMPUTED ***********************/
 
   const headlineArticle = useMemo(() => mockArticles.find((a) => a.isHeadline), [])
-  const leftColumnArticles = useMemo(() => mockArticles.filter((a) => !a.isHeadline).slice(0, 3), [])
-  const rightColumnArticles = useMemo(() => mockArticles.filter((a) => !a.isHeadline).slice(3, 7), [])
-  const opinionArticles = useMemo(() => mockArticles.filter((a) => a.category.slug === 'opinion'), [])
+  const leftColumnArticles = useMemo(() => mockArticles.filter((a) => !a.isHeadline && a.layout !== 'opinion').slice(0, 3), [])
+  const rightColumnArticles = useMemo(() => mockArticles.filter((a) => !a.isHeadline && a.layout !== 'opinion').slice(3, 7), [])
+  const opinionArticle = useMemo(() => mockArticles.find((a) => a.layout === 'opinion'), [])
 
   /******************* EFFECTS ***********************/
 
@@ -277,109 +169,130 @@ const HomePage: React.FC = observer(function HomePage() {
   /******************* RENDER ***********************/
 
   return (
-    <div className="homepage-container">
-      {/* Main 3-column grid */}
-      <div className="main-grid">
-        {/* Center Column - Main headline with image (shown first on mobile) */}
-        <div className="center-column">
+    <main className="py-6 px-5 w-full">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-0">
+        {/* Left Column: Text-only articles */}
+        <div className="lg:pr-7 lg:border-r lg:border-[#e2e2e2]">
+          {leftColumnArticles.map((article, index) => (
+            <article
+              key={article.id}
+              className={`pb-6 mb-6 ${index < leftColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''
+                }`}
+            >
+              <Link href={`/article/${article.slug}`}>
+                <h3 className="font-headline text-[26px] font-bold leading-[1.15] text-[#121212] mb-4">
+                  {article.headline}
+                </h3>
+              </Link>
+              <p className="font-serif text-xl leading-[1.4] text-[#333]">
+                {article.excerpt}
+              </p>
+              <p className="font-sans text-[13px] font-medium text-[#666] mt-3 uppercase tracking-wider">
+                6 MIN READ
+              </p>
+            </article>
+          ))}
+        </div>
+
+        {/* Center Column: Main headline with large image */}
+        <div className="lg:px-7 lg:border-r lg:border-[#e2e2e2]">
           {headlineArticle && (
             <article>
               {headlineArticle.featuredImageUrl && (
                 <Link href={`/article/${headlineArticle.slug}`}>
-                  <div style={styles.headlineImage}>
+                  <div className="relative w-full aspect-[16/10] mb-3">
                     <Image
                       src={headlineArticle.featuredImageUrl}
                       alt={headlineArticle.headline}
                       fill
-                      style={{ objectFit: 'cover' }}
+                      className="object-cover"
                       sizes="(max-width: 768px) 100vw, 50vw"
                       priority
                     />
                   </div>
-                  <p style={styles.imageCaption}>{headlineArticle.imageCaption}</p>
                 </Link>
               )}
+              {headlineArticle.imageCaption && (
+                <p className="font-sans text-sm text-[#666] mb-4 text-right">
+                  {headlineArticle.imageCaption}
+                </p>
+              )}
               <Link href={`/article/${headlineArticle.slug}`}>
-                <h2 style={styles.mainHeadline}>{headlineArticle.headline}</h2>
+                <h2 className="font-headline text-[40px] font-bold leading-[1.1] text-[#121212] mb-5">
+                  {headlineArticle.headline}
+                </h2>
               </Link>
-              <p style={styles.mainSubheadline}>{headlineArticle.subheadline}</p>
+              {headlineArticle.subheadline && (
+                <p className="font-serif text-2xl leading-[1.3] text-[#333] mb-4">
+                  {headlineArticle.subheadline}
+                </p>
+              )}
+              <p className="font-serif text-xl leading-[1.4] text-[#333]">
+                {headlineArticle.excerpt}
+              </p>
             </article>
           )}
         </div>
 
-        {/* Left Column - Text-only articles */}
-        <div className="left-column">
-          {leftColumnArticles.map((article, index) => (
-            <article
-              key={article.id}
-              style={index < leftColumnArticles.length - 1 ? styles.articleItem : styles.articleItemLast}
-            >
-              <Link href={`/article/${article.slug}`}>
-                <h3 style={styles.articleHeadline}>{article.headline}</h3>
-              </Link>
-              <p style={styles.articleExcerpt}>{article.excerpt}</p>
-              <p style={styles.readTime}>4 min read</p>
-            </article>
-          ))}
-        </div>
-
-        {/* Right Column - Featured articles with thumbnails */}
-        <div className="right-column">
+        {/* Right Column: Articles with thumbnails */}
+        <div className="lg:pl-7">
           {rightColumnArticles.map((article, index) => (
             <article
               key={article.id}
-              style={{
-                display: index < 2 ? 'flex' : 'block',
-                gap: '12px',
-                paddingBottom: '16px',
-                marginBottom: '16px',
-                borderBottom: index < rightColumnArticles.length - 1 ? '1px solid var(--color-rule)' : 'none',
-              }}
+              className={`flex gap-4 pb-5 mb-5 ${index < rightColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''
+                }`}
             >
-              <div style={{ flex: 1 }}>
+              <div className="flex-1">
                 <Link href={`/article/${article.slug}`}>
-                  <h3 style={styles.articleHeadlineSmall}>{article.headline}</h3>
+                  <h3 className="font-headline text-[22px] font-bold leading-[1.2] text-[#121212] mb-3">
+                    {article.headline}
+                  </h3>
                 </Link>
-                <p style={styles.articleExcerptSmall}>{article.excerpt}</p>
-                <p style={styles.readTime}>5 min read</p>
+                <p className="font-serif text-lg leading-[1.35] text-[#333] line-clamp-3">
+                  {article.excerpt}
+                </p>
+                <p className="font-sans text-xs font-medium text-[#666] mt-2.5 uppercase tracking-wider">
+                  5 MIN READ
+                </p>
               </div>
-              {index < 2 && article.featuredImageUrl && (
-                <Link href={`/article/${article.slug}`}>
-                  <div style={styles.thumbnailWrapper}>
+              {article.featuredImageUrl && (
+                <Link href={`/article/${article.slug}`} className="shrink-0">
+                  <div className="relative w-[150px] h-[100px]">
                     <Image
                       src={article.featuredImageUrl}
                       alt={article.headline}
                       fill
-                      style={{ objectFit: 'cover' }}
-                      sizes="120px"
+                      className="object-cover"
+                      sizes="150px"
                     />
                   </div>
                 </Link>
               )}
             </article>
           ))}
+
+          {/* Opinion Section */}
+          {opinionArticle && (
+            <div className="mt-7 pt-6 border-t-[3px] border-[#121212]">
+              <h4 className="font-sans text-lg font-bold uppercase tracking-wider text-[#121212] mb-4">
+                Opinion
+              </h4>
+              <article>
+                {opinionArticle.author?.name && (
+                  <p className="font-sans text-base font-bold text-[#121212] mb-2">
+                    {opinionArticle.author.name}
+                  </p>
+                )}
+                <Link href={`/article/${opinionArticle.slug}`}>
+                  <h3 className="font-headline text-2xl font-medium leading-[1.25] text-[#121212]">
+                    {opinionArticle.headline}
+                  </h3>
+                </Link>
+              </article>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Opinion Section */}
-      {opinionArticles.length > 0 && (
-        <section style={styles.opinionSection}>
-          <h2 style={styles.sectionTitle}>Opinion</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
-            {opinionArticles.map((article) => (
-              <article key={article.id}>
-                <p style={styles.authorName}>{article.author.name}</p>
-                <Link href={`/article/${article.slug}`}>
-                  <h3 style={styles.articleHeadlineSmall}>{article.headline}</h3>
-                </Link>
-                <p style={styles.articleExcerptSmall}>{article.excerpt}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
+    </main>
   )
 })
-
-export default HomePage

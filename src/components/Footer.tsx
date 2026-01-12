@@ -11,22 +11,22 @@ const footerSections = [
     links: [
       { name: 'Home Page', href: '/' },
       { name: 'Bureaucracy', href: '/section/bureaucracy' },
-      { name: 'Reception', href: '/section/reception' },
+      { name: 'Leopoldplatz', href: '/section/leopoldplatz' },
       { name: 'Nightlife', href: '/section/nightlife' },
-      { name: 'Family Drama', href: '/section/family' },
+      { name: 'Crime', href: '/section/crime' },
       { name: 'Kiez News', href: '/section/kiez' },
       { name: 'Gentrification', href: '/section/gentrification' },
     ],
   },
   {
-    title: 'BERLIN LIFE',
+    title: 'WEDDING LIFE',
     links: [
       { name: 'Doener & Drinks', href: '/section/food-drink' },
       { name: 'Techno', href: '/section/techno' },
       { name: 'Spaetkauf Reviews', href: '/section/spaeti' },
       { name: 'BVG Delays', href: '/section/bvg' },
       { name: 'Buergeramt Tips', href: '/section/buergeramt' },
-      { name: 'Gorlitzer Park', href: '/section/goerlitzer' },
+      { name: 'Muellerstrasse', href: '/section/muellerstrasse' },
     ],
   },
   {
@@ -55,57 +55,37 @@ const footerSections = [
 /******************* COMPONENT ***********************/
 
 export const Footer: React.FC = React.memo(function Footer() {
+  /******************* COMPUTED ***********************/
+
   const currentYear = new Date().getFullYear()
 
+  /******************* RENDER ***********************/
+
   return (
-    <footer style={{ backgroundColor: '#f7f7f7', marginTop: '48px' }}>
+    <footer className="bg-[#f7f7f7] mt-12">
       {/* Top border */}
-      <div style={{ borderTop: '2px solid var(--color-ink)' }} />
+      <div className="border-t-2 border-[#121212]" />
 
       {/* Main footer content */}
-      <div style={{ padding: '32px 40px' }}>
+      <div className="py-8 px-10">
         {/* Logo */}
-        <div style={{ marginBottom: '24px' }}>
-          <Link href="/" style={{ fontFamily: 'var(--font-masthead)', fontSize: '1.75rem', color: 'var(--color-ink)' }}>
+        <div className="mb-6">
+          <Link href="/" className="font-masthead text-[1.75rem] text-[#121212]">
             The Wedding Times
           </Link>
         </div>
 
         {/* Footer columns */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '32px',
-            paddingBottom: '32px',
-            borderBottom: '1px solid var(--color-rule)',
-          }}
-        >
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-8 pb-8 border-b border-[#e2e2e2]">
           {footerSections.map((section) => (
             <div key={section.title}>
-              <h3
-                style={{
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                  color: 'var(--color-ink)',
-                  marginBottom: '12px',
-                }}
-              >
+              <h3 className="font-sans text-base font-bold tracking-wider text-[#121212] mb-3">
                 {section.title}
               </h3>
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              <ul className="list-none m-0 p-0">
                 {section.links.map((link) => (
-                  <li key={link.name} style={{ marginBottom: '8px' }}>
-                    <Link
-                      href={link.href}
-                      style={{
-                        fontFamily: 'var(--font-sans)',
-                        fontSize: '13px',
-                        color: 'var(--color-ink)',
-                      }}
-                    >
+                  <li key={link.name} className="mb-2">
+                    <Link href={link.href} className="font-sans text-[15px] text-[#121212]">
                       {link.name}
                     </Link>
                   </li>
@@ -116,55 +96,28 @@ export const Footer: React.FC = React.memo(function Footer() {
         </div>
 
         {/* Bottom footer */}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingTop: '24px',
-            gap: '16px',
-          }}
-        >
-          {/* Copyright and links */}
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: '8px',
-              fontFamily: 'var(--font-sans)',
-              fontSize: '11px',
-              color: 'var(--color-ink-lighter)',
-            }}
-          >
+        <div className="flex flex-wrap justify-between items-center pt-6 gap-4">
+          <div className="flex flex-wrap items-center gap-2 font-sans text-[13px] text-[#666]">
             <span>&copy; {currentYear} The Wedding Times Berlin</span>
-            <span style={{ margin: '0 4px' }}>|</span>
-            <Link href="/contact" style={{ color: 'inherit' }}>Contact Us</Link>
-            <span style={{ margin: '0 4px' }}>|</span>
-            <Link href="/accessibility" style={{ color: 'inherit' }}>Accessibility</Link>
-            <span style={{ margin: '0 4px' }}>|</span>
-            <Link href="/advertise" style={{ color: 'inherit' }}>Advertise</Link>
-            <span style={{ margin: '0 4px' }}>|</span>
-            <Link href="/privacy" style={{ color: 'inherit' }}>Privacy Policy</Link>
-            <span style={{ margin: '0 4px' }}>|</span>
-            <Link href="/terms" style={{ color: 'inherit' }}>Terms of Service</Link>
+            <span className="mx-1">|</span>
+            <Link href="/contact" className="text-inherit">Contact Us</Link>
+            <span className="mx-1">|</span>
+            <Link href="/accessibility" className="text-inherit">Accessibility</Link>
+            <span className="mx-1">|</span>
+            <Link href="/advertise" className="text-inherit">Advertise</Link>
+            <span className="mx-1">|</span>
+            <Link href="/privacy" className="text-inherit">Privacy Policy</Link>
+            <span className="mx-1">|</span>
+            <Link href="/terms" className="text-inherit">Terms of Service</Link>
           </div>
         </div>
 
         {/* Disclaimer */}
-        <p
-          style={{
-            fontFamily: 'var(--font-sans)',
-            fontSize: '11px',
-            color: 'var(--color-ink-lighter)',
-            marginTop: '16px',
-            lineHeight: 1.5,
-          }}
-        >
-          THE WEDDING TIMES is a satirical publication. All articles, stories, and characters appearing in this publication are fictitious.
+        <p className="font-sans text-[13px] text-[#666] mt-4 leading-relaxed">
+          THE WEDDING TIMES is a satirical publication about Berlin&apos;s Wedding neighbourhood.
+          All articles, stories, and characters appearing in this publication are fictitious.
           Any resemblance to real persons, living or dead, is purely coincidental and unintentional.
-          No actual wedding guests were harmed in the making of this publication.
+          No actual Wedding residents were harmed in the making of this publication.
         </p>
       </div>
     </footer>

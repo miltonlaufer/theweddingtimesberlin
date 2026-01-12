@@ -3,6 +3,7 @@ import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import sharp from 'sharp'
 
 import { Articles } from './collections/Articles'
 import { Categories } from './collections/Categories'
@@ -31,5 +32,5 @@ export default buildConfig({
       url: process.env.DATABASE_URI || 'file:./payload.db',
     },
   }),
-  sharp: (await import('sharp')).default,
+  sharp,
 })
