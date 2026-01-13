@@ -4,50 +4,34 @@ import React, { useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
+import { NytContainer } from '@/components/NytContainer'
 
 /******************* MOCK DATA ***********************/
 
 // Same mock data - will be replaced by CMS
 const mockArticle = {
   id: '1',
-  headline: 'Bride Declares Emergency After Discovering Aunt Karen Wore White',
-  subheadline:
-    'The incident has been described as "an act of war" by sources close to the wedding party',
-  slug: 'aunt-karen-white-dress',
-  featuredImageUrl: 'https://picsum.photos/seed/wedding1/1200/800',
-  imageCaption: 'The offending garment, captured moments before the confrontation',
+  headline: 'Buergeramt Appointment Secured for 2027 After 3-Year Wait',
+  subheadline: 'Local resident celebrates bureaucratic victory, plans to finally register address',
+  slug: 'buergeramt-2027',
+  featuredImageUrl: 'https://picsum.photos/seed/bureaucracy1/1200/800',
+  imageCaption: 'Photo by Wedding Bureaucracy Watch',
   content: `
-    <p>In what witnesses are calling "the most predictable betrayal in the history of family gatherings," local bride Jennifer Mitchell discovered at 2:47 PM Saturday that her Aunt Karen had arrived at the ceremony wearing an ivory floor-length gown that sources describe as "aggressively bridal."</p>
-    
-    <p>"I saw it from across the venue," Mitchell told The Wedding Times, her voice still trembling with rage. "She walked in like she was the second coming of Princess Diana. The audacity. The absolute audacity."</p>
-    
-    <p>According to multiple eyewitnesses, Aunt Karen, 54, made her entrance during the pre-ceremony cocktail hour, immediately drawing gasps from several bridesmaids and one very vocal flower girl who reportedly asked, "Mommy, why are there two brides?"</p>
-    
-    <h3>The Aftermath</h3>
-    
-    <p>The incident has sent shockwaves through the extended Mitchell family, with relatives reportedly choosing sides in what some are calling "the Great Dress Schism of 2024."</p>
-    
-    <p>"In 47 years of wedding photography, I've never seen anything like it," said veteran photographer Marcus Chen. "The tension was so thick you could cut it with a cake knife. Which, incidentally, the bride did threaten to do at one point."</p>
-    
-    <p>Aunt Karen, reached for comment, defended her choice of attire. "It's not white, it's eggshell," she insisted, before adding, "Besides, I look terrible in pastels. Jennifer should have considered that when she chose her color scheme."</p>
-    
-    <h3>Expert Analysis</h3>
-    
-    <p>Dr. Helena Worthington, professor of Wedding Psychology at the University of Romance Studies, called the incident "a textbook example of attention-seeking behavior masked as fashion independence."</p>
-    
-    <p>"The white dress at someone else's wedding is the nuclear option of passive aggression," Dr. Worthington explained. "It's essentially saying, 'I acknowledge this is your day, but what if it wasn't?'"</p>
-    
-    <p>The wedding reception proceeded as scheduled, though sources report that Aunt Karen was strategically excluded from all official photographs and seated at a table near the kitchen with the groom's college roommates who "nobody really knows anymore."</p>
+    <p>In a landmark achievement for patience and perseverance, a Wedding resident has finally secured an appointment at the local Buergeramt for their Anmeldung, scheduled for the spring of 2027.</p>
+    <p>The resident, who began their application process in 2024, expressed &quot;cautious optimism&quot; about the upcoming registration. &quot;I&apos;ve learned German, started a business, and memorized the BVG strike calendar. Now I just need the stamp.&quot;</p>
+    <p>City officials described the backlog as &quot;a testament to Berlin&apos;s enduring popularity&quot; and encouraged residents to &quot;embrace the unique charm of delayed gratification.&quot;</p>
+    <h3>Practical Advice</h3>
+    <p>Experts recommend arriving early, bringing a book, and preparing your documents in triplicate. If your appointment is canceled, simply try again in 2029.</p>
   `,
   excerpt:
-    'In what witnesses are calling "the most predictable betrayal in the history of family gatherings," local bride Jennifer Mitchell discovered at 2:47 PM Saturday that her Aunt Karen had arrived at the ceremony wearing an ivory floor-length gown.',
-  category: { id: 'c1', name: 'Breaking News', slug: 'breaking', description: '', order: 0 },
+    'In a landmark achievement for patience and perseverance, a Wedding resident has finally secured an appointment at the local Buergeramt for their Anmeldung, scheduled for the spring of 2027.',
+  category: { id: 'c1', name: 'Bureaucracy', slug: 'bureaucracy', description: '', order: 0 },
   author: {
     id: 'a1',
-    name: 'Margaret Thornberry',
-    slug: 'margaret-thornberry',
-    title: 'Wedding Correspondent',
-    bio: 'Margaret Thornberry has been covering weddings, engagements, and matrimonial disasters for over 15 years. She believes every wedding tells a story, though not always the one the couple intended.',
+    name: 'Greta Schmidt',
+    slug: 'greta-schmidt',
+    title: 'Bureaucracy Correspondent',
+    bio: 'Greta Schmidt covers the sacred rituals of bureaucracy, queueing, and paperwork in Wedding.',
   },
   publishedAt: new Date().toISOString(),
   status: 'published' as const,
@@ -61,8 +45,7 @@ const mockArticle = {
 export default function ArticlePage() {
   /******************* STORE ***********************/
 
-  const params = useParams()
-  const _slug = params.slug as string // Will be used for fetching from CMS
+  useParams()
 
   /******************* COMPUTED ***********************/
 
@@ -88,122 +71,112 @@ export default function ArticlePage() {
 
   if (!article) {
     return (
-      <div className="newspaper-container py-12 text-center">
+      <NytContainer className="py-12 text-center">
         <h1 className="font-headline text-3xl">Article Not Found</h1>
-        <p className="mt-4 text-[var(--color-ink-lighter)]">
+        <p className="mt-4 text-[#666]">
           The article you&apos;re looking for doesn&apos;t exist or has been removed.
         </p>
-        <Link href="/" className="mt-6 inline-block text-[var(--color-accent-dark)] hover:underline">
+        <Link href="/" className="mt-6 inline-block text-[#121212]">
           Return to Homepage
         </Link>
-      </div>
+      </NytContainer>
     )
   }
 
   return (
-    <article className="newspaper-container py-6">
-      {/* Article header */}
-      <header className="max-w-3xl mx-auto">
-        {/* Category */}
-        <Link href={categoryUrl}>
-          <span className="font-sans text-sm uppercase tracking-wider text-[var(--color-accent-dark)] hover:underline">
-            {article.category.name}
-          </span>
-        </Link>
+    <NytContainer className="py-6">
+      <article>
+        {/* Article header */}
+        <header className="max-w-[720px] mx-auto">
+          {/* Category */}
+          <Link href={categoryUrl}>
+            <span className="font-sans text-sm uppercase tracking-wider text-[#666]">
+              {article.category.name}
+            </span>
+          </Link>
 
-        {/* Headline */}
-        <h1 className="font-headline text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mt-3">
-          {article.headline}
-        </h1>
+          {/* Headline */}
+          <h1 className="font-headline italic text-3xl md:text-4xl lg:text-5xl font-semibold leading-[1.03] mt-3 text-[#121212]">
+            {article.headline}
+          </h1>
 
-        {/* Subheadline */}
-        {article.subheadline && (
-          <p className="font-subhead text-xl md:text-2xl text-[var(--color-ink-light)] italic mt-4">
-            {article.subheadline}
-          </p>
+          {/* Subheadline */}
+          {article.subheadline && (
+            <p className="font-serif text-xl md:text-2xl text-[#333] mt-4 leading-snug">
+              {article.subheadline}
+            </p>
+          )}
+
+          {/* Byline */}
+          <div className="mt-6 pt-4 border-t border-[#e2e2e2] flex items-center gap-4">
+            <div>
+              <p className="font-sans text-sm text-[#121212]">
+                By{' '}
+                <Link href={`/author/${article.author.slug}`} className="font-semibold">
+                  {article.author.name}
+                </Link>
+              </p>
+              {article.author.title && (
+                <p className="font-sans text-xs text-[#666]">{article.author.title}</p>
+              )}
+            </div>
+            <div className="ml-auto text-right">
+              {formattedDate && (
+                <time dateTime={article.publishedAt} className="font-sans text-sm text-[#666]">
+                  {formattedDate}
+                </time>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* Featured image */}
+        {article.featuredImageUrl && (
+          <figure className="mt-8 max-w-[720px] mx-auto">
+            <div className="relative aspect-[16/10] overflow-hidden bg-[#e2e2e2]">
+              <Image
+                src={article.featuredImageUrl}
+                alt={article.headline}
+                fill
+                className="object-cover"
+                priority
+                sizes="(max-width: 768px) 100vw, 720px"
+              />
+            </div>
+            {article.imageCaption && (
+              <figcaption className="mt-2 font-sans text-sm text-[#666] italic text-right">
+                {article.imageCaption}
+              </figcaption>
+            )}
+          </figure>
         )}
 
-        {/* Byline */}
-        <div className="mt-6 pt-4 rule-top flex items-center gap-4">
-          <div>
-            <p className="font-sans text-sm">
-              By{' '}
-              <Link
-                href={`/author/${article.author.slug}`}
-                className="font-semibold hover:text-[var(--color-accent-dark)]"
-              >
-                {article.author.name}
-              </Link>
-            </p>
-            {article.author.title && (
-              <p className="font-sans text-xs text-[var(--color-ink-lighter)]">{article.author.title}</p>
-            )}
-          </div>
-          <div className="ml-auto text-right">
-            {formattedDate && (
-              <time
-                dateTime={article.publishedAt}
-                className="font-sans text-sm text-[var(--color-ink-lighter)]"
-              >
-                {formattedDate}
-              </time>
-            )}
-          </div>
+        {/* Article content */}
+        <div className="mt-8 max-w-[720px] mx-auto">
+          <div
+            className="font-article text-[20px] leading-[1.7] text-[#121212]"
+            dangerouslySetInnerHTML={{ __html: article.content }}
+          />
         </div>
-      </header>
 
-      {/* Featured image */}
-      {article.featuredImageUrl && (
-        <figure className="mt-8 max-w-4xl mx-auto">
-          <div className="relative aspect-[16/10] overflow-hidden bg-[var(--color-rule)]">
-            <Image
-              src={article.featuredImageUrl}
-              alt={article.headline}
-              fill
-              className="object-cover"
-              priority
-              sizes="(max-width: 768px) 100vw, 900px"
-            />
-          </div>
-          {article.imageCaption && (
-            <figcaption className="mt-2 font-sans text-sm text-[var(--color-ink-lighter)] italic">
-              {article.imageCaption}
-            </figcaption>
-          )}
-        </figure>
-      )}
+        {/* Author bio */}
+        {article.author.bio && (
+          <aside className="mt-12 pt-6 border-t border-[#e2e2e2] max-w-[720px] mx-auto">
+            <div className="bg-[#e2e2e2]/30 p-6">
+              <h3 className="font-sans text-xs uppercase tracking-wider text-[#666] mb-2">
+                About the Author
+              </h3>
+              <p className="font-headline text-lg font-semibold text-[#121212]">{article.author.name}</p>
+              {article.author.title && (
+                <p className="font-sans text-sm text-[#333]">{article.author.title}</p>
+              )}
+              <p className="mt-2 font-sans text-[#333]">{article.author.bio}</p>
+            </div>
+          </aside>
+        )}
 
-      {/* Article content */}
-      <div className="mt-8 max-w-3xl mx-auto">
-        <div
-          className="prose prose-lg prose-neutral max-w-none
-            prose-headings:font-headline prose-headings:text-[var(--color-ink)]
-            prose-p:font-body prose-p:text-[var(--color-ink)] prose-p:leading-relaxed
-            prose-a:text-[var(--color-accent-dark)] prose-a:no-underline hover:prose-a:underline
-            prose-blockquote:border-l-[var(--color-accent)] prose-blockquote:italic
-            prose-strong:text-[var(--color-ink)]
-            first:prose-p:drop-cap"
-          dangerouslySetInnerHTML={{ __html: article.content }}
-        />
-      </div>
-
-      {/* Author bio */}
-      {article.author.bio && (
-        <aside className="mt-12 pt-6 rule-top max-w-3xl mx-auto">
-          <div className="bg-[var(--color-rule)] bg-opacity-30 p-6">
-            <h3 className="font-sans text-xs uppercase tracking-wider text-[var(--color-ink-lighter)] mb-2">
-              About the Author
-            </h3>
-            <p className="font-headline text-lg font-semibold">{article.author.name}</p>
-            {article.author.title && (
-              <p className="font-sans text-sm text-[var(--color-accent-dark)]">{article.author.title}</p>
-            )}
-            <p className="mt-2 font-body text-[var(--color-ink-light)]">{article.author.bio}</p>
-          </div>
-        </aside>
-      )}
-
-      {/* Related articles would go here */}
-    </article>
+        {/* Related articles would go here */}
+      </article>
+    </NytContainer>
   )
 }

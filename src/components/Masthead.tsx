@@ -3,7 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useUIStore } from '@/stores'
+import { NytContainer } from './NytContainer'
 
 /******************* DRUG PRICES DATA ***********************/
 
@@ -205,6 +207,9 @@ export const Masthead: React.FC = observer(function Masthead() {
 
   /******************* COMPUTED ***********************/
 
+  const pathname = usePathname()
+  const isArticlePage = pathname.startsWith('/article/')
+
   const formattedDate = useMemo(() => {
     const now = new Date()
     return now.toLocaleDateString('en-US', {
@@ -241,63 +246,92 @@ export const Masthead: React.FC = observer(function Masthead() {
       <SearchOverlay isOpen={isSearchOpen} onClose={handleSearchClose} />
       <MobileMenu isOpen={isMobileMenuOpen} onClose={handleMobileMenuClose} />
       
-      <header className="px-5">
-        {/* Row 1: Search left, Account right */}
-        <div className="flex items-center justify-between py-2">
-          <button
-            onClick={handleSearchOpen}
-            className="bg-transparent border-none cursor-pointer p-1 flex items-center"
-            aria-label="Search"
-            type="button"
-          >
-            <SearchIcon />
-          </button>
+      <header className={isArticlePage ? 'border-b border-[#e2e2e2]' : undefined}>
+        <NytContainer>
+          {isArticlePage ? (
+            <>
+              {/* Article header: compact masthead + burger/search, no ticker, no category nav */}
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleMobileMenuOpen}
+                    className="bg-transparent border-none cursor-pointer p-1 flex items-center"
+                    aria-label="Open menu"
+                    type="button"
+                  >
+                    <HamburgerIcon />
+                  </button>
+                  <button
+                    onClick={handleSearchOpen}
+                    className="bg-transparent border-none cursor-pointer p-1 flex items-center"
+                    aria-label="Search"
+                    type="button"
+                  >
+                    <SearchIcon />
+                  </button>
+                </div>
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleMobileMenuOpen}
-              className="bg-transparent border-none cursor-pointer p-1 flex items-center md:hidden"
-              aria-label="Open menu"
-              type="button"
-            >
-              <HamburgerIcon />
-            </button>
-            <Link
-              href="/admin"
-              className="hidden md:block font-sans text-[13px] font-medium text-[#121212]"
-            >
-              Account
-            </Link>
-          </div>
-        </div>
+                <Link href="/" className="text-center">
+                  <span className="font-masthead font-normal tracking-tight text-[#121212] leading-none whitespace-nowrap text-[2.25rem]">
+                    The Wedding Times
+                  </span>
+                </Link>
 
-        {/* Row 2: Date left, Masthead center, Ticker right */}
-        <div className="flex items-center justify-between py-3 pb-5">
-          {/* Left - Date and Today's Paper */}
-          <div className="hidden md:flex flex-col flex-1">
-            <div className="font-sans text-[13px] text-[#121212]">{formattedDate}</div>
-            <Link
-              href="/todays-paper"
-              className="font-sans text-[13px] text-[#121212] underline"
-            >
-              Today&apos;s Paper
-            </Link>
-          </div>
+                <div className="w-10" />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Homepage header: Search left, Account right */}
+              <div className="flex items-center justify-between py-2">
+                <button
+                  onClick={handleSearchOpen}
+                  className="bg-transparent border-none cursor-pointer p-1 flex items-center"
+                  aria-label="Search"
+                  type="button"
+                >
+                  <SearchIcon />
+                </button>
 
-          {/* Center - Masthead */}
-          <div className="text-center">
-            <Link href="/">
-              <h1 className="font-masthead font-normal tracking-tight text-[#121212] leading-none whitespace-nowrap text-[2.5rem] md:text-[5rem] lg:text-[6.5rem] xl:text-[7.5rem]">
-                The Wedding Times
-              </h1>
-            </Link>
-          </div>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={handleMobileMenuOpen}
+                    className="bg-transparent border-none cursor-pointer p-1 flex items-center md:hidden"
+                    aria-label="Open menu"
+                    type="button"
+                  >
+                    <HamburgerIcon />
+                  </button>
+                </div>
+              </div>
 
-          {/* Right - Drug ticker */}
-          <div className="hidden md:flex flex-1 justify-end items-center">
-            <DrugTicker />
-          </div>
-        </div>
+              {/* Row 2: Date left, Masthead center, Ticker right */}
+              <div className="flex items-center justify-between py-3 pb-5">
+                {/* Left - Date and Today's Paper */}
+                <div className="hidden md:flex flex-col flex-1">
+                  <div className="font-sans text-[13px] text-[#121212]">{formattedDate}</div>
+                  <Link href="/todays-paper" className="font-sans text-[13px] text-[#121212]">
+                    Today&apos;s Paper
+                  </Link>
+                </div>
+
+                {/* Center - Masthead */}
+                <div className="text-center">
+                  <Link href="/">
+                    <h1 className="font-masthead font-normal tracking-tight text-[#121212] leading-none whitespace-nowrap text-[2.5rem] md:text-[5rem] lg:text-[6.5rem] xl:text-[7.5rem]">
+                      The Wedding Times
+                    </h1>
+                  </Link>
+                </div>
+
+                {/* Right - Drug ticker */}
+                <div className="hidden md:flex flex-1 justify-end items-center">
+                  <DrugTicker />
+                </div>
+              </div>
+            </>
+          )}
+        </NytContainer>
       </header>
     </>
   )

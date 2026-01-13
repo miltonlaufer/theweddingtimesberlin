@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import { NytContainer } from './NytContainer'
 
 /******************* FOOTER SECTIONS ***********************/
 
@@ -67,7 +68,7 @@ export const Footer: React.FC = React.memo(function Footer() {
       <div className="border-t-2 border-[#121212]" />
 
       {/* Main footer content */}
-      <div className="py-8 px-10">
+      <NytContainer className="py-8">
         {/* Logo */}
         <div className="mb-6">
           <Link href="/" className="font-masthead text-[1.75rem] text-[#121212]">
@@ -119,7 +120,7 @@ export const Footer: React.FC = React.memo(function Footer() {
           Any resemblance to real persons, living or dead, is purely coincidental and unintentional.
           No actual Wedding residents were harmed in the making of this publication.
         </p>
-      </div>
+      </NytContainer>
     </footer>
   )
 })

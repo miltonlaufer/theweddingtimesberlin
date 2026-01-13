@@ -1,7 +1,7 @@
 import React from 'react'
 import { Masthead, Navigation, SatiricalRibbon, Footer } from '@/components'
 import { StoreProvider } from '@/stores'
-import '../globals.css'
+import '../../styles/global.css'
 
 /******************* TYPES ***********************/
 
@@ -14,7 +14,7 @@ interface FrontendLayoutProps {
 export default function FrontendLayout({ children }: FrontendLayoutProps) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body className="antialiased frontend-app">
         <StoreProvider>
           <div className="min-h-screen flex flex-col">
             <SatiricalRibbon />

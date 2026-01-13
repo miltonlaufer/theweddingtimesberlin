@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import React from 'react'
 
 export const metadata: Metadata = {
   title: 'The Wedding Times | Berlin',
@@ -17,5 +18,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  // Payload Admin's RootLayout renders its own <html>/<body>.
+  // To avoid invalid nested html/body tags, we delegate html/body to route-group layouts.
   return children
 }

@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Ensure Payload packages are transpiled correctly
+  transpilePackages: ['@payloadcms/next', '@payloadcms/ui', '@payloadcms/richtext-lexical'],
 }
 
 export default withPayload(nextConfig)

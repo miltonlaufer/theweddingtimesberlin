@@ -1,0 +1,154 @@
+/* Frontend Global Styles */
+/* Import Tailwind WITHOUT preflight to avoid conflicts with Payload admin */
+@layer theme, base, components, utilities;
+
+/* Import theme and utilities, but SKIP preflight */
+@import "tailwindcss/theme.css" layer(theme);
+/* @import "tailwindcss/preflight.css" layer(base); <- DISABLED to not conflict with Payload */
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap');
+
+/* Configure Tailwind to scan our source files */
+@source "../**/*.{js,ts,jsx,tsx}";
+@source "../../components/**/*.{js,ts,jsx,tsx}";
+
+/* Chomsky blackletter font for masthead */
+@font-face {
+  font-family: 'Chomsky';
+  src: url('/fonts/Chomsky.woff2') format('woff2'),
+       url('/fonts/Chomsky.woff') format('woff'),
+       url('/fonts/Chomsky.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Frontend-specific base styles (our own "preflight" for the frontend only) */
+@layer base {
+  :root {
+    --color-ink: #121212;
+    --color-ink-light: #333;
+    --color-ink-lighter: #666;
+    --color-rule: #e2e2e2;
+    --color-background: #fff;
+  }
+
+  /* Scoped to .frontend-app to not affect Payload admin */
+  .frontend-app {
+    color: #121212;
+    background: #fff;
+    /* NYT-like body: Times/Imperial-style serif (headlines use a different serif) */
+    font-family: "Times New Roman", Times, Georgia, serif;
+    font-size: 19px;
+    line-height: 1.5;
+    font-kerning: normal;
+    font-feature-settings: "kern", "liga", "clig", "calt";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  .frontend-app * {
+    box-sizing: border-box;
+  }
+
+  .frontend-app a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .frontend-app a:hover {
+    text-decoration: none;
+  }
+
+  .frontend-app h1,
+  .frontend-app h2,
+  .frontend-app h3,
+  .frontend-app h4,
+  .frontend-app h5,
+  .frontend-app h6,
+  .frontend-app p {
+    margin: 0;
+  }
+
+  .frontend-app img {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* Custom utility classes */
+@utility font-masthead {
+  font-family: 'Chomsky', 'Old English Text MT', serif;
+}
+
+@utility font-headline {
+  /* NYT-like headline: distinct serif */
+  font-family: 'Libre Baskerville', Georgia, "Times New Roman", Times, serif;
+}
+
+@utility font-serif {
+  font-family: "Times New Roman", Times, Georgia, serif;
+}
+
+@utility font-article {
+  /* Closer to NYT body feel than Times New Roman */
+  font-family: Georgia, "Times New Roman", Times, serif;
+}
+
+@utility font-sans {
+  font-family: 'Libre Franklin', "helvetica neue", helvetica, arial, sans-serif;
+}
+
+@utility double-rule {
+  /* NYT-like nav separator: two equally-light lines (avoid darker "double border" look) */
+  background-image: linear-gradient(
+    to bottom,
+    rgba(18, 18, 18, 0.35) 0,
+    rgba(18, 18, 18, 0.35) 1px,
+    transparent 1px,
+    transparent 3px,
+    rgba(18, 18, 18, 0.35) 3px,
+    rgba(18, 18, 18, 0.35) 4px
+  );
+  background-repeat: no-repeat;
+  height: 4px;
+}
+
+/* Homepage grid layout */
+@layer components {
+  .homepage-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    max-width: 100%;
+  }
+
+  @media (min-width: 768px) {
+    .homepage-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .homepage-grid {
+      grid-template-columns: 280px 1fr 320px;
+      gap: 30px;
+    }
+
+    .homepage-grid .left-column {
+      border-right: 1px solid #e2e2e2;
+      padding-right: 20px;
+    }
+
+    .homepage-grid .center-column {
+      border-right: 1px solid #e2e2e2;
+      padding-right: 20px;
+    }
+  }
+}

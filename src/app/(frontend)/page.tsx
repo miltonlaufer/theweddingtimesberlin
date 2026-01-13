@@ -5,6 +5,7 @@ import { observer } from 'mobx-react-lite'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useArticleStore } from '@/stores'
+import { NytContainer } from '@/components/NytContainer'
 import type { IArticle } from '@/types/article'
 
 /******************* MOCK DATA ***********************/
@@ -169,130 +170,137 @@ export default observer(function HomePage() {
   /******************* RENDER ***********************/
 
   return (
-    <main className="py-6 px-5 w-full">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-0">
-        {/* Left Column: Text-only articles */}
-        <div className="lg:pr-7 lg:border-r lg:border-[#e2e2e2]">
-          {leftColumnArticles.map((article, index) => (
-            <article
-              key={article.id}
-              className={`pb-6 mb-6 ${index < leftColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''
-                }`}
-            >
-              <Link href={`/article/${article.slug}`}>
-                <h3 className="font-headline text-[26px] font-bold leading-[1.15] text-[#121212] mb-4">
-                  {article.headline}
-                </h3>
-              </Link>
-              <p className="font-serif text-xl leading-[1.4] text-[#333]">
-                {article.excerpt}
-              </p>
-              <p className="font-sans text-[13px] font-medium text-[#666] mt-3 uppercase tracking-wider">
-                6 MIN READ
-              </p>
-            </article>
-          ))}
-        </div>
-
-        {/* Center Column: Main headline with large image */}
-        <div className="lg:px-7 lg:border-r lg:border-[#e2e2e2]">
-          {headlineArticle && (
-            <article>
-              {headlineArticle.featuredImageUrl && (
-                <Link href={`/article/${headlineArticle.slug}`}>
-                  <div className="relative w-full aspect-[16/10] mb-3">
-                    <Image
-                      src={headlineArticle.featuredImageUrl}
-                      alt={headlineArticle.headline}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 100vw, 50vw"
-                      priority
-                    />
-                  </div>
-                </Link>
-              )}
-              {headlineArticle.imageCaption && (
-                <p className="font-sans text-sm text-[#666] mb-4 text-right">
-                  {headlineArticle.imageCaption}
-                </p>
-              )}
-              <Link href={`/article/${headlineArticle.slug}`}>
-                <h2 className="font-headline text-[40px] font-bold leading-[1.1] text-[#121212] mb-5">
-                  {headlineArticle.headline}
-                </h2>
-              </Link>
-              {headlineArticle.subheadline && (
-                <p className="font-serif text-2xl leading-[1.3] text-[#333] mb-4">
-                  {headlineArticle.subheadline}
-                </p>
-              )}
-              <p className="font-serif text-xl leading-[1.4] text-[#333]">
-                {headlineArticle.excerpt}
-              </p>
-            </article>
-          )}
-        </div>
-
-        {/* Right Column: Articles with thumbnails */}
-        <div className="lg:pl-7">
-          {rightColumnArticles.map((article, index) => (
-            <article
-              key={article.id}
-              className={`flex gap-4 pb-5 mb-5 ${index < rightColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''
-                }`}
-            >
-              <div className="flex-1">
-                <Link href={`/article/${article.slug}`}>
-                  <h3 className="font-headline text-[22px] font-bold leading-[1.2] text-[#121212] mb-3">
+    <main className="py-6 w-full">
+      <NytContainer>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_1fr_320px] lg:gap-0">
+          {/* Left Column: Text-only articles */}
+          <div className="lg:pr-7 lg:border-r lg:border-[#e2e2e2]">
+            {leftColumnArticles.map((article, index) => (
+              <Link
+                key={article.id}
+                href={`/article/${article.slug}`}
+                className={`group block ${index < leftColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''}`}
+                aria-label={article.headline}
+              >
+                <article className="pb-6 mb-6">
+                  <h3 className="font-headline text-[24px] font-semibold leading-[1.14] tracking-[-0.01em] text-[#121212] mb-3 transition-colors duration-150 group-hover:text-[#555]">
                     {article.headline}
                   </h3>
-                </Link>
-                <p className="font-serif text-lg leading-[1.35] text-[#333] line-clamp-3">
-                  {article.excerpt}
-                </p>
-                <p className="font-sans text-xs font-medium text-[#666] mt-2.5 uppercase tracking-wider">
-                  5 MIN READ
-                </p>
-              </div>
-              {article.featuredImageUrl && (
-                <Link href={`/article/${article.slug}`} className="shrink-0">
-                  <div className="relative w-[150px] h-[100px]">
-                    <Image
-                      src={article.featuredImageUrl}
-                      alt={article.headline}
-                      fill
-                      className="object-cover"
-                      sizes="150px"
-                    />
-                  </div>
-                </Link>
-              )}
-            </article>
-          ))}
-
-          {/* Opinion Section */}
-          {opinionArticle && (
-            <div className="mt-7 pt-6 border-t-[3px] border-[#121212]">
-              <h4 className="font-sans text-lg font-bold uppercase tracking-wider text-[#121212] mb-4">
-                Opinion
-              </h4>
-              <article>
-                {opinionArticle.author?.name && (
-                  <p className="font-sans text-base font-bold text-[#121212] mb-2">
-                    {opinionArticle.author.name}
+                  <p className="font-serif text-[19px] leading-[1.3] text-[#333]">
+                    {article.excerpt}
                   </p>
-                )}
-                <Link href={`/article/${opinionArticle.slug}`}>
-                  <h3 className="font-headline text-2xl font-medium leading-[1.25] text-[#121212]">
-                    {opinionArticle.headline}
+                  <p className="font-sans text-[13px] font-medium text-[#666] mt-1.5 uppercase tracking-wider">
+                    6 MIN READ
+                  </p>
+                </article>
+              </Link>
+            ))}
+          </div>
+
+          {/* Center Column: Main headline with large image */}
+          <div className="lg:px-7 lg:border-r lg:border-[#e2e2e2]">
+            {headlineArticle && (
+              <Link
+                href={`/article/${headlineArticle.slug}`}
+                className="group block"
+                aria-label={headlineArticle.headline}
+              >
+                <article>
+                  {headlineArticle.featuredImageUrl && (
+                    <div className="relative w-full aspect-[16/10] mb-3">
+                      <Image
+                        src={headlineArticle.featuredImageUrl}
+                        alt={headlineArticle.headline}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                        priority
+                      />
+                    </div>
+                  )}
+                  {headlineArticle.imageCaption && (
+                    <p className="font-sans text-sm text-[#666] mb-4 text-right">
+                      {headlineArticle.imageCaption}
+                    </p>
+                  )}
+                  <h2 className="font-headline text-[38px] font-semibold leading-[1.06] tracking-[-0.015em] text-[#121212] mb-3 transition-colors duration-150 group-hover:text-[#555]">
+                    {headlineArticle.headline}
+                  </h2>
+                  {headlineArticle.subheadline && (
+                    <p className="font-serif text-[20px] leading-[1.24] text-[#333] mb-3">
+                      {headlineArticle.subheadline}
+                    </p>
+                  )}
+                  <p className="font-serif text-[19px] leading-[1.3] text-[#333]">
+                    {headlineArticle.excerpt}
+                  </p>
+                </article>
+              </Link>
+            )}
+          </div>
+
+          {/* Right Column: Articles with thumbnails */}
+          <div className="lg:pl-7">
+            {rightColumnArticles.map((article, index) => (
+              <Link
+                key={article.id}
+                href={`/article/${article.slug}`}
+                className={`group block ${index < rightColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''}`}
+                aria-label={article.headline}
+              >
+                <article className="pb-5 mb-5">
+                  {article.featuredImageUrl && (
+                    <div className="relative w-full aspect-[16/10] mb-3">
+                      <Image
+                        src={article.featuredImageUrl}
+                        alt={article.headline}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 1024px) 100vw, 320px"
+                      />
+                    </div>
+                  )}
+
+                  <h3 className="font-headline text-[18px] font-semibold leading-[1.15] tracking-[-0.01em] text-[#121212] mb-2 transition-colors duration-150 group-hover:text-[#555]">
+                    {article.headline}
                   </h3>
-                </Link>
-              </article>
-            </div>
-          )}
+                  <p className="font-serif text-[17px] leading-[1.3] text-[#333] line-clamp-3">
+                    {article.excerpt}
+                  </p>
+                  <p className="font-sans text-xs font-medium text-[#666] mt-1.5 uppercase tracking-wider">
+                    5 MIN READ
+                  </p>
+                </article>
+              </Link>
+            ))}
+
+            {/* Opinion Section */}
+            {opinionArticle && (
+              <div className="mt-7 pt-6 border-t-2 border-[rgba(18,18,18,0.45)]">
+                <h4 className="font-sans text-lg font-bold uppercase tracking-wider text-[#121212] mb-4">
+                  Opinion
+                </h4>
+                <article>
+                  {opinionArticle.author?.name && (
+                    <p className="font-sans text-base font-bold text-[#121212] mb-2">
+                      {opinionArticle.author.name}
+                    </p>
+                  )}
+                  <Link
+                    href={`/article/${opinionArticle.slug}`}
+                    className="group block"
+                    aria-label={opinionArticle.headline}
+                  >
+                    <h3 className="font-headline text-[20px] font-medium leading-[1.25] text-[#121212] transition-colors duration-150 group-hover:text-[#555]">
+                      {opinionArticle.headline}
+                    </h3>
+                  </Link>
+                </article>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </NytContainer>
     </main>
   )
 })

@@ -3,6 +3,8 @@
 import React from 'react'
 import { observer } from 'mobx-react-lite'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { NytContainer } from './NytContainer'
 
 /******************* ICONS ***********************/
 
@@ -31,26 +33,31 @@ const categories = [
 /******************* MAIN COMPONENT ***********************/
 
 export const Navigation: React.FC = observer(function Navigation() {
+  const pathname = usePathname()
+  const isArticlePage = pathname.startsWith('/article/')
+
+  if (isArticlePage) return null
+
   return (
     <nav>
-      {/* Navigation links */}
-      <div className="flex justify-center items-center gap-6 py-2 px-5 flex-wrap overflow-x-auto">
-        {categories.map((category) => (
-          <Link
-            key={category.slug}
-            href={`/section/${category.slug}`}
-            className="font-sans text-[15px] font-semibold text-[#121212] flex items-center gap-[5px] whitespace-nowrap leading-none"
-          >
-            {category.name}
-            <CaretDownIcon />
-          </Link>
-        ))}
-      </div>
-      
-      {/* Double line - aligned with content columns */}
-      <div className="px-5">
-        <div className="double-rule" />
-      </div>
+      <NytContainer>
+        {/* Navigation links */}
+        <div className="flex justify-center items-center gap-6 py-1.5 flex-wrap overflow-x-auto">
+          {categories.map((category) => (
+            <Link
+              key={category.slug}
+              href={`/section/${category.slug}`}
+              className="font-sans text-[14px] font-medium tracking-[0.01em] text-[#121212] flex items-center gap-[5px] whitespace-nowrap leading-none"
+            >
+              {category.name}
+              <CaretDownIcon />
+            </Link>
+          ))}
+        </div>
+
+        {/* Double line - aligned with content columns */}
+        <div className="double-rule mt-1" />
+      </NytContainer>
     </nav>
   )
 })
