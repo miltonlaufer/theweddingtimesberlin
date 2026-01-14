@@ -282,30 +282,40 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     // Bureaucracy
     'Bürgeramt nightmares, appointment systems, or German paperwork hell',
     'Berlin bureaucracy, forms in triplicate, or civil servant attitudes',
+    'the sadistic joy German officials take in rejecting incomplete forms',
     // Leopoldplatz
     'Leopoldplatz happenings, the fountain crowd, or Wedding central life',
     'Leopoldplatz characters, street vendors, or the morning drunks',
+    'the unofficial Leopoldplatz economy of questionable transactions',
     // Nightlife
     'Berlin techno clubs, Berghain door policy, or nightlife culture',
     'after-hours clubs, sunrise sessions, or the walk of shame home',
+    'the desperate measures people take to get into Berghain',
+    'club bathroom hookups, darkroom etiquette, or fetish night mishaps',
     // Crime
     'bike theft epidemic, stolen e-scooters, or neighborhood watch drama',
     'petty crime in Berlin, suspicious activity, or police blotter absurdity',
     'Späti robberies, U-Bahn pickpockets, or street dealer turf wars',
+    'organized crime disguised as döner shops or shisha bars',
     // Techno
     'Berlin techno scene, DJ drama, or warehouse rave culture',
     'Berghain rejection stories, club outfit disasters, or bouncer psychology',
+    'washed-up DJs clinging to relevance, or techno bro philosophy',
     // Doener & Drinks
     'döner kebab culture, späti life, or Berlin food scene',
     'best döner debates, kebab rankings, or late-night munchies',
+    'the mystery meat in your 3am döner, or health code violations',
     // Kiez News
     'local neighborhood drama, kiez gossip, or community board meetings',
     'BVG transit delays, U-Bahn drama, or S-Bahn chaos',
     'new hipster café openings, shop closures, or rent hikes on your block',
+    'passive-aggressive notes in apartment buildings, or neighbor feuds',
     // Gentrification
     'gentrification battles, rent protests, or neighborhood changes',
     'expat invasion, English menus everywhere, or "authentic" Berlin debates',
     'startup culture, co-working spaces, or tech bros pricing out locals',
+    'trust fund kids cosplaying as poor artists in Neukölln',
+    'Americans ruining everything they touch in Berlin',
     // General Berlin satire
     'tourist invasions in Kreuzberg, Mitte, or Friedrichshain',
     'expat life struggles, language barriers, or Anmeldung nightmares',
@@ -318,6 +328,69 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Berlin decadence, after-parties that last days, or hedonistic lifestyle',
     'Berlin filth, lack of street cleaning, overflowing trash, or rat sightings',
     'Görlitzer Park shenanigans, dealer diplomacy, or park culture',
+    // Edgier topics
+    'polyamory as an excuse for commitment issues in Berlin',
+    'vegans who still do cocaine on weekends',
+    'the performative activism of Instagram Berliners',
+    'rich kids pretending to be broke while daddy pays the rent',
+    'the hypocrisy of Berliners who complain about tourists while being expats themselves',
+    'sex work, Oranienstraße corners, or the German approach to legalized prostitution',
+    'Berlin influencers with 47 followers calling themselves content creators',
+    'the mid-30s identity crisis of people who moved here for techno',
+    'Germans lecturing everyone on morality while their grandfathers did what exactly',
+    'the subtle racism of "where are you REALLY from" conversations',
+    'leftist infighting, purity tests, and eating their own',
+    // Drugs - expanded
+    'ketamine as a personality substitute in Berlin',
+    'the dealer hierarchy at Görlitzer Park, or drug tourism',
+    'microdosing tech bros who think LSD makes them Steve Jobs',
+    'people who base their entire identity around doing MDMA',
+    'the cocaine-to-meditation pipeline of Berlin wellness culture',
+    'speed as the unofficial currency of Berlin nightlife',
+    'GHB mishaps and the fine line between party and ambulance',
+    'drug dealers with better customer service than Deutsche Bahn',
+    'the gentrification of drug culture—artisanal cocaine and organic weed',
+    // Decadence - expanded
+    'sex parties marketed as "networking events"',
+    'the three-day bender that turned into a lifestyle',
+    'KitKat dress codes and the nudity-as-personality phenomenon',
+    'people who havent seen daylight since 2019',
+    'the Berlin tradition of turning every brunch into day drinking',
+    'after-hour clubs where time has no meaning and neither does hygiene',
+    'orgies disguised as art installations',
+    'the dark tourist economy of Berlin hedonism',
+    'people whose only accomplishment is attending every Berghain opening',
+    // High rents & housing crisis
+    'paying 1500 euros for a WG room the size of a coffin',
+    'landlords who think a 40sqm apartment is worth more than a Munich villa',
+    'the WG casting process thats more intense than a job interview',
+    'Airbnb destroying neighborhoods while tourists complain about authenticity',
+    'the delusion of ever owning property in Berlin',
+    'rent increases forcing artists out so yoga studios can move in',
+    'Zwischenmiete scams and the housing black market',
+    'people paying 2000 euros to live next to a döner that never closes',
+    'the absurdity of Wohnungsbesichtigung lines around the block',
+    // Declining art scene
+    'galleries closing so another vape shop can open',
+    'the death of Berlin underground culture, killed by Instagram',
+    'artists who moved here for cheap rent now working in tech',
+    'street art being replaced by corporate murals',
+    'the commodification of everything that made Berlin interesting',
+    'when your art collective becomes a brand partnership',
+    'the Berlin art scene: now sponsored by Red Bull',
+    'creative spaces turned into coworking for crypto startups',
+    'the last real artist in Berlin turns 65 and still cant afford retirement',
+    // Deutsche Bahn disasters
+    'Deutsche Bahn: where 10 minutes late is considered on time',
+    'the eternal construction at Berlin Hauptbahnhof',
+    'ICE trains breaking down in creative new ways',
+    'DB customer service as a form of psychological warfare',
+    'train delays blamed on weather, leaves, sun, existence',
+    'the mystery of why German trains cost more but work less than everywhere else',
+    'Bahnhof homeless populations and the citys non-solutions',
+    'regional trains cancelled due to "operational reasons" (no one knows what)',
+    'the 49-euro ticket and the chaos it unleashed',
+    'S-Bahn Berlin: an unreliable service wrapped in an apology',
   ]
   const randomFocus = topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
 
@@ -329,7 +402,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const systemPrompt = [
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
     'Language: write everything in US English (no German, no other languages).',
-    'Tone: news-like, witty, sharp, absurd, observational. Jokes should be intellectual meets indecent—clever wordplay and sophisticated humor with a subtle edge of risqué or slightly inappropriate content (think: Ricky Gervais meets intellectual dark humor, but avoid hate/harassment and stay within OpenAI safety guidelines).',
+    'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel the spirit of early South Park, Anthony Jeselnik, and classic British satire like Brass Eye. Mock sacred cows, poke fun at every demographic equally, and embrace taboo topics with gleeful abandon. Use dark humor, shock value, and absurdist takes on sensitive subjects. Nothing is off-limits except actual hate speech or calls to violence.',
+    'Style: write like a hungover journalist who has stopped caring about keeping their job—biting sarcasm, cynical observations, and jokes that make readers say "they cant print that".',
     `FOR THIS ARTICLE, focus on: ${randomFocus}`,
     recentTitlesSection,
     'CRITICAL: Pick a categorySlug that BEST matches your assigned topic focus above.',
@@ -347,7 +421,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- Rent/gentrification/expats → gentrification',
     '- Opinion/editorial → opinion',
     'DO NOT default to bureaucracy, nightlife, or opinion unless your topic truly matches.',
-    'Important safety: do not use slurs; do not advocate harm; do not target protected groups with hateful content.',
+    'Remember: punch in all directions, mock everyone, but avoid slurs or explicit calls for harm.',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
   ].join('\n')
 
@@ -386,6 +460,15 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '  "imagePrompt": string|null  // prompt for an illustrative photo-like image, no text overlays',
     '}',
   ].join('\n')
+
+  console.log('\n' + '='.repeat(80))
+  console.log('LLM PROMPT - generateArticle')
+  console.log('='.repeat(80))
+  console.log('\n--- SYSTEM PROMPT ---\n')
+  console.log(systemPrompt)
+  console.log('\n--- USER PROMPT ---\n')
+  console.log(userPrompt)
+  console.log('\n' + '='.repeat(80) + '\n')
 
   const raw = await llm.invoke([
     { role: 'system', content: systemPrompt },
