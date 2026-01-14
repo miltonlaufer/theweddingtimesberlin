@@ -14,6 +14,7 @@ import {
 
 const MIN_AUTHOR_POOL = Number(process.env.MIN_AUTHOR_POOL ?? 8)
 const MAX_NEW_AUTHORS_PER_RUN = Number(process.env.MAX_NEW_AUTHORS_PER_RUN ?? 3)
+const ARTICLES_PER_RUN = Number(process.env.ARTICLES_PER_RUN ?? 4)
 
 const BASELINE_CATEGORIES = [
   { name: 'Bureaucracy', slug: 'bureaucracy', order: 1 },
@@ -115,84 +116,103 @@ export async function GET(req: Request) {
       )
     }
 
-    // Fetch RSS topics (2/3 chance to include)
-    const includeTopics = pickTwoThirds()
+    // Fetch RSS topics once for all articles
     const { topicSummary } = await fetchRssTopics()
 
-    // Generate article
-    const generated = await generateArticle({
-      categories,
-      authors,
-      topicSummary,
-      includeTopics,
-    })
-
-    // Map slugs to IDs
-    const categoryDoc = (categoriesFinal.docs as Array<{ id: string; slug: string }>).find(
-      (c) => c.slug === generated.categorySlug,
-    )
-    const authorDoc = (authorsRes.docs as Array<{ id: string; slug: string }>).find(
-      (a) => a.slug === generated.authorSlug,
-    )
-
-    if (!categoryDoc || !authorDoc) {
-      return NextResponse.json(
-        { ok: false, error: 'Generated slugs did not match existing documents' },
-        { status: 500 },
-      )
-    }
-
-    // Convert markdown to Lexical
+    // Prepare editor config once
     const sanitizedEditorConfig = await sanitizeServerEditorConfig(defaultEditorConfig, payload.config)
-    const lexical = convertMarkdownToLexical({
-      editorConfig: sanitizedEditorConfig,
-      markdown: generated.bodyMarkdown,
-    })
 
-    const slug = `${slugify(generated.headline)}-${Date.now()}`
+    // Generate multiple articles
+    const createdArticles: Array<{ id: string; slug: string; featuredImageUrl: string | null }> = []
+    const errors: string[] = []
 
-    // Generate image (2/3 chance)
-    let featuredImageUrl: string | undefined
-    const imagePrompt = typeof generated.imagePrompt === 'string' ? generated.imagePrompt : ''
-    const shouldGenerateImage = pickTwoThirds() && imagePrompt.length > 0
-
-    if (shouldGenerateImage) {
+    for (let i = 0; i < ARTICLES_PER_RUN; i++) {
       try {
-        const uploaded = await generateAndUploadImage({
-          prompt: imagePrompt,
-          fileBaseName: slug,
+        // 2/3 chance to include RSS topics for variety
+        const includeTopics = pickTwoThirds()
+
+        // Generate article
+        const generated = await generateArticle({
+          categories,
+          authors,
+          topicSummary,
+          includeTopics,
         })
-        featuredImageUrl = uploaded.publicUrl
-      } catch {
-        // Image generation failed - continue without image
+
+        // Map slugs to IDs
+        const categoryDoc = (categoriesFinal.docs as Array<{ id: string; slug: string }>).find(
+          (c) => c.slug === generated.categorySlug,
+        )
+        const authorDoc = (authorsRes.docs as Array<{ id: string; slug: string }>).find(
+          (a) => a.slug === generated.authorSlug,
+        )
+
+        if (!categoryDoc || !authorDoc) {
+          errors.push(`Article ${i + 1}: Generated slugs did not match existing documents`)
+          continue
+        }
+
+        // Convert markdown to Lexical
+        const lexical = convertMarkdownToLexical({
+          editorConfig: sanitizedEditorConfig,
+          markdown: generated.bodyMarkdown,
+        })
+
+        const slug = `${slugify(generated.headline)}-${Date.now()}-${i}`
+
+        // Generate image (2/3 chance)
+        let featuredImageUrl: string | undefined
+        const imagePrompt = typeof generated.imagePrompt === 'string' ? generated.imagePrompt : ''
+        const shouldGenerateImage = pickTwoThirds() && imagePrompt.length > 0
+
+        if (shouldGenerateImage) {
+          try {
+            const uploaded = await generateAndUploadImage({
+              prompt: imagePrompt,
+              fileBaseName: slug,
+            })
+            featuredImageUrl = uploaded.publicUrl
+          } catch {
+            // Image generation failed - continue without image
+          }
+        }
+
+        // Create article in Payload
+        const created = await payload.create({
+          collection: 'articles',
+          data: {
+            headline: generated.headline,
+            subheadline: generated.subheadline ?? undefined,
+            slug,
+            featuredImageUrl,
+            imageCaption: generated.imageCaption ?? undefined,
+            content: lexical,
+            excerpt: generated.excerpt ?? undefined,
+            category: categoryDoc.id,
+            author: authorDoc.id,
+            publishedAt: new Date().toISOString(),
+            status: 'published',
+            isFeatured: generated.isFeatured,
+            isHeadline: i === 0 ? generated.isHeadline : false, // Only first can be headline
+            layout: generated.layout,
+          },
+        })
+
+        createdArticles.push({
+          id: String(created.id),
+          slug,
+          featuredImageUrl: featuredImageUrl ?? null,
+        })
+      } catch (error) {
+        errors.push(`Article ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
     }
 
-    // Create article in Payload
-    const created = await payload.create({
-      collection: 'articles',
-      data: {
-        headline: generated.headline,
-        subheadline: generated.subheadline ?? undefined,
-        slug,
-        featuredImageUrl,
-        imageCaption: generated.imageCaption ?? undefined,
-        content: lexical,
-        excerpt: generated.excerpt ?? undefined,
-        category: categoryDoc.id,
-        author: authorDoc.id,
-        publishedAt: new Date().toISOString(),
-        status: 'published',
-        isFeatured: generated.isFeatured,
-        isHeadline: generated.isHeadline,
-        layout: generated.layout,
-      },
-    })
-
     return NextResponse.json({
-      ok: true,
-      created: { id: created.id, slug },
-      featuredImageUrl: featuredImageUrl ?? null,
+      ok: createdArticles.length > 0,
+      created: createdArticles,
+      errors: errors.length > 0 ? errors : undefined,
+      summary: `Created ${createdArticles.length}/${ARTICLES_PER_RUN} articles`,
     })
   } catch (error) {
     console.error('Cron generate error:', error)
