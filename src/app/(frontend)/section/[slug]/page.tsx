@@ -42,6 +42,11 @@ export default async function SectionPage({ params }: SectionPageProps) {
 
   const payload = await getPayload()
 
+  // DB unavailable (build time) - will be generated on first request
+  if (!payload) {
+    notFound()
+  }
+
   // Find the category
   const categoryResult = await payload.find({
     collection: 'categories',

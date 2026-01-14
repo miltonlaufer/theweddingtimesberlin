@@ -33,6 +33,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   const payload = await getPayload()
 
+  // DB unavailable (build time) - will be generated on first request
+  if (!payload) {
+    notFound()
+  }
+
   const result = await payload.find({
     collection: 'articles',
     where: {

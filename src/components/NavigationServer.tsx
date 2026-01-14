@@ -7,6 +7,11 @@ import { NavigationClient } from './Navigation'
 export async function NavigationServer() {
   const payload = await getPayload()
 
+  // DB unavailable (build time) - return empty navigation
+  if (!payload) {
+    return <NavigationClient categories={[]} />
+  }
+
   // Fetch all categories
   const categoriesResult = await payload.find({
     collection: 'categories',

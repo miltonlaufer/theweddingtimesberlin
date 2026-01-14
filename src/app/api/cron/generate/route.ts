@@ -61,6 +61,10 @@ export async function GET(req: Request) {
   try {
     const payload = await getPayload()
 
+    if (!payload) {
+      return NextResponse.json({ ok: false, error: 'Database unavailable' }, { status: 503 })
+    }
+
     // Ensure baseline categories exist
     const categoriesRes = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
     if ((categoriesRes.totalDocs ?? 0) === 0) {

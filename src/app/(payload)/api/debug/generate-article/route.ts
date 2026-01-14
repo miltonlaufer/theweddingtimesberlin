@@ -78,6 +78,10 @@ export async function POST(req: Request) {
 
   const payload = await getPayload()
 
+  if (!payload) {
+    return NextResponse.json({ ok: false, error: 'Database unavailable' }, { status: 503 })
+  }
+
   const categoriesRes = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
   const authorsRes = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
 
