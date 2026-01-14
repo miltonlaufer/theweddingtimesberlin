@@ -23,14 +23,7 @@ export const revalidate = 3600
 /******************* HOMEPAGE COMPONENT ***********************/
 
 export default async function HomePage() {
-  // Wrap in try/catch to handle build-time when DB is unavailable
-  let articles: IArticle[] = []
-  try {
-    const result = await fetchPublishedArticles({ limit: 40 })
-    articles = result.articles
-  } catch {
-    // DB unavailable (build time) - render empty state, will be filled on first request
-  }
+  const { articles } = await fetchPublishedArticles({ limit: 40 })
 
   if (articles.length === 0) {
     return (

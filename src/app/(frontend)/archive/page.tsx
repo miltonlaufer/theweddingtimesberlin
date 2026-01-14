@@ -5,7 +5,7 @@ import { fetchPublishedArticles } from '@/lib/articles/fetchPublishedArticles'
 
 /******************* RENDERING CONFIG ***********************/
 
-// searchParams makes this inherently dynamic, revalidate for caching
+// ISR: static at runtime, revalidate hourly  
 export const revalidate = 3600
 
 /******************* PAGE ***********************/

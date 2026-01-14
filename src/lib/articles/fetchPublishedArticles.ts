@@ -40,6 +40,17 @@ function log(location: string, message: string, data: Record<string, unknown>) {
   // #endregion agent log
 }
 
+/******************* EMPTY RESULT ***********************/
+
+const EMPTY_RESULT: FetchPublishedArticlesResult = {
+  articles: [],
+  totalDocs: 0,
+  totalPages: 1,
+  page: 1,
+  hasNextPage: false,
+  hasPrevPage: false,
+}
+
 /******************* MAIN ***********************/
 
 export async function fetchPublishedArticles(
@@ -47,6 +58,11 @@ export async function fetchPublishedArticles(
 ): Promise<FetchPublishedArticlesResult> {
   const payload = await getPayload()
   const page = args.page ?? 1
+
+  // DB unavailable (build time) - return empty result
+  if (!payload) {
+    return { ...EMPTY_RESULT, page }
+  }
 
   log('src/lib/articles/fetchPublishedArticles.ts:49', 'fetch_start', {
     limit: args.limit,
