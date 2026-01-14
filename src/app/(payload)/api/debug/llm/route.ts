@@ -29,6 +29,7 @@ export async function GET(req: Request) {
       authors,
       topicSummary,
       includeTopics,
+      recentArticleTitles: [], // Empty for debug/testing
     })
 
     return NextResponse.json({ ok: true, article })

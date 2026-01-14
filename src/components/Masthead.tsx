@@ -414,7 +414,6 @@ export const Masthead: React.FC = observer(function Masthead() {
                   // #region agent log
                   if (el && typeof window !== 'undefined') {
                     const rect = el.getBoundingClientRect()
-                    const computed = window.getComputedStyle(el)
                     const leftDiv = el.querySelector('div:first-child') as HTMLElement
                     const centerDiv = el.querySelector('div:nth-child(2)') as HTMLElement
                     const rightDiv = el.querySelector('div:last-child') as HTMLElement

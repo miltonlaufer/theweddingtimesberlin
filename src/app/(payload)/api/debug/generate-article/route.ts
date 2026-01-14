@@ -193,9 +193,12 @@ export async function POST(req: Request) {
     limit: 10,
     sort: '-publishedAt',
   })
-  const recentArticleTitles = (recentArticlesRes.docs as Array<{ headline: string }>).map(
-    (a) => a.headline,
-  )
+  const recentArticleTitles = recentArticlesRes.docs
+    .map((a) => {
+      const doc = a as unknown as { headline?: string }
+      return doc.headline
+    })
+    .filter((title): title is string => typeof title === 'string')
 
   const generated = await generateArticle({
     categories,

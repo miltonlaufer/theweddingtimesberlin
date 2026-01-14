@@ -1,8 +1,10 @@
 import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import type { Metadata } from 'next'
 import { NytContainer } from '@/components/NytContainer'
 import { fetchPublishedArticles } from '@/lib/articles/fetchPublishedArticles'
+import { getBaseUrl } from '@/lib/getBaseUrl'
 import type { IArticle } from '@/types/article'
 
 /******************* HELPERS ***********************/
@@ -13,6 +15,38 @@ function calculateReadingTime(content: string): number {
   const wordCount = text.split(' ').filter((w) => w.length > 0).length
   // Average reading speed: 200 words per minute, minimum 1 minute
   return Math.max(1, Math.ceil(wordCount / 200))
+}
+
+/******************* METADATA ***********************/
+
+export async function generateMetadata(): Promise<Metadata> {
+  const baseUrl = getBaseUrl()
+  
+  return {
+    title: 'The Wedding Times | Berlin',
+    description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+    openGraph: {
+      title: 'The Wedding Times | Berlin',
+      description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+      type: 'website',
+      locale: 'en_US',
+      siteName: 'The Wedding Times',
+      url: baseUrl,
+      images: [
+        {
+          url: `${baseUrl}/favicon.png`,
+          width: 512,
+          height: 512,
+          alt: 'The Wedding Times',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary',
+      title: 'The Wedding Times | Berlin',
+      description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+    },
+  }
 }
 
 /******************* RENDERING CONFIG ***********************/
@@ -84,10 +118,17 @@ export default async function HomePage() {
     articlesWithImages.add(opinionArticle.id)
   }
   
-  // Left and right columns: random 3/5 chance
+  // Left and right columns: deterministic 3/5 chance based on article ID hash
+  // This ensures consistent results across renders while appearing random
   [...leftColumnArticles, ...rightColumnArticles].forEach((article) => {
-    if (article.featuredImageUrl && Math.random() < 3 / 5) {
-      articlesWithImages.add(article.id)
+    if (article.featuredImageUrl) {
+      // Simple hash-based selection (deterministic but appears random)
+      const idStr = String(article.id)
+      const hash = idStr.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+      if ((hash % 5) < 3) {
+        // 3 out of 5 chance (60%)
+        articlesWithImages.add(idStr)
+      }
     }
   })
 

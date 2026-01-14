@@ -1,9 +1,11 @@
 import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { NytContainer } from '@/components/NytContainer'
 import { getPayload } from '@/lib/payload'
+import { getBaseUrl } from '@/lib/getBaseUrl'
 import {
   mapPayloadArticleToIArticle,
   type PayloadArticleLike,
@@ -24,6 +26,76 @@ export async function generateStaticParams() {
 
 interface ArticlePageProps {
   params: Promise<{ slug: string }>
+}
+
+/******************* METADATA ***********************/
+
+export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
+  const { slug } = await params
+  const baseUrl = getBaseUrl()
+  
+  const payload = await getPayload()
+  if (!payload) {
+    return {
+      title: 'The Wedding Times | Berlin',
+      description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+    }
+  }
+
+  const result = await payload.find({
+    collection: 'articles',
+    where: {
+      slug: { equals: slug },
+      status: { equals: 'published' },
+    },
+    depth: 2,
+    limit: 1,
+  })
+
+  const article = result.docs[0]
+    ? mapPayloadArticleToIArticle(result.docs[0] as PayloadArticleLike)
+    : null
+
+  if (!article) {
+    return {
+      title: 'The Wedding Times | Berlin',
+      description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+    }
+  }
+
+  const articleUrl = `${baseUrl}/article/${article.slug}`
+  const description = article.excerpt || article.subheadline || "Read the full article on The Wedding Times"
+  const imageUrl = article.featuredImageUrl || `${baseUrl}/favicon.png`
+
+  return {
+    title: `${article.headline} | The Wedding Times`,
+    description,
+    openGraph: {
+      title: article.headline,
+      description,
+      type: 'article',
+      locale: 'en_US',
+      siteName: 'The Wedding Times',
+      url: articleUrl,
+      images: [
+        {
+          url: imageUrl,
+          width: 1200,
+          height: 630,
+          alt: article.headline,
+        },
+      ],
+      publishedTime: article.publishedAt,
+      authors: [article.author.name],
+      section: article.category.name,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: article.headline,
+      description,
+      images: [imageUrl],
+    },
+  }
 }
 
 /******************* ARTICLE PAGE COMPONENT ***********************/
