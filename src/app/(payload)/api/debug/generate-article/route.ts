@@ -213,14 +213,59 @@ export async function POST(req: Request) {
     categorySlug: generated.categorySlug,
     authorSlug: generated.authorSlug,
     hasImagePrompt: Boolean(generated.imagePrompt),
+    isNewAuthor: Boolean(generated.newAuthorName),
   })
 
   const categoryDoc = (categoriesResFinal.docs as Array<{ id: string; slug: string }>).find(
     (c) => c.slug === generated.categorySlug,
   )
-  const authorDoc = (authorsResFinal.docs as Array<{ id: string; slug: string }>).find(
+  
+  // Check if author exists, or if we need to create a new one
+  let authorDoc = (authorsResFinal.docs as Array<{ id: string; slug: string }>).find(
     (a) => a.slug === generated.authorSlug,
   )
+
+  // If author doesn't exist and new author fields are provided, create the author
+  if (!authorDoc && generated.newAuthorName) {
+    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:150', 'creating_new_author', {
+      slug: generated.authorSlug,
+      name: generated.newAuthorName,
+      title: generated.newAuthorTitle,
+    })
+
+    try {
+      const newAuthor = await payload.create({
+        collection: 'authors',
+        data: {
+          name: generated.newAuthorName,
+          slug: generated.authorSlug,
+          title: generated.newAuthorTitle ?? undefined,
+          bio: generated.newAuthorBio ?? undefined,
+        },
+      })
+      authorDoc = { id: String(newAuthor.id), slug: generated.authorSlug }
+      
+      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:167', 'new_author_created', {
+        id: newAuthor.id,
+        slug: generated.authorSlug,
+      })
+    } catch (e) {
+      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:172', 'new_author_creation_failed', {
+        slug: generated.authorSlug,
+        error: e instanceof Error ? e.message : 'unknown error',
+      })
+      // If creation failed (e.g., duplicate slug), try to find existing author again
+      const existingAuthor = await payload.find({
+        collection: 'authors',
+        where: { slug: { equals: generated.authorSlug } },
+        limit: 1,
+      })
+      if (existingAuthor.docs.length > 0) {
+        const found = existingAuthor.docs[0] as { id: string; slug: string }
+        authorDoc = { id: String(found.id), slug: found.slug }
+      }
+    }
+  }
 
   if (!categoryDoc || !authorDoc) {
     log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:147', 'slug_mapping_failed', {
