@@ -1,306 +1,219 @@
-'use client'
-
-import React, { useEffect, useMemo } from 'react'
-import { observer } from 'mobx-react-lite'
+import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { useArticleStore } from '@/stores'
 import { NytContainer } from '@/components/NytContainer'
+import { fetchPublishedArticles } from '@/lib/articles/fetchPublishedArticles'
 import type { IArticle } from '@/types/article'
 
-/******************* MOCK DATA ***********************/
+/******************* HELPERS ***********************/
 
-const mockArticles: IArticle[] = [
-  {
-    id: '1',
-    headline: 'Buergeramt Appointment Secured for 2027 After 3-Year Wait',
-    subheadline: 'Local resident celebrates bureaucratic victory, plans to finally register address',
-    slug: 'buergeramt-2027',
-    featuredImageUrl: 'https://picsum.photos/seed/bureaucracy1/800/600',
-    imageCaption: 'Photo by Wedding Bureaucracy Watch',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'In a landmark achievement for patience and perseverance, a Wedding resident has finally secured an appointment at the local Buergeramt for their Anmeldung, scheduled for the spring of 2027. The resident, who began their application process in 2024, expressed "cautious optimism" about the upcoming registration.',
-    category: { id: 'c1', name: 'Bureaucracy', slug: 'bureaucracy', description: '', order: 0 },
-    author: {
-      id: 'a1',
-      name: 'Greta Schmidt',
-      slug: 'greta-schmidt',
-      title: 'Bureaucracy Correspondent',
-    },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: false,
-    isHeadline: true,
-    layout: 'standard',
-  },
-  {
-    id: '2',
-    headline: 'Schwabian Tourist Complains Wedding Too Dirty While Standing in Own Vomit',
-    subheadline: 'Incident outside Spaeti sparks debate on urban hygiene standards',
-    slug: 'schwabian-dirty-wedding',
-    featuredImageUrl: 'https://picsum.photos/seed/dirtyberlin/800/600',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'A recent visitor from Stuttgart, identified only as "Klaus," was overheard loudly lamenting the perceived filth of Wedding streets, moments before slipping into a puddle of his own making outside a popular Spaeti on Muellerstrasse.',
-    category: { id: 'c2', name: 'Nightlife', slug: 'nightlife', description: '', order: 1 },
-    author: { id: 'a2', name: 'Hans Muller', slug: 'hans-muller', title: 'Kiez Reporter' },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: true,
-    isHeadline: false,
-    layout: 'standard',
-  },
-  {
-    id: '3',
-    headline: "Neukoelln Man Offers to 'Handle' Neighbour's Parking Dispute",
-    slug: 'neukoelln-parking-dispute',
-    featuredImageUrl: 'https://picsum.photos/seed/familydrama/800/600',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'Tensions flared on Seestrasse when a local man, a prominent figure from Neukoelln visiting his cousin in Wedding, reportedly offered to "have a chat" with a neighbour over a contested parking spot.',
-    category: { id: 'c3', name: 'Kiez News', slug: 'kiez', description: '', order: 2 },
-    author: { id: 'a3', name: 'Lena Richter', slug: 'lena-richter', title: 'Social Observer' },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: true,
-    isHeadline: false,
-    layout: 'standard',
-  },
-  {
-    id: '4',
-    headline: 'Prenzlauer Berg Mother Refuses to Let Child Play in Leopoldplatz',
-    slug: 'prenzlauer-berg-leopoldplatz',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'A visiting mother from Prenzlauer Berg has refused to let her child use the playground at Leopoldplatz, citing concerns about "the wrong kind of diversity" and insufficient organic snack options.',
-    category: { id: 'c4', name: 'Opinion', slug: 'opinion', description: '', order: 3 },
-    author: { id: 'a4', name: 'Dr. Klaus Weber', slug: 'klaus-weber', title: 'Opinion Columnist' },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: false,
-    isHeadline: false,
-    layout: 'opinion',
-  },
-  {
-    id: '5',
-    headline: "Spaeti DJ's 6-Hour Techno Set Leaves Elderly Neighbours 'Forever Changed'",
-    slug: 'spaeti-techno-set',
-    featuredImageUrl: 'https://picsum.photos/seed/techno/800/600',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'What started as a quiet Thursday evening at a Reinickendorfer Strasse Spaeti quickly escalated into a six-hour odyssey of pulsating rhythms, leaving several elderly residents of the adjacent building questioning their life choices.',
-    category: { id: 'c5', name: 'Techno', slug: 'techno', description: '', order: 4 },
-    author: { id: 'a1', name: 'Greta Schmidt', slug: 'greta-schmidt' },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: false,
-    isHeadline: false,
-    layout: 'standard',
-  },
-  {
-    id: '6',
-    headline: 'Man Found at Leopoldplatz Claims He "Just Got Here"',
-    slug: 'man-leopoldplatz',
-    featuredImageUrl: 'https://picsum.photos/seed/party/800/600',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'Emergency services were called to Leopoldplatz where a man was found unresponsive on a bench. Upon regaining consciousness, he insisted he had "just arrived" despite witnesses confirming he had been there since Tuesday.',
-    category: { id: 'c2', name: 'Nightlife', slug: 'nightlife', description: '', order: 1 },
-    author: { id: 'a3', name: 'Lena Richter', slug: 'lena-richter' },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: false,
-    isHeadline: false,
-    layout: 'standard',
-  },
-  {
-    id: '7',
-    headline: 'New Doener Shop on Muellerstrasse Declared "Elevated German Cuisine"',
-    slug: 'doener-elevated',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'A newly opened Doener shop on Muellerstrasse has sparked controversy by charging 12 euros for a "deconstructed Doener experience" and referring to their garlic sauce as "artisanal aioli".',
-    category: { id: 'c6', name: 'Doener & Drinks', slug: 'food-drink', description: '', order: 5 },
-    author: { id: 'a2', name: 'Hans Muller', slug: 'hans-muller' },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: false,
-    isHeadline: false,
-    layout: 'standard',
-  },
-  {
-    id: '8',
-    headline: 'Local Resident Still Waiting for Anmeldung to Legally Exist',
-    slug: 'anmeldung-waiting',
-    featuredImageUrl: 'https://picsum.photos/seed/bureaucracy2/800/600',
-    content: '<p>Full article content here...</p>',
-    excerpt:
-      'A Wedding resident entering their third year without an Anmeldung appointment has begun to question whether they legally exist, as they remain unable to open a bank account, sign a phone contract, or prove their identity.',
-    category: { id: 'c1', name: 'Bureaucracy', slug: 'bureaucracy', description: '', order: 0 },
-    author: { id: 'a4', name: 'Dr. Klaus Weber', slug: 'klaus-weber' },
-    publishedAt: new Date().toISOString(),
-    status: 'published',
-    isFeatured: false,
-    isHeadline: false,
-    layout: 'standard',
-  },
-]
+function calculateReadingTime(content: string): number {
+  // Strip HTML tags and count words
+  const text = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const wordCount = text.split(' ').filter((w) => w.length > 0).length
+  // Average reading speed: 200 words per minute, minimum 1 minute
+  return Math.max(1, Math.ceil(wordCount / 200))
+}
+
+/******************* ISR CONFIG ***********************/
+
+export const revalidate = 3600 // Revalidate every hour
 
 /******************* HOMEPAGE COMPONENT ***********************/
 
-export default observer(function HomePage() {
-  /******************* STORE ***********************/
+export default async function HomePage() {
+  const { articles } = await fetchPublishedArticles({ limit: 40 })
 
-  const articleStore = useArticleStore()
+  if (articles.length === 0) {
+    return (
+      <main className="py-10 w-full">
+        <NytContainer>
+          <p className="font-sans text-sm text-[#666]">No published articles yet.</p>
+          <Link href="/archive" className="font-sans text-sm text-[#121212] underline mt-2 inline-block">
+            View Archive
+          </Link>
+        </NytContainer>
+      </main>
+    )
+  }
 
-  /******************* COMPUTED ***********************/
+  const headlineArticle = articles.find((a: IArticle) => a.isHeadline) ?? articles[0]
+  const opinionArticle = articles.find((a: IArticle) => a.category.slug === 'opinion' && a.id !== headlineArticle?.id)
 
-  const headlineArticle = useMemo(() => mockArticles.find((a) => a.isHeadline), [])
-  const leftColumnArticles = useMemo(() => mockArticles.filter((a) => !a.isHeadline && a.layout !== 'opinion').slice(0, 3), [])
-  const rightColumnArticles = useMemo(() => mockArticles.filter((a) => !a.isHeadline && a.layout !== 'opinion').slice(3, 7), [])
-  const opinionArticle = useMemo(() => mockArticles.find((a) => a.layout === 'opinion'), [])
+  const headlineId = headlineArticle?.id
+  const opinionId = opinionArticle?.id
+  const otherArticles = articles.filter((a: IArticle) => a.id !== headlineId && a.id !== opinionId)
 
-  /******************* EFFECTS ***********************/
-
-  useEffect(() => {
-    // articleStore.fetchAll()
-  }, [articleStore])
-
-  /******************* RENDER ***********************/
+  const leftColumnArticles = otherArticles.slice(0, 3)
+  const rightColumnArticles = otherArticles.slice(3, 9) // More compact = more articles
 
   return (
-    <main className="py-6 w-full">
+    <main className="py-10 w-full">
       <NytContainer>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_1fr_320px] lg:gap-0">
-          {/* Left Column: Text-only articles */}
-          <div className="lg:pr-7 lg:border-r lg:border-[#e2e2e2]">
-            {leftColumnArticles.map((article, index) => (
-              <Link
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-6">
+          {/* Left Column - Secondary Stories */}
+          <div className="order-2 lg:order-1 lg:border-r lg:border-[#e2e2e2] lg:pr-6">
+            {leftColumnArticles.map((article: IArticle, index: number) => (
+              <LeftColumnArticle
                 key={article.id}
-                href={`/article/${article.slug}`}
-                className={`group block ${index < leftColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''}`}
-                aria-label={article.headline}
-              >
-                <article className="pb-6 mb-6">
-                  <h3 className="font-headline text-[24px] font-semibold leading-[1.14] tracking-[-0.01em] text-[#121212] mb-3 transition-colors duration-150 group-hover:text-[#555]">
-                    {article.headline}
-                  </h3>
-                  <p className="font-serif text-[19px] leading-[1.3] text-[#333]">
-                    {article.excerpt}
-                  </p>
-                  <p className="font-sans text-[13px] font-medium text-[#666] mt-1.5 uppercase tracking-wider">
-                    6 MIN READ
-                  </p>
-                </article>
-              </Link>
+                article={article}
+                isLast={index === leftColumnArticles.length - 1}
+              />
             ))}
           </div>
 
-          {/* Center Column: Main headline with large image */}
-          <div className="lg:px-7 lg:border-r lg:border-[#e2e2e2]">
-            {headlineArticle && (
-              <Link
-                href={`/article/${headlineArticle.slug}`}
-                className="group block"
-                aria-label={headlineArticle.headline}
-              >
-                <article>
-                  {headlineArticle.featuredImageUrl && (
-                    <div className="relative w-full aspect-[16/10] mb-3">
-                      <Image
-                        src={headlineArticle.featuredImageUrl}
-                        alt={headlineArticle.headline}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 768px) 100vw, 50vw"
-                        priority
-                      />
-                    </div>
-                  )}
-                  {headlineArticle.imageCaption && (
-                    <p className="font-sans text-sm text-[#666] mb-4 text-right">
-                      {headlineArticle.imageCaption}
-                    </p>
-                  )}
-                  <h2 className="font-headline text-[38px] font-semibold leading-[1.06] tracking-[-0.015em] text-[#121212] mb-3 transition-colors duration-150 group-hover:text-[#555]">
-                    {headlineArticle.headline}
-                  </h2>
-                  {headlineArticle.subheadline && (
-                    <p className="font-serif text-[20px] leading-[1.24] text-[#333] mb-3">
-                      {headlineArticle.subheadline}
-                    </p>
-                  )}
-                  <p className="font-serif text-[19px] leading-[1.3] text-[#333]">
-                    {headlineArticle.excerpt}
-                  </p>
-                </article>
-              </Link>
-            )}
-          </div>
-
-          {/* Right Column: Articles with thumbnails */}
-          <div className="lg:pl-7">
-            {rightColumnArticles.map((article, index) => (
-              <Link
-                key={article.id}
-                href={`/article/${article.slug}`}
-                className={`group block ${index < rightColumnArticles.length - 1 ? 'border-b border-[#e2e2e2]' : ''}`}
-                aria-label={article.headline}
-              >
-                <article className="pb-5 mb-5">
-                  {article.featuredImageUrl && (
-                    <div className="relative w-full aspect-[16/10] mb-3">
-                      <Image
-                        src={article.featuredImageUrl}
-                        alt={article.headline}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 1024px) 100vw, 320px"
-                      />
-                    </div>
-                  )}
-
-                  <h3 className="font-headline text-[18px] font-semibold leading-[1.15] tracking-[-0.01em] text-[#121212] mb-2 transition-colors duration-150 group-hover:text-[#555]">
-                    {article.headline}
-                  </h3>
-                  <p className="font-serif text-[17px] leading-[1.3] text-[#333] line-clamp-3">
-                    {article.excerpt}
-                  </p>
-                  <p className="font-sans text-xs font-medium text-[#666] mt-1.5 uppercase tracking-wider">
-                    5 MIN READ
-                  </p>
-                </article>
-              </Link>
-            ))}
+          {/* Center Column - Main Headline */}
+          <div className="order-1 lg:order-2 lg:px-6 lg:border-r lg:border-[#e2e2e2]">
+            {headlineArticle && <HeadlineArticle article={headlineArticle} />}
 
             {/* Opinion Section */}
-            {opinionArticle && (
-              <div className="mt-7 pt-6 border-t-2 border-[rgba(18,18,18,0.45)]">
-                <h4 className="font-sans text-lg font-bold uppercase tracking-wider text-[#121212] mb-4">
-                  Opinion
-                </h4>
-                <article>
-                  {opinionArticle.author?.name && (
-                    <p className="font-sans text-base font-bold text-[#121212] mb-2">
-                      {opinionArticle.author.name}
-                    </p>
-                  )}
-                  <Link
-                    href={`/article/${opinionArticle.slug}`}
-                    className="group block"
-                    aria-label={opinionArticle.headline}
-                  >
-                    <h3 className="font-headline text-[20px] font-medium leading-[1.25] text-[#121212] transition-colors duration-150 group-hover:text-[#555]">
-                      {opinionArticle.headline}
-                    </h3>
-                  </Link>
-                </article>
-              </div>
-            )}
+            {opinionArticle && <OpinionSection article={opinionArticle} />}
+          </div>
+
+          {/* Right Column - More Stories */}
+          <div className="order-3 lg:pl-6">
+            <h2 className="font-sans text-sm font-bold uppercase tracking-wider text-[#121212] pb-2 mb-4 border-b border-[#e2e2e2]">
+              More News
+            </h2>
+            {rightColumnArticles.map((article: IArticle, index: number) => (
+              <RightColumnArticle
+                key={article.id}
+                article={article}
+                isLast={index === rightColumnArticles.length - 1}
+                showImage={index === 0}
+              />
+            ))}
           </div>
         </div>
       </NytContainer>
     </main>
   )
-})
+}
+
+/******************* SUB-COMPONENTS ***********************/
+
+function LeftColumnArticle({ article, isLast }: { article: IArticle; isLast: boolean }) {
+  const readingTime = calculateReadingTime(article.content)
+  return (
+    <Link key={article.id} href={`/article/${article.slug}`} className="group block">
+      <article className={`pb-5 mb-5 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
+        <h3 className="font-headline text-[26px] font-bold leading-[1.15] tracking-[-0.01em] text-[#121212] mb-2 group-hover:text-[#555] transition-colors">
+          {article.headline}
+        </h3>
+        <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-3">
+          {article.excerpt}
+        </p>
+        <p className="font-sans text-xs font-medium text-[#666] mt-2 uppercase tracking-wider">
+          {readingTime} MIN READ
+        </p>
+      </article>
+    </Link>
+  )
+}
+
+function HeadlineArticle({ article }: { article: IArticle }) {
+  return (
+    <Link href={`/article/${article.slug}`} className="group block">
+      <article>
+        {article.featuredImageUrl && (
+          <div className="w-full aspect-[16/10] mb-3 relative overflow-hidden">
+            <Image
+              src={article.featuredImageUrl}
+              alt={article.headline}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              priority
+              sizes="(max-width: 768px) 100vw, 600px"
+            />
+          </div>
+        )}
+        <h2 className="font-headline text-[40px] font-bold leading-[1.1] tracking-[-0.02em] text-[#121212] mb-3 group-hover:text-[#555] transition-colors">
+          {article.headline}
+        </h2>
+        {article.subheadline && (
+          <p className="font-serif text-xl text-[#333] mb-3 leading-snug">
+            {article.subheadline}
+          </p>
+        )}
+        <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-4">
+          {article.excerpt}
+        </p>
+        <p className="font-sans text-xs font-medium text-[#666] mt-3 uppercase tracking-wider">
+          By {article.author.name}
+        </p>
+      </article>
+    </Link>
+  )
+}
+
+function OpinionSection({ article }: { article: IArticle }) {
+  return (
+    <div className="mt-8 pt-8 border-t-2 border-[rgba(18,18,18,0.7)]">
+      <h2 className="font-sans text-sm font-bold uppercase tracking-wider text-[#121212] mb-4">
+        Opinion
+      </h2>
+      <Link href={`/article/${article.slug}`} className="group block">
+        <article>
+          <h3 className="font-headline text-[22px] font-semibold leading-[1.2] text-[#121212] mb-2 group-hover:text-[#555] transition-colors">
+            {article.headline}
+          </h3>
+          <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-3 mb-2">
+            {article.excerpt}
+          </p>
+          <p className="font-sans text-sm text-[#333]">
+            By {article.author.name}
+            {article.author.title && (
+              <span className="text-[#666]">, {article.author.title}</span>
+            )}
+          </p>
+        </article>
+      </Link>
+    </div>
+  )
+}
+
+function RightColumnArticle({
+  article,
+  isLast,
+  showImage,
+}: {
+  article: IArticle
+  isLast: boolean
+  showImage: boolean
+}) {
+  const readingTime = calculateReadingTime(article.content)
+  return (
+    <Link key={article.id} href={`/article/${article.slug}`} className="group block">
+      <article className={`pb-4 mb-4 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
+        {showImage && article.featuredImageUrl ? (
+          // First article: image on top
+          <>
+            <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
+              <Image
+                src={article.featuredImageUrl}
+                alt={article.headline}
+                fill
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
+                sizes="320px"
+              />
+            </div>
+            <h3 className="font-headline text-[18px] font-semibold leading-[1.2] tracking-[-0.01em] text-[#121212] group-hover:text-[#555] transition-colors">
+              {article.headline}
+            </h3>
+          </>
+        ) : (
+          // Other articles: compact text-only
+          <>
+            <h3 className="font-headline text-[16px] font-semibold leading-[1.2] tracking-[-0.01em] text-[#121212] group-hover:text-[#555] transition-colors">
+              {article.headline}
+            </h3>
+            <p className="font-sans text-xs text-[#666] mt-1 uppercase tracking-wider">
+              {readingTime} MIN READ
+            </p>
+          </>
+        )}
+      </article>
+    </Link>
+  )
+}

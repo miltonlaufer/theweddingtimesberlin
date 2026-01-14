@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import { observer } from 'mobx-react-lite'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NytContainer } from './NytContainer'
@@ -16,27 +15,24 @@ const CaretDownIcon: React.FC = React.memo(function CaretDownIcon() {
   )
 })
 
-/******************* DATA ***********************/
+/******************* TYPES ***********************/
 
-const categories = [
-  { name: 'Bureaucracy', slug: 'bureaucracy' },
-  { name: 'Leopoldplatz', slug: 'leopoldplatz' },
-  { name: 'Nightlife', slug: 'nightlife' },
-  { name: 'Opinion', slug: 'opinion' },
-  { name: 'Doener & Drinks', slug: 'food-drink' },
-  { name: 'Crime', slug: 'crime' },
-  { name: 'Techno', slug: 'techno' },
-  { name: 'Kiez News', slug: 'kiez' },
-  { name: 'Gentrification', slug: 'gentrification' },
-]
+interface NavigationClientProps {
+  categories: Array<{ name: string; slug: string }>
+}
 
-/******************* MAIN COMPONENT ***********************/
+/******************* CLIENT COMPONENT ***********************/
 
-export const Navigation: React.FC = observer(function Navigation() {
+export const NavigationClient: React.FC<NavigationClientProps> = React.memo(function NavigationClient({
+  categories,
+}) {
   const pathname = usePathname()
   const isArticlePage = pathname.startsWith('/article/')
 
   if (isArticlePage) return null
+
+  // If no categories have articles, don't render navigation
+  if (categories.length === 0) return null
 
   return (
     <nav>
@@ -61,3 +57,8 @@ export const Navigation: React.FC = observer(function Navigation() {
     </nav>
   )
 })
+
+/******************* LEGACY EXPORT (for backwards compatibility) ***********************/
+
+// This is a simple wrapper that shows nothing - the real Navigation is NavigationServer
+export const Navigation: React.FC = () => null

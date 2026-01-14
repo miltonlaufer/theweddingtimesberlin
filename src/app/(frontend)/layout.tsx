@@ -1,5 +1,5 @@
 import React from 'react'
-import { Masthead, Navigation, SatiricalRibbon, Footer } from '@/components'
+import { Masthead, NavigationServer, SatiricalRibbon, Footer } from '@/components'
 import { StoreProvider } from '@/stores'
 import '../../styles/global.css'
 
@@ -19,7 +19,7 @@ export default function FrontendLayout({ children }: FrontendLayoutProps) {
           <div className="min-h-screen flex flex-col">
             <SatiricalRibbon />
             <Masthead />
-            <Navigation />
+            <NavigationServer />
             <main className="flex-1">{children}</main>
             <Footer />
           </div>

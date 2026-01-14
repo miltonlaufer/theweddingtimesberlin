@@ -1,5 +1,6 @@
 import { buildConfig } from 'payload'
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
+import { postgresAdapter } from '@payloadcms/db-postgres'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -27,10 +28,28 @@ export default buildConfig({
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
-  db: sqliteAdapter({
-    client: {
-      url: process.env.DATABASE_URI || 'file:./payload.db',
-    },
-  }),
+  db: (() => {
+    const databaseUri = process.env.DATABASE_URI
+    const isPostgresUri = databaseUri?.startsWith('postgres') === true
+
+    // Avoid breaking local dev if a remote Postgres URI is present but unreachable.
+    // - Production: use Postgres automatically
+    // - Dev: use SQLite unless explicitly opted-in via PAYLOAD_USE_POSTGRES=1
+    const usePostgres =
+      isPostgresUri && (process.env.NODE_ENV === 'production' || process.env.PAYLOAD_USE_POSTGRES === '1')
+
+    return usePostgres
+      ? postgresAdapter({
+          migrationDir: path.resolve(dirname, 'migrations'),
+          pool: {
+            connectionString: databaseUri,
+          },
+        })
+      : sqliteAdapter({
+          client: {
+            url: databaseUri?.startsWith('file:') === true ? databaseUri : 'file:./payload.db',
+          },
+        })
+  })(),
   sharp,
 })

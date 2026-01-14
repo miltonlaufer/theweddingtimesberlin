@@ -34,6 +34,13 @@ export const Articles: CollectionConfig = {
       relationTo: 'media',
     },
     {
+      name: 'featuredImageUrl',
+      type: 'text',
+      admin: {
+        description: 'External image URL (e.g. Supabase Storage). Used when running on Vercel.',
+      },
+    },
+    {
       name: 'imageCaption',
       type: 'text',
     },

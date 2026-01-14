@@ -9,14 +9,16 @@ import { NytContainer } from './NytContainer'
 
 /******************* DRUG PRICES DATA ***********************/
 
-const drugPrices = [
-  { name: 'Weed', price: '+2.34%', isUp: true },
-  { name: 'MDMA', price: '-4.12%', isUp: false },
-  { name: 'Ket', price: '+8.71%', isUp: true },
-  { name: 'Coke', price: '-1.89%', isUp: false },
-  { name: 'Speed', price: '+5.23%', isUp: true },
-  { name: 'Shrooms', price: '+12.4%', isUp: true },
-]
+const drugNames = ['Weed', 'MDMA', 'Ket', 'Coke', 'Speed', 'Shrooms', 'LSD', '2C-B']
+
+function generateRandomPrice(): { price: string; isUp: boolean } {
+  const isUp = Math.random() > 0.4 // 60% chance up
+  const change = (Math.random() * 15 + 0.5).toFixed(2) // 0.50% to 15.50%
+  return {
+    price: `${isUp ? '+' : '-'}${change}%`,
+    isUp,
+  }
+}
 
 /******************* ICONS ***********************/
 
@@ -50,6 +52,7 @@ const DrugTicker: React.FC = React.memo(function DrugTicker() {
   /******************* STATE ***********************/
 
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [currentPrice, setCurrentPrice] = useState(generateRandomPrice)
   const [isVisible, setIsVisible] = useState(true)
 
   /******************* EFFECTS ***********************/
@@ -58,16 +61,13 @@ const DrugTicker: React.FC = React.memo(function DrugTicker() {
     const interval = setInterval(() => {
       setIsVisible(false)
       setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % drugPrices.length)
+        setCurrentIndex((prev) => (prev + 1) % drugNames.length)
+        setCurrentPrice(generateRandomPrice()) // New random price each time
         setIsVisible(true)
       }, 500)
     }, 4000)
     return () => clearInterval(interval)
   }, [])
-
-  /******************* COMPUTED ***********************/
-
-  const currentDrug = drugPrices[currentIndex]
 
   /******************* RENDER ***********************/
 
@@ -77,12 +77,12 @@ const DrugTicker: React.FC = React.memo(function DrugTicker() {
         isVisible ? 'opacity-100' : 'opacity-0'
       }`}
     >
-      <span className="text-[#666] mr-2">{currentDrug.name}</span>
-      <span className={`font-semibold text-xl ${currentDrug.isUp ? 'text-[#0a7c00]' : 'text-[#d32f2f]'}`}>
-        {currentDrug.price}
+      <span className="text-[#666] mr-2">{drugNames[currentIndex]}</span>
+      <span className={`font-semibold text-xl ${currentPrice.isUp ? 'text-[#0a7c00]' : 'text-[#d32f2f]'}`}>
+        {currentPrice.price}
       </span>
-      <span className={`ml-1 text-xs ${currentDrug.isUp ? 'text-[#0a7c00]' : 'text-[#d32f2f]'}`}>
-        {currentDrug.isUp ? '▲' : '▼'}
+      <span className={`ml-1 text-xs ${currentPrice.isUp ? 'text-[#0a7c00]' : 'text-[#d32f2f]'}`}>
+        {currentPrice.isUp ? '▲' : '▼'}
       </span>
     </div>
   )
@@ -307,11 +307,11 @@ export const Masthead: React.FC = observer(function Masthead() {
 
               {/* Row 2: Date left, Masthead center, Ticker right */}
               <div className="flex items-center justify-between py-3 pb-5">
-                {/* Left - Date and Today's Paper */}
+                {/* Left - Date and Archive */}
                 <div className="hidden md:flex flex-col flex-1">
                   <div className="font-sans text-[13px] text-[#121212]">{formattedDate}</div>
-                  <Link href="/todays-paper" className="font-sans text-[13px] text-[#121212]">
-                    Today&apos;s Paper
+                  <Link href="/archive" className="font-sans text-[13px] text-[#121212]">
+                    Archive
                   </Link>
                 </div>
 
