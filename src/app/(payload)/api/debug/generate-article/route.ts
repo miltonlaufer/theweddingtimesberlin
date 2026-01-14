@@ -184,11 +184,25 @@ export async function POST(req: Request) {
     topicSummaryLen: topicSummary.length,
   })
 
+  // Fetch last 10 article titles to avoid repetition
+  const recentArticlesRes = await payload.find({
+    collection: 'articles',
+    where: {
+      status: { equals: 'published' },
+    },
+    limit: 10,
+    sort: '-publishedAt',
+  })
+  const recentArticleTitles = (recentArticlesRes.docs as Array<{ headline: string }>).map(
+    (a) => a.headline,
+  )
+
   const generated = await generateArticle({
     categories,
     authors,
     topicSummary,
     includeTopics,
+    recentArticleTitles,
   })
 
   log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:132', 'llm_generated', {

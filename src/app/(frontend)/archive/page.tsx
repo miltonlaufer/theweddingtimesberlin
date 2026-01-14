@@ -5,8 +5,8 @@ import { fetchPublishedArticles } from '@/lib/articles/fetchPublishedArticles'
 
 /******************* RENDERING CONFIG ***********************/
 
-// ISR: static at runtime, revalidate hourly  
-export const revalidate = 3600
+// ISR: pre-render at build time, revalidate every 20 minutes
+export const revalidate = 1200
 
 /******************* PAGE ***********************/
 

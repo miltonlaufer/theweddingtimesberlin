@@ -66,7 +66,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const categoryUrl = `/section/${article.category.slug}`
 
   return (
-    <NytContainer>
+    <div className="pt-20">
+      <NytContainer>
       <article className="py-6">
         {/* Article header */}
         <header className="max-w-[680px] mx-auto">
@@ -78,13 +79,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           </Link>
 
           {/* Headline */}
-          <h1 className="font-headline text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mt-3 text-[#121212]">
+          <h1 className="font-headline text-4xl md:text-5xl lg:text-6xl font-bold leading-[1.2] mt-3 text-[#121212]">
             {article.headline}
           </h1>
 
           {/* Subheadline */}
           {article.subheadline && (
-            <p className="font-serif text-xl md:text-2xl text-[#333] mt-4">
+            <p className="font-serif text-xl md:text-2xl text-[#333] mt-6 mb-6 leading-snug">
               {article.subheadline}
             </p>
           )}
@@ -136,7 +137,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         {/* Article content */}
         <div className="mt-8 max-w-[680px] mx-auto">
           <div
-            className="font-serif text-xl leading-relaxed text-[#121212] prose prose-lg"
+            className="article font-serif text-xl leading-relaxed text-[#121212] prose prose-lg"
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
         </div>
@@ -159,6 +160,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           </aside>
         )}
       </article>
-    </NytContainer>
+      </NytContainer>
+    </div>
   )
 }

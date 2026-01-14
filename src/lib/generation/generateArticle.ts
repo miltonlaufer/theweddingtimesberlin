@@ -20,6 +20,7 @@ export interface GenerateArticleInput {
   authors: GeneratorAuthorOption[]
   topicSummary: string
   includeTopics: boolean
+  recentArticleTitles: string[] // Titles of recent articles to avoid repeating
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -320,12 +321,32 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   ]
   const randomFocus = topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
 
+  const recentTitlesSection =
+    input.recentArticleTitles.length > 0
+      ? `\nCRITICAL: DO NOT write about these recent article topics (avoid repetition):\n${input.recentArticleTitles.map((title, idx) => `${idx + 1}. ${title}`).join('\n')}\n\nYou must write about a DIFFERENT topic/subject matter.`
+      : ''
+
   const systemPrompt = [
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
     'Language: write everything in US English (no German, no other languages).',
-    'Tone: news-like, witty, sharp, absurd, observational (think: Ricky Gervais style punchlines, but avoid hate/harassment).',
+    'Tone: news-like, witty, sharp, absurd, observational. Jokes should be intellectual meets indecent—clever wordplay and sophisticated humor with a subtle edge of risqué or slightly inappropriate content (think: Ricky Gervais meets intellectual dark humor, but avoid hate/harassment and stay within OpenAI safety guidelines).',
     `FOR THIS ARTICLE, focus on: ${randomFocus}`,
-    'Pick a categorySlug that BEST matches your topic (bureaucracy, leopoldplatz, nightlife, opinion, food-drink, crime, techno, kiez, gentrification, drugs, decadence, filth).',
+    recentTitlesSection,
+    'CRITICAL: Pick a categorySlug that BEST matches your assigned topic focus above.',
+    'Category mapping guide:',
+    '- Drugs/ketamine/club bathroom → drugs',
+    '- Techno/Berghain/DJ/warehouse rave → techno',
+    '- Decadence/after-parties/hedonism → decadence',
+    '- Filth/trash/cleaning/rats → filth',
+    '- Bureaucracy/forms/appointments → bureaucracy',
+    '- Leopoldplatz/fountain → leopoldplatz',
+    '- Nightlife/clubs/parties → nightlife',
+    '- Food/kebab/späti → food-drink',
+    '- Crime/theft/police → crime',
+    '- Local news/kiez/BVG → kiez',
+    '- Rent/gentrification/expats → gentrification',
+    '- Opinion/editorial → opinion',
+    'DO NOT default to bureaucracy, nightlife, or opinion unless your topic truly matches.',
     'Important safety: do not use slurs; do not advocate harm; do not target protected groups with hateful content.',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
   ].join('\n')

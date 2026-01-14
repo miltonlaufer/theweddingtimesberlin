@@ -151,4 +151,24 @@
       padding-right: 20px;
     }
   }
+
+  /* Article content headings - target nested structure with high specificity */
+  article  h1,
+  article .prose h1,
+  article .prose-lg h1,
+  article  .payload-richtext h1,
+  .payload-richtext h1 {
+    line-height: 1.1 !important;
+    font-style: italic !important;
+  }
+
+  article  h2,
+  article .prose h2,
+  article .prose-lg h2,
+  article  .payload-richtext h2,
+  .payload-richtext h2 {
+    line-height: 1.25 !important;
+    margin-top: 1.5rem !important;
+    margin-bottom: 1.5rem !important;
+  }
 }

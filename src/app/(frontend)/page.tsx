@@ -17,13 +17,13 @@ function calculateReadingTime(content: string): number {
 
 /******************* RENDERING CONFIG ***********************/
 
-// ISR: static at runtime, revalidate hourly
-export const revalidate = 3600
+// ISR: pre-render at build time, revalidate every 20 minutes
+export const revalidate = 1200
 
 /******************* HOMEPAGE COMPONENT ***********************/
 
 export default async function HomePage() {
-  const { articles } = await fetchPublishedArticles({ limit: 40 })
+  const { articles } = await fetchPublishedArticles({ limit: 50 })
 
   if (articles.length === 0) {
     return (
@@ -38,15 +38,58 @@ export default async function HomePage() {
     )
   }
 
+  // Distribution ratio: Left:Center:Right = 15:10:25
+  const totalArticles = articles.length
+  const ratioTotal = 15 + 10 + 25 // 50
+  
+  // Calculate distribution based on ratio (proportional)
+  const leftCount = Math.round((totalArticles * 15) / ratioTotal)
+  const centerCount = Math.round((totalArticles * 10) / ratioTotal)
+  const rightCount = totalArticles - leftCount - centerCount // Ensure we use all articles
+
   const headlineArticle = articles.find((a: IArticle) => a.isHeadline) ?? articles[0]
   const opinionArticle = articles.find((a: IArticle) => a.category.slug === 'opinion' && a.id !== headlineArticle?.id)
 
   const headlineId = headlineArticle?.id
   const opinionId = opinionArticle?.id
+  
+  // Separate headline/opinion from other articles
   const otherArticles = articles.filter((a: IArticle) => a.id !== headlineId && a.id !== opinionId)
 
-  const leftColumnArticles = otherArticles.slice(0, 3)
-  const rightColumnArticles = otherArticles.slice(3, 9) // More compact = more articles
+  // Center already has headline (1) + opinion (1) = 2 articles
+  // So center needs (centerCount - 2) more regular articles
+  const centerRegularCount = Math.max(0, centerCount - 2)
+  
+  // Distribute remaining articles
+  const leftColumnArticles = otherArticles.slice(0, leftCount)
+  const centerColumnArticles = otherArticles.slice(leftCount, leftCount + centerRegularCount)
+  const rightColumnArticles = otherArticles.slice(leftCount + centerRegularCount, leftCount + centerRegularCount + rightCount)
+
+  // Randomly decide which articles show photos (3/5 chance for left/right columns)
+  // Center column articles always show images if available
+  const articlesWithImages = new Set<string>()
+  
+  // Center column articles always show images
+  centerColumnArticles.forEach((article) => {
+    if (article.featuredImageUrl) {
+      articlesWithImages.add(article.id)
+    }
+  })
+  
+  // Headline and opinion always show images if available
+  if (headlineArticle?.featuredImageUrl) {
+    articlesWithImages.add(headlineArticle.id)
+  }
+  if (opinionArticle?.featuredImageUrl) {
+    articlesWithImages.add(opinionArticle.id)
+  }
+  
+  // Left and right columns: random 3/5 chance
+  [...leftColumnArticles, ...rightColumnArticles].forEach((article) => {
+    if (article.featuredImageUrl && Math.random() < 3 / 5) {
+      articlesWithImages.add(article.id)
+    }
+  })
 
   return (
     <main className="py-10 w-full">
@@ -60,6 +103,7 @@ export default async function HomePage() {
                 key={article.id}
                 article={article}
                 isLast={index === leftColumnArticles.length - 1}
+                showImage={articlesWithImages.has(article.id)}
               />
             ))}
           </div>
@@ -70,6 +114,20 @@ export default async function HomePage() {
 
             {/* Opinion Section */}
             {opinionArticle && <OpinionSection article={opinionArticle} />}
+
+            {/* Additional Center Column Articles */}
+            {centerColumnArticles.length > 0 && (
+              <div className="mt-8 pt-8 border-t border-[#e2e2e2]">
+                {centerColumnArticles.map((article: IArticle, index: number) => (
+                  <CenterColumnArticle
+                    key={article.id}
+                    article={article}
+                    isLast={index === centerColumnArticles.length - 1}
+                    showImage={articlesWithImages.has(article.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Right Column - More Stories */}
@@ -82,7 +140,7 @@ export default async function HomePage() {
                 key={article.id}
                 article={article}
                 isLast={index === rightColumnArticles.length - 1}
-                showImage={index === 0}
+                showImage={articlesWithImages.has(article.id) || index === 0}
               />
             ))}
           </div>
@@ -94,11 +152,30 @@ export default async function HomePage() {
 
 /******************* SUB-COMPONENTS ***********************/
 
-function LeftColumnArticle({ article, isLast }: { article: IArticle; isLast: boolean }) {
+function LeftColumnArticle({
+  article,
+  isLast,
+  showImage,
+}: {
+  article: IArticle
+  isLast: boolean
+  showImage: boolean
+}) {
   const readingTime = calculateReadingTime(article.content)
   return (
     <Link key={article.id} href={`/article/${article.slug}`} className="group block">
       <article className={`pb-5 mb-5 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
+        {showImage && article.featuredImageUrl && (
+          <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
+            <Image
+              src={article.featuredImageUrl}
+              alt={article.headline}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, 280px"
+            />
+          </div>
+        )}
         <h3 className="font-headline text-[26px] font-bold leading-[1.15] tracking-[-0.01em] text-[#121212] mb-2 group-hover:text-[#555] transition-colors">
           {article.headline}
         </h3>
@@ -171,6 +248,46 @@ function OpinionSection({ article }: { article: IArticle }) {
         </article>
       </Link>
     </div>
+  )
+}
+
+function CenterColumnArticle({
+  article,
+  isLast,
+  showImage,
+}: {
+  article: IArticle
+  isLast: boolean
+  showImage: boolean
+}) {
+  const readingTime = calculateReadingTime(article.content)
+  return (
+    <Link href={`/article/${article.slug}`} className="group block">
+      <article className={`pb-5 mb-5 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
+        {showImage && article.featuredImageUrl && (
+          <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
+            <Image
+              src={article.featuredImageUrl}
+              alt={article.headline}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, 600px"
+            />
+          </div>
+        )}
+        <h3 className="font-headline text-[24px] font-bold leading-[1.15] tracking-[-0.01em] text-[#121212] mb-2 group-hover:text-[#555] transition-colors">
+          {article.headline}
+        </h3>
+        {article.excerpt && (
+          <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-2 mb-2">
+            {article.excerpt}
+          </p>
+        )}
+        <p className="font-sans text-xs font-medium text-[#666] uppercase tracking-wider">
+          {readingTime} MIN READ
+        </p>
+      </article>
+    </Link>
   )
 }
 

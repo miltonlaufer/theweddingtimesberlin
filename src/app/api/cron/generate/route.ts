@@ -26,6 +26,9 @@ const BASELINE_CATEGORIES = [
   { name: 'Techno', slug: 'techno', order: 7 },
   { name: 'Kiez News', slug: 'kiez', order: 8 },
   { name: 'Gentrification', slug: 'gentrification', order: 9 },
+  { name: 'Drugs', slug: 'drugs', order: 10 },
+  { name: 'Decadence', slug: 'decadence', order: 11 },
+  { name: 'Filth', slug: 'filth', order: 12 },
 ]
 
 /******************* HELPERS ***********************/
@@ -123,25 +126,69 @@ export async function GET(req: Request) {
     // Fetch RSS topics once for all articles
     const { topicSummary } = await fetchRssTopics()
 
+    // Fetch last 10 article titles to avoid repetition
+    const recentArticlesRes = await payload.find({
+      collection: 'articles',
+      where: {
+        status: { equals: 'published' },
+      },
+      limit: 10,
+      sort: '-publishedAt',
+    })
+    const recentArticleTitles = (recentArticlesRes.docs as Array<{ headline: string }>).map(
+      (a) => a.headline,
+    )
+
     // Prepare editor config once
     const sanitizedEditorConfig = await sanitizeServerEditorConfig(defaultEditorConfig, payload.config)
 
     // Generate multiple articles
     const createdArticles: Array<{ id: string; slug: string; featuredImageUrl: string | null }> = []
     const errors: string[] = []
+    const usedCategories = new Set<string>()
 
     for (let i = 0; i < ARTICLES_PER_RUN; i++) {
       try {
         // 2/3 chance to include RSS topics for variety
         const includeTopics = pickTwoThirds()
 
-        // Generate article
+        // Prefer unused categories, but allow repeats if we've used all
+        const unusedCategories = categories.filter((c) => !usedCategories.has(c.slug))
+        const categoriesToUse = unusedCategories.length > 0 ? unusedCategories : categories
+
+        // Generate article with category distribution
         const generated = await generateArticle({
-          categories,
+          categories: categoriesToUse,
           authors,
           topicSummary,
           includeTopics,
+          recentArticleTitles,
         })
+
+        // Track used category
+        usedCategories.add(generated.categorySlug)
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'cron/generate/route.ts:145',
+            message: 'Category selected for article',
+            data: {
+              articleIndex: i + 1,
+              categorySlug: generated.categorySlug,
+              usedCategories: Array.from(usedCategories),
+              availableCategories: categoriesToUse.map((c) => c.slug),
+              wasUnused: unusedCategories.length > 0,
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            runId: 'category-distribution',
+            hypothesisId: 'A',
+          }),
+        }).catch(() => {})
+        // #endregion agent log
 
         // Map slugs to IDs
         const categoryDoc = (categoriesFinal.docs as Array<{ id: string; slug: string }>).find(
