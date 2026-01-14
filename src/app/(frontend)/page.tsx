@@ -74,32 +74,32 @@ export default async function HomePage() {
     )
   }
 
+  // Separate opinion articles from regular articles FIRST
+  const allOpinionArticles = articles.filter((a: IArticle) => a.category.slug === 'opinion')
+  const nonOpinionArticles = articles.filter((a: IArticle) => a.category.slug !== 'opinion')
+
+  const headlineArticle = nonOpinionArticles.find((a: IArticle) => a.isHeadline) ?? nonOpinionArticles[0]
+  const opinionArticle = allOpinionArticles[0] // Show latest opinion article in the Opinion section
+
+  const headlineId = headlineArticle?.id
+  
+  // Only non-opinion articles go into the regular columns (excluding the headline)
+  const otherArticles = nonOpinionArticles.filter((a: IArticle) => a.id !== headlineId)
+
   // Distribution ratio: Left:Center:Right = 12:14:24
-  const totalArticles = articles.length
+  // Calculate based on DISTRIBUTABLE articles (non-opinion, non-headline)
+  const distributableCount = otherArticles.length
   const ratioTotal = 12 + 14 + 24 // 50
   
   // Calculate distribution based on ratio (proportional)
-  const leftCount = Math.round((totalArticles * 12) / ratioTotal)
-  const centerCount = Math.round((totalArticles * 14) / ratioTotal)
-  const rightCount = totalArticles - leftCount - centerCount // Ensure we use all articles
-
-  const headlineArticle = articles.find((a: IArticle) => a.isHeadline) ?? articles[0]
-  const opinionArticle = articles.find((a: IArticle) => a.category.slug === 'opinion' && a.id !== headlineArticle?.id)
-
-  const headlineId = headlineArticle?.id
-  const opinionId = opinionArticle?.id
-  
-  // Separate headline/opinion from other articles
-  const otherArticles = articles.filter((a: IArticle) => a.id !== headlineId && a.id !== opinionId)
-
-  // Center already has headline (1) + opinion (1) = 2 articles
-  // So center needs (centerCount - 2) more regular articles
-  const centerRegularCount = Math.max(0, centerCount - 2)
+  const leftCount = Math.round((distributableCount * 12) / ratioTotal)
+  const centerRegularCount = Math.round((distributableCount * 14) / ratioTotal)
+  // Right column gets all remaining articles (slice to end)
   
   // Distribute remaining articles
   const leftColumnArticles = otherArticles.slice(0, leftCount)
   const centerColumnArticles = otherArticles.slice(leftCount, leftCount + centerRegularCount)
-  const rightColumnArticles = otherArticles.slice(leftCount + centerRegularCount, leftCount + centerRegularCount + rightCount)
+  const rightColumnArticles = otherArticles.slice(leftCount + centerRegularCount)
 
   // Randomly decide which articles show photos (3/5 chance for left/right columns)
   // Center column articles always show images if available
