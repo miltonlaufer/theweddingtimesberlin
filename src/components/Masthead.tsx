@@ -254,70 +254,10 @@ export const Masthead: React.FC = observer(function Masthead() {
         }
       >
         <NytContainer>
-          <div
-            ref={(el) => {
-              // #region agent log
-              if (el && typeof window !== 'undefined') {
-                const rect = el.getBoundingClientRect()
-                const computed = window.getComputedStyle(el)
-                fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    location: 'Masthead.tsx:256',
-                    message: 'NytContainer dimensions',
-                    data: {
-                      width: rect.width,
-                      left: rect.left,
-                      paddingLeft: computed.paddingLeft,
-                      paddingRight: computed.paddingRight,
-                      viewportWidth: window.innerWidth,
-                    },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    runId: 'run1',
-                    hypothesisId: 'B',
-                  }),
-                }).catch(() => {})
-              }
-              // #endregion agent log
-            }}
-            style={{ display: 'contents' }}
-          />
           {isArticlePage ? (
             <>
               {/* Article header: compact masthead + burger/search, no ticker, no category nav */}
-              <div
-                className="relative flex items-center justify-between py-2"
-                ref={(el) => {
-                  // #region agent log
-                  if (el && typeof window !== 'undefined') {
-                    const rect = el.getBoundingClientRect()
-                    const computed = window.getComputedStyle(el)
-                    fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        location: 'Masthead.tsx:260',
-                        message: 'Parent container dimensions',
-                        data: {
-                          width: rect.width,
-                          left: rect.left,
-                          right: rect.right,
-                          position: computed.position,
-                          paddingLeft: computed.paddingLeft,
-                          paddingRight: computed.paddingRight,
-                        },
-                        timestamp: Date.now(),
-                        sessionId: 'debug-session',
-                        runId: 'run1',
-                        hypothesisId: 'A',
-                      }),
-                    }).catch(() => {})
-                  }
-                  // #endregion agent log
-                }}
-              >
+              <div className="relative flex items-center justify-between py-2">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleMobileMenuOpen}
@@ -340,39 +280,6 @@ export const Masthead: React.FC = observer(function Masthead() {
                 <Link
                   href="/"
                   className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                  ref={(el) => {
-                    // #region agent log
-                    if (el && typeof window !== 'undefined') {
-                      const rect = el.getBoundingClientRect()
-                      const parentRect = el.parentElement?.getBoundingClientRect()
-                      const computed = window.getComputedStyle(el)
-                      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          location: 'Masthead.tsx:280',
-                          message: 'Title link positioning',
-                          data: {
-                            left: rect.left,
-                            width: rect.width,
-                            parentWidth: parentRect?.width,
-                            parentLeft: parentRect?.left,
-                            centerOffset: parentRect
-                              ? rect.left + rect.width / 2 - (parentRect.left + parentRect.width / 2)
-                              : null,
-                            computedLeft: computed.left,
-                            computedTransform: computed.transform,
-                            position: computed.position,
-                          },
-                          timestamp: Date.now(),
-                          sessionId: 'debug-session',
-                          runId: 'run1',
-                          hypothesisId: 'D',
-                        }),
-                      }).catch(() => {})
-                    }
-                    // #endregion agent log
-                  }}
                 >
                   <span className="font-masthead font-normal tracking-tight text-[#121212] leading-none whitespace-nowrap text-[2.25rem]">
                     The Wedding Times
@@ -408,47 +315,7 @@ export const Masthead: React.FC = observer(function Masthead() {
               </div>
 
               {/* Row 2: Date left, Masthead center, Ticker right */}
-              <div
-                className="flex items-center justify-center md:justify-between py-3 pb-5"
-                ref={(el) => {
-                  // #region agent log
-                  if (el && typeof window !== 'undefined') {
-                    const rect = el.getBoundingClientRect()
-                    const leftDiv = el.querySelector('div:first-child') as HTMLElement
-                    const centerDiv = el.querySelector('div:nth-child(2)') as HTMLElement
-                    const rightDiv = el.querySelector('div:last-child') as HTMLElement
-                    fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        location: 'Masthead.tsx:411',
-                        message: 'Homepage masthead row layout',
-                        data: {
-                          parentWidth: rect.width,
-                          parentLeft: rect.left,
-                          isMobile: window.innerWidth < 768,
-                          leftDivDisplay: leftDiv ? window.getComputedStyle(leftDiv).display : null,
-                          leftDivWidth: leftDiv?.offsetWidth || 0,
-                          centerDivLeft: centerDiv?.getBoundingClientRect().left || 0,
-                          centerDivWidth: centerDiv?.offsetWidth || 0,
-                          centerOffset: centerDiv
-                            ? centerDiv.getBoundingClientRect().left +
-                              centerDiv.offsetWidth / 2 -
-                              (rect.left + rect.width / 2)
-                            : null,
-                          rightDivDisplay: rightDiv ? window.getComputedStyle(rightDiv).display : null,
-                          rightDivWidth: rightDiv?.offsetWidth || 0,
-                        },
-                        timestamp: Date.now(),
-                        sessionId: 'debug-session',
-                        runId: 'run1',
-                        hypothesisId: 'B',
-                      }),
-                    }).catch(() => {})
-                  }
-                  // #endregion agent log
-                }}
-              >
+              <div className="flex items-center justify-center md:justify-between py-3 pb-5">
                 {/* Left - Date and Archive */}
                 <div className="hidden md:flex flex-col flex-1">
                   <div className="font-sans text-[13px] text-[#121212]">{formattedDate}</div>

@@ -31,70 +31,177 @@ interface ArticlePageProps {
 /******************* METADATA ***********************/
 
 export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
-  const { slug } = await params
-  const baseUrl = getBaseUrl()
-  
-  const payload = await getPayload()
-  if (!payload) {
+  try {
+    const { slug } = await params
+    
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:generateMetadata',
+          message: 'generateMetadata called',
+          data: {
+            slug,
+            nodeEnv: process.env.NODE_ENV,
+            hasNextPublicSiteUrl: !!process.env.NEXT_PUBLIC_SITE_URL,
+            hasVercelUrl: !!process.env.VERCEL_URL,
+          },
+          sessionId: 'debug-session',
+          runId: 'metadata-debug',
+          hypothesisId: 'A',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
+    
+    const baseUrl = getBaseUrl()
+    
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:generateMetadata',
+          message: 'getBaseUrl result',
+          data: { baseUrl },
+          sessionId: 'debug-session',
+          runId: 'metadata-debug',
+          hypothesisId: 'B',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
+    
+    const payload = await getPayload()
+    
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:generateMetadata',
+          message: 'payload check',
+          data: { hasPayload: !!payload },
+          sessionId: 'debug-session',
+          runId: 'metadata-debug',
+          hypothesisId: 'C',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
+    
+    if (!payload) {
+      return {
+        title: 'The Wedding Times | Berlin',
+        description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+      }
+    }
+
+    const result = await payload.find({
+      collection: 'articles',
+      where: {
+        slug: { equals: slug },
+        status: { equals: 'published' },
+      },
+      depth: 2,
+      limit: 1,
+    })
+
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:generateMetadata',
+          message: 'article query result',
+          data: {
+            slug,
+            foundDocs: result.docs.length,
+            totalDocs: result.totalDocs,
+          },
+          sessionId: 'debug-session',
+          runId: 'metadata-debug',
+          hypothesisId: 'D',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
+
+    const article = result.docs[0]
+      ? mapPayloadArticleToIArticle(result.docs[0] as PayloadArticleLike)
+      : null
+
+    if (!article) {
+      return {
+        title: 'The Wedding Times | Berlin',
+        description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+      }
+    }
+
+    const articleUrl = `${baseUrl}/article/${article.slug}`
+    const description = article.excerpt || article.subheadline || "Read the full article on The Wedding Times"
+    const imageUrl = article.featuredImageUrl || `${baseUrl}/favicon.png`
+
+    return {
+      title: `${article.headline} | The Wedding Times`,
+      description,
+      openGraph: {
+        title: article.headline,
+        description,
+        type: 'article',
+        locale: 'en_US',
+        siteName: 'The Wedding Times',
+        url: articleUrl,
+        images: [
+          {
+            url: imageUrl,
+            width: 1200,
+            height: 630,
+            alt: article.headline,
+          },
+        ],
+        publishedTime: article.publishedAt,
+        authors: [article.author.name],
+        section: article.category.name,
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: article.headline,
+        description,
+        images: [imageUrl],
+      },
+    }
+  } catch (error) {
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:generateMetadata',
+          message: 'generateMetadata error',
+          data: {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+          sessionId: 'debug-session',
+          runId: 'metadata-debug',
+          hypothesisId: 'E',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
+    
+    // Return fallback metadata on error
     return {
       title: 'The Wedding Times | Berlin',
       description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
     }
-  }
-
-  const result = await payload.find({
-    collection: 'articles',
-    where: {
-      slug: { equals: slug },
-      status: { equals: 'published' },
-    },
-    depth: 2,
-    limit: 1,
-  })
-
-  const article = result.docs[0]
-    ? mapPayloadArticleToIArticle(result.docs[0] as PayloadArticleLike)
-    : null
-
-  if (!article) {
-    return {
-      title: 'The Wedding Times | Berlin',
-      description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
-    }
-  }
-
-  const articleUrl = `${baseUrl}/article/${article.slug}`
-  const description = article.excerpt || article.subheadline || "Read the full article on The Wedding Times"
-  const imageUrl = article.featuredImageUrl || `${baseUrl}/favicon.png`
-
-  return {
-    title: `${article.headline} | The Wedding Times`,
-    description,
-    openGraph: {
-      title: article.headline,
-      description,
-      type: 'article',
-      locale: 'en_US',
-      siteName: 'The Wedding Times',
-      url: articleUrl,
-      images: [
-        {
-          url: imageUrl,
-          width: 1200,
-          height: 630,
-          alt: article.headline,
-        },
-      ],
-      publishedTime: article.publishedAt,
-      authors: [article.author.name],
-      section: article.category.name,
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: article.headline,
-      description,
-      images: [imageUrl],
-    },
   }
 }
 
@@ -103,24 +210,159 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params
 
-  const payload = await getPayload()
+  // #region agent log
+  if (typeof window === 'undefined') {
+    fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'article/[slug]/page.tsx:ArticlePage',
+        message: 'ArticlePage component called',
+        data: { slug },
+        sessionId: 'debug-session',
+        runId: 'page-debug',
+        hypothesisId: 'F',
+      }),
+    }).catch(() => {})
+  }
+  // #endregion agent log
 
-  // DB unavailable (build time) - will be generated on first request
-  if (!payload) {
+  let payload
+  try {
+    payload = await getPayload()
+  } catch (error) {
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:ArticlePage',
+          message: 'getPayload error',
+          data: {
+            slug,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          sessionId: 'debug-session',
+          runId: 'page-debug',
+          hypothesisId: 'K',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
     notFound()
   }
 
-  const result = await payload.find({
-    collection: 'articles',
-    where: {
-      slug: { equals: slug },
-      status: { equals: 'published' },
-    },
-    depth: 2,
-    limit: 1,
-  })
+  // #region agent log
+  if (typeof window === 'undefined') {
+    fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'article/[slug]/page.tsx:ArticlePage',
+        message: 'payload check in component',
+        data: { slug, hasPayload: !!payload },
+        sessionId: 'debug-session',
+        runId: 'page-debug',
+        hypothesisId: 'G',
+      }),
+    }).catch(() => {})
+  }
+  // #endregion agent log
+
+  // DB unavailable (build time) - will be generated on first request
+  if (!payload) {
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:ArticlePage',
+          message: 'payload null, calling notFound',
+          data: { slug },
+          sessionId: 'debug-session',
+          runId: 'page-debug',
+          hypothesisId: 'H',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
+    notFound()
+  }
+
+  let result
+  try {
+    result = await payload.find({
+      collection: 'articles',
+      where: {
+        slug: { equals: slug },
+        status: { equals: 'published' },
+      },
+      depth: 2,
+      limit: 1,
+    })
+  } catch (error) {
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:ArticlePage',
+          message: 'payload.find error',
+          data: {
+            slug,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          sessionId: 'debug-session',
+          runId: 'page-debug',
+          hypothesisId: 'K',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
+    notFound()
+  }
+
+  // #region agent log
+  if (typeof window === 'undefined') {
+    fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'article/[slug]/page.tsx:ArticlePage',
+        message: 'article query result in component',
+        data: {
+          slug,
+          foundDocs: result.docs.length,
+          totalDocs: result.totalDocs,
+        },
+        sessionId: 'debug-session',
+        runId: 'page-debug',
+        hypothesisId: 'I',
+      }),
+    }).catch(() => {})
+  }
+  // #endregion agent log
 
   if (result.docs.length === 0) {
+    // #region agent log
+    if (typeof window === 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'article/[slug]/page.tsx:ArticlePage',
+          message: 'no docs found, calling notFound',
+          data: { slug },
+          sessionId: 'debug-session',
+          runId: 'page-debug',
+          hypothesisId: 'J',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion agent log
     notFound()
   }
 
@@ -231,6 +473,18 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             </div>
           </aside>
         )}
+
+        {/* Copyright and Logo */}
+        <footer className="mt-12 pt-6 border-t border-[rgba(18,18,18,0.7)] max-w-[680px] mx-auto flex items-center gap-3">
+          <span className="font-sans text-sm text-[#666]">©</span>
+          <Image
+            src="/favicon.png"
+            alt="The Wedding Times"
+            width={32}
+            height={32}
+            className="object-contain"
+          />
+        </footer>
       </article>
       </NytContainer>
     </div>

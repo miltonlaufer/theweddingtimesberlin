@@ -170,28 +170,6 @@ export async function GET(req: Request) {
 
         // Track used category
         usedCategories.add(generated.categorySlug)
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'cron/generate/route.ts:145',
-            message: 'Category selected for article',
-            data: {
-              articleIndex: i + 1,
-              categorySlug: generated.categorySlug,
-              usedCategories: Array.from(usedCategories),
-              availableCategories: categoriesToUse.map((c) => c.slug),
-              wasUnused: unusedCategories.length > 0,
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'category-distribution',
-            hypothesisId: 'A',
-          }),
-        }).catch(() => {})
-        // #endregion agent log
 
         // Map slugs to IDs
         const categoryDoc = (categoriesFinal.docs as Array<{ id: string; slug: string }>).find(
