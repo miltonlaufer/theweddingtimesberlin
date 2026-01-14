@@ -3,8 +3,9 @@ import { NytContainer } from '@/components/NytContainer'
 import { ArticleArchive } from '@/components/ArticleArchive'
 import { fetchPublishedArticles } from '@/lib/articles/fetchPublishedArticles'
 
-/******************* ISR ***********************/
+/******************* RENDERING CONFIG ***********************/
 
+// searchParams makes this inherently dynamic, revalidate for caching
 export const revalidate = 3600
 
 /******************* PAGE ***********************/
@@ -18,7 +19,12 @@ export default async function ArchivePage({
   const rawPage = resolvedSearchParams?.page
   const page = rawPage ? Math.max(1, Math.floor(Number(rawPage) || 1)) : 1
 
-  const res = await fetchPublishedArticles({ limit: 20, page })
+  // Handle build-time when DB is unavailable
+  const res = await fetchPublishedArticles({ limit: 20, page }).catch(() => ({
+    articles: [],
+    page: 1,
+    totalPages: 1,
+  }))
 
   return (
     <NytContainer className="py-8">

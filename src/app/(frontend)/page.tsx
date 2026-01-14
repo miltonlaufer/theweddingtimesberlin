@@ -15,14 +15,22 @@ function calculateReadingTime(content: string): number {
   return Math.max(1, Math.ceil(wordCount / 200))
 }
 
-/******************* ISR CONFIG ***********************/
+/******************* RENDERING CONFIG ***********************/
 
-export const revalidate = 3600 // Revalidate every hour
+// ISR: static at runtime, revalidate hourly
+export const revalidate = 3600
 
 /******************* HOMEPAGE COMPONENT ***********************/
 
 export default async function HomePage() {
-  const { articles } = await fetchPublishedArticles({ limit: 40 })
+  // Wrap in try/catch to handle build-time when DB is unavailable
+  let articles: IArticle[] = []
+  try {
+    const result = await fetchPublishedArticles({ limit: 40 })
+    articles = result.articles
+  } catch {
+    // DB unavailable (build time) - render empty state, will be filled on first request
+  }
 
   if (articles.length === 0) {
     return (

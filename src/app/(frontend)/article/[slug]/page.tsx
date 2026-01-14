@@ -9,9 +9,16 @@ import {
   type PayloadArticleLike,
 } from '@/lib/articles/mapPayloadArticleToIArticle'
 
-/******************* ISR CONFIG ***********************/
+/******************* RENDERING CONFIG ***********************/
 
+// Don't pre-render at build time, but allow static generation at runtime (ISR)
+export const dynamicParams = true
 export const revalidate = 3600 // Revalidate every hour
+
+// Return empty array = no build-time generation, pages generated on first request
+export async function generateStaticParams() {
+  return []
+}
 
 /******************* PAGE PROPS ***********************/
 
