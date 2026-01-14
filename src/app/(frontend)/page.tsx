@@ -103,31 +103,50 @@ export default async function HomePage() {
   // Center column articles always show images if available
   const articlesWithImages = new Set<string>()
   
+  // Helper to normalize article ID to string
+  const normalizeId = (id: string | number): string => String(id)
+  
   // Center column articles always show images
   centerColumnArticles.forEach((article) => {
     if (article.featuredImageUrl) {
-      articlesWithImages.add(article.id)
+      articlesWithImages.add(normalizeId(article.id))
     }
   })
   
   // Headline and opinion always show images if available
   if (headlineArticle?.featuredImageUrl) {
-    articlesWithImages.add(headlineArticle.id)
+    articlesWithImages.add(normalizeId(headlineArticle.id))
   }
   if (opinionArticle?.featuredImageUrl) {
-    articlesWithImages.add(opinionArticle.id)
+    articlesWithImages.add(normalizeId(opinionArticle.id))
   }
   
-  // Left and right columns: deterministic 3/5 chance based on article ID hash
-  // This ensures consistent results across renders while appearing random
-  [...leftColumnArticles, ...rightColumnArticles].forEach((article) => {
+  // Left column: show images for 4/5 of articles (80%) to ensure more images
+  leftColumnArticles.forEach((article) => {
     if (article.featuredImageUrl) {
       // Simple hash-based selection (deterministic but appears random)
-      const idStr = String(article.id)
+      const idStr = normalizeId(article.id)
       const hash = idStr.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-      if ((hash % 5) < 3) {
-        // 3 out of 5 chance (60%)
+      if ((hash % 5) < 4) {
+        // 4 out of 5 chance (80%)
         articlesWithImages.add(idStr)
+      }
+    }
+  })
+  
+  // Right column: show images for all articles that have them (or at least first 3)
+  rightColumnArticles.forEach((article, index) => {
+    if (article.featuredImageUrl) {
+      // Show images for first 3 articles, then 3/5 chance for others
+      if (index < 3) {
+        articlesWithImages.add(normalizeId(article.id))
+      } else {
+        const idStr = normalizeId(article.id)
+        const hash = idStr.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+        if ((hash % 5) < 3) {
+          // 3 out of 5 chance (60%) for articles after the first 3
+          articlesWithImages.add(idStr)
+        }
       }
     }
   })
@@ -144,7 +163,7 @@ export default async function HomePage() {
                 key={article.id}
                 article={article}
                 isLast={index === leftColumnArticles.length - 1}
-                showImage={articlesWithImages.has(article.id)}
+                showImage={articlesWithImages.has(String(article.id))}
               />
             ))}
           </div>
@@ -164,7 +183,7 @@ export default async function HomePage() {
                     key={article.id}
                     article={article}
                     isLast={index === centerColumnArticles.length - 1}
-                    showImage={articlesWithImages.has(article.id)}
+                    showImage={articlesWithImages.has(String(article.id))}
                   />
                 ))}
               </div>
@@ -181,7 +200,7 @@ export default async function HomePage() {
                 key={article.id}
                 article={article}
                 isLast={index === rightColumnArticles.length - 1}
-                showImage={articlesWithImages.has(article.id) || index === 0}
+                showImage={articlesWithImages.has(String(article.id))}
               />
             ))}
           </div>

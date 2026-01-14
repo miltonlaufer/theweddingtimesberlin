@@ -15,7 +15,7 @@ import {
 
 // Don't pre-render at build time, but allow static generation at runtime (ISR)
 export const dynamicParams = true
-export const revalidate = 3600 // Revalidate every hour
+export const revalidate = 1200 // Revalidate every 20 minutes
 
 // Return empty array = no build-time generation, pages generated on first request
 export async function generateStaticParams() {
@@ -250,7 +250,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       }).catch(() => {})
     }
     // #endregion agent log
-    notFound()
+    // Do NOT return a 404 for transient infra issues, or it may get ISR-cached as a permanent 404.
+    throw new Error('Payload unavailable')
   }
 
   // #region agent log
@@ -288,7 +289,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       }).catch(() => {})
     }
     // #endregion agent log
-    notFound()
+    // Do NOT return a 404 for transient infra issues, or it may get ISR-cached as a permanent 404.
+    throw new Error('Payload unavailable')
   }
 
   let result
@@ -322,7 +324,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       }).catch(() => {})
     }
     // #endregion agent log
-    notFound()
+    // Do NOT return a 404 for transient infra issues, or it may get ISR-cached as a permanent 404.
+    throw new Error('Article query failed')
   }
 
   // #region agent log

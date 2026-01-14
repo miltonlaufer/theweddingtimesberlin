@@ -16,11 +16,31 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Revalidate homepage and archive
-    revalidatePath('/')
-    revalidatePath('/archive')
+    const body = await req.json().catch(() => null)
 
-    return NextResponse.json({ ok: true, message: 'Cache invalidated for homepage and archive' })
+    const pathsFromBody: string[] = Array.isArray(body?.paths)
+      ? body.paths.filter((p: unknown): p is string => typeof p === 'string' && p.startsWith('/'))
+      : []
+
+    const articleSlugsFromBody: string[] = Array.isArray(body?.articleSlugs)
+      ? body.articleSlugs.filter((s: unknown): s is string => typeof s === 'string' && s.length > 0)
+      : []
+
+    const defaultPaths = ['/', '/archive']
+    const articlePaths = articleSlugsFromBody.map((s) => `/article/${s}`)
+
+    const pathsToRevalidate = Array.from(
+      new Set([...defaultPaths, ...pathsFromBody, ...articlePaths]),
+    )
+
+    for (const p of pathsToRevalidate) {
+      revalidatePath(p)
+    }
+
+    return NextResponse.json({
+      ok: true,
+      revalidated: pathsToRevalidate,
+    })
   } catch (error) {
     console.error('Cache revalidation error:', error)
     return NextResponse.json(
