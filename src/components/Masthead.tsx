@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useUIStore } from '@/stores'
 import { NytContainer } from './NytContainer'
 
@@ -99,19 +99,32 @@ const SearchOverlay: React.FC<SearchOverlayProps> = React.memo(function SearchOv
   /******************* STATE ***********************/
 
   const [searchQuery, setSearchQuery] = useState('')
+  const router = useRouter()
 
   /******************* FUNCTIONS ***********************/
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  const handleSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (searchQuery.trim()) {
-      alert(`Search functionality coming soon! You searched for: "${searchQuery}"`)
+    // Get value from form data to ensure compatibility with browser automation
+    const formData = new FormData(e.currentTarget)
+    const inputValue = (formData.get('search') as string) || searchQuery
+    const trimmedQuery = inputValue.trim()
+    if (trimmedQuery) {
+      // Navigate to search page with query
+      router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`)
+      onClose()
     }
-  }, [searchQuery])
+  }, [searchQuery, router, onClose])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value)
   }, [])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose()
+    }
+  }, [onClose])
 
   /******************* RENDER ***********************/
 
@@ -130,8 +143,10 @@ const SearchOverlay: React.FC<SearchOverlayProps> = React.memo(function SearchOv
       <form onSubmit={handleSubmit} className="w-full max-w-[600px] px-5">
         <input
           type="text"
+          name="search"
           value={searchQuery}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
           placeholder="Search The Wedding Times..."
           autoFocus
           className="w-full text-2xl font-sans py-4 border-0 border-b-2 border-[#121212] outline-none bg-transparent"

@@ -216,12 +216,12 @@ export async function POST(req: Request) {
     isNewAuthor: Boolean(generated.newAuthorName),
   })
 
-  const categoryDoc = (categoriesResFinal.docs as Array<{ id: string; slug: string }>).find(
+  const categoryDoc = (categoriesResFinal.docs as Array<{ id: string | number; slug: string }>).find(
     (c) => c.slug === generated.categorySlug,
   )
   
   // Check if author exists, or if we need to create a new one
-  let authorDoc = (authorsResFinal.docs as Array<{ id: string; slug: string }>).find(
+  let authorDoc: { id: string | number; slug: string } | undefined = (authorsResFinal.docs as Array<{ id: string | number; slug: string }>).find(
     (a) => a.slug === generated.authorSlug,
   )
 
@@ -243,7 +243,8 @@ export async function POST(req: Request) {
           bio: generated.newAuthorBio ?? undefined,
         },
       })
-      authorDoc = { id: String(newAuthor.id), slug: generated.authorSlug }
+      // Keep ID in original format (could be number or string depending on DB)
+      authorDoc = { id: newAuthor.id, slug: generated.authorSlug }
       
       log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:167', 'new_author_created', {
         id: newAuthor.id,
@@ -261,8 +262,8 @@ export async function POST(req: Request) {
         limit: 1,
       })
       if (existingAuthor.docs.length > 0) {
-        const found = existingAuthor.docs[0] as { id: string; slug: string }
-        authorDoc = { id: String(found.id), slug: found.slug }
+        const found = existingAuthor.docs[0] as { id: string | number; slug: string }
+        authorDoc = { id: found.id, slug: found.slug }
       }
     }
   }
