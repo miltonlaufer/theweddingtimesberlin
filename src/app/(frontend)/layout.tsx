@@ -2,6 +2,7 @@ import React from 'react'
 import { Masthead, NavigationServer, SatiricalRibbon, Footer } from '@/components'
 import { StoreProvider } from '@/stores'
 import '../../styles/global.css'
+import { GoogleAnalyticsClient } from '@/components/GoogleAnalyticsClient'
 
 /******************* TYPES ***********************/
 
@@ -15,6 +16,7 @@ export default function FrontendLayout({ children }: FrontendLayoutProps) {
   return (
     <html lang="en">
       <body className="antialiased frontend-app">
+        <GoogleAnalyticsClient />
         <StoreProvider>
           <div className="min-h-screen flex flex-col">
             <SatiricalRibbon />

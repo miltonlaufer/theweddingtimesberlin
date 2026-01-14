@@ -171,4 +171,9 @@
     margin-top: 1.5rem !important;
     margin-bottom: 1.5rem !important;
   }
+
+  article h3, article h4 {
+    margin-top: 1.25rem !important;
+    margin-bottom: 1.25rem !important;
+  }
 }

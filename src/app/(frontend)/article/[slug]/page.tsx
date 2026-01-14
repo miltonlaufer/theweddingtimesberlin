@@ -145,13 +145,14 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
 
     const articleUrl = `${baseUrl}/article/${article.slug}`
     const description = article.excerpt || article.subheadline || "Read the full article on The Wedding Times"
-    const imageUrl = article.featuredImageUrl || `${baseUrl}/favicon.png`
+    const imageUrl = article.featuredImageUrl || `${baseUrl}/logo-200x200.png`
+    const fullTitle = `${article.headline} | The Wedding Times`
 
     return {
-      title: `${article.headline} | The Wedding Times`,
+      title: fullTitle,
       description,
       openGraph: {
-        title: article.headline,
+        title: fullTitle,
         description,
         type: 'article',
         locale: 'en_US',
@@ -160,8 +161,8 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
         images: [
           {
             url: imageUrl,
-            width: 1200,
-            height: 630,
+            width: article.featuredImageUrl ? 1200 : 200,
+            height: article.featuredImageUrl ? 630 : 200,
             alt: article.headline,
           },
         ],
@@ -170,8 +171,8 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
         section: article.category.name,
       },
       twitter: {
-        card: 'summary_large_image',
-        title: article.headline,
+        card: article.featuredImageUrl ? 'summary_large_image' : 'summary',
+        title: fullTitle,
         description,
         images: [imageUrl],
       },

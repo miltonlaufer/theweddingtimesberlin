@@ -21,6 +21,7 @@ function calculateReadingTime(content: string): number {
 
 export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = getBaseUrl()
+  const logoUrl = `${baseUrl}/logo-200x200.png`
   
   return {
     title: 'The Wedding Times | Berlin',
@@ -34,9 +35,9 @@ export async function generateMetadata(): Promise<Metadata> {
       url: baseUrl,
       images: [
         {
-          url: `${baseUrl}/favicon.png`,
-          width: 512,
-          height: 512,
+          url: logoUrl,
+          width: 200,
+          height: 200,
           alt: 'The Wedding Times',
         },
       ],
@@ -45,6 +46,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: 'summary',
       title: 'The Wedding Times | Berlin',
       description: "All the News That's Fit to Print - Berlin Wedding's Premier Satirical Neighbourhood Publication",
+      images: [logoUrl],
     },
   }
 }

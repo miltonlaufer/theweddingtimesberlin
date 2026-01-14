@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated assets
+    "public/sw.js",
+    "public/swe-worker-*.js",
+    "public/swe-worker-*.js.map",
+    "public/sitemap*.xml",
+    "public/robots.txt",
   ]),
 ]);
 
