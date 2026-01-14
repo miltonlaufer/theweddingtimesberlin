@@ -127,7 +127,7 @@ function ArticleCard({ article }: { article: IArticle }) {
           {article.headline}
         </h2>
         {article.excerpt && (
-          <p className="font-serif text-[15px] leading-relaxed text-[#333] line-clamp-3 mb-2">
+          <p className="font-serif text-[15px] leading-relaxed text-[#333] mb-2">
             {article.excerpt}
           </p>
         )}

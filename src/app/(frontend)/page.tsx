@@ -74,13 +74,13 @@ export default async function HomePage() {
     )
   }
 
-  // Distribution ratio: Left:Center:Right = 15:10:25
+  // Distribution ratio: Left:Center:Right = 12:14:24
   const totalArticles = articles.length
-  const ratioTotal = 15 + 10 + 25 // 50
+  const ratioTotal = 12 + 14 + 24 // 50
   
   // Calculate distribution based on ratio (proportional)
-  const leftCount = Math.round((totalArticles * 15) / ratioTotal)
-  const centerCount = Math.round((totalArticles * 10) / ratioTotal)
+  const leftCount = Math.round((totalArticles * 12) / ratioTotal)
+  const centerCount = Math.round((totalArticles * 14) / ratioTotal)
   const rightCount = totalArticles - leftCount - centerCount // Ensure we use all articles
 
   const headlineArticle = articles.find((a: IArticle) => a.isHeadline) ?? articles[0]
@@ -241,7 +241,7 @@ function LeftColumnArticle({
         <h3 className="font-headline text-[26px] font-bold leading-[1.15] tracking-[-0.01em] text-[#121212] mb-2 group-hover:text-[#555] transition-colors">
           {article.headline}
         </h3>
-        <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-3">
+        <p className="font-serif text-[17px] leading-[1.35] text-[#333]">
           {article.excerpt}
         </p>
         <p className="font-sans text-xs font-medium text-[#666] mt-2 uppercase tracking-wider">
@@ -276,7 +276,7 @@ function HeadlineArticle({ article }: { article: IArticle }) {
             {article.subheadline}
           </p>
         )}
-        <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-4">
+        <p className="font-serif text-[17px] leading-[1.35] text-[#333]">
           {article.excerpt}
         </p>
         <p className="font-sans text-xs font-medium text-[#666] mt-3 uppercase tracking-wider">
@@ -298,7 +298,7 @@ function OpinionSection({ article }: { article: IArticle }) {
           <h3 className="font-headline text-[22px] font-semibold leading-[1.2] text-[#121212] mb-2 group-hover:text-[#555] transition-colors">
             {article.headline}
           </h3>
-          <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-3 mb-2">
+          <p className="font-serif text-[17px] leading-[1.35] text-[#333] mb-2">
             {article.excerpt}
           </p>
           <p className="font-sans text-sm text-[#333]">
@@ -341,7 +341,7 @@ function CenterColumnArticle({
           {article.headline}
         </h3>
         {article.excerpt && (
-          <p className="font-serif text-[17px] leading-[1.35] text-[#333] line-clamp-2 mb-2">
+          <p className="font-serif text-[17px] leading-[1.35] text-[#333] mb-2">
             {article.excerpt}
           </p>
         )}

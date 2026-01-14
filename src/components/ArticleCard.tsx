@@ -105,7 +105,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = React.memo(function Artic
 
       {/* Excerpt */}
       {showExcerpt && article.excerpt && variant !== 'compact' && (
-        <p className="mt-2 font-body text-[var(--color-ink-light)] leading-relaxed line-clamp-3">
+        <p className="mt-2 font-body text-[var(--color-ink-light)] leading-relaxed">
           {article.excerpt}
         </p>
       )}
