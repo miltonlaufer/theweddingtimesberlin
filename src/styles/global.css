@@ -176,4 +176,9 @@
     margin-top: 1.25rem !important;
     margin-bottom: 1.25rem !important;
   }
+
+  /* Override for spanning article title */
+  article .spanning-article-title {
+    margin-top: -5px !important;
+  }
 }
