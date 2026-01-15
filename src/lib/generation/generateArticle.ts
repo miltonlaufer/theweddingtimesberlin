@@ -480,6 +480,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   ]
   const randomFocus = topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
 
+  // When RSS topics are available, pick one to base the article on
+  const rssTopics = input.topicSummary.trim().split('\n').filter((line) => line.length > 0)
+  const hasRssTopics = input.includeTopics && rssTopics.length > 0
+  const selectedRssTopic = hasRssTopics ? rssTopics[Math.floor(Math.random() * rssTopics.length)] : null
+
   const recentTitlesSection =
     input.recentArticleTitles.length > 0
       ? `\nCRITICAL: DO NOT write about these recent article topics (avoid repetition):\n${input.recentArticleTitles.map((title, idx) => `${idx + 1}. ${title}`).join('\n')}\n\nYou must write about a DIFFERENT topic/subject matter.`
@@ -491,13 +496,24 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       ? `\nCRITICAL: AVOID these overused headline patterns (be creative with structure!):\n${headlinePatterns.map((p) => `- "${p}"`).join('\n')}\n\nYour headline MUST use a DIFFERENT structure. Examples of varied structures:\n- Question format: "Why [something]?" or "Is [something] the new [something]?"\n- Quotation/character focus: "[Character/Group] [does something absurd]"\n- Descriptive/observational: "The [absurd thing] of [location/group]"\n- Comparison: "[X] vs [Y]: The [absurd comparison]"\n- Direct statement: "[Something] is [absurd claim]"\n- Narrative: "How [something] became [absurd outcome]"\n- Listicle-style: "The [number] ways [something absurd]"\n- Absurd claim: "[Something] declares itself [absurd status]"\n\nVary your headline structure! Do NOT default to "Berlin [verb] [noun]" or "Wedding [verb] [noun]".`
       : ''
 
+  // Determine topic instruction based on whether we're using RSS topics
+  const topicInstruction = hasRssTopics && selectedRssTopic
+    ? [
+        'PRIMARY TOPIC SOURCE: A real-world news headline will be provided. You MUST write a satirical Berlin angle on that news story.',
+        `SECONDARY/BACKUP THEME (use only if the news topic is too narrow): ${randomFocus}`,
+        'The real news topic takes PRIORITY - find a clever Berlin connection to it.',
+      ].join('\n')
+    : [
+        `TOPIC DIRECTION (use as inspiration, NOT as your headline): ${randomFocus}`,
+        'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
+      ].join('\n')
+
   const systemPrompt = [
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
     'Language: write everything in US English (no German, no other languages).',
     'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel the spirit of early South Park, Anthony Jeselnik, and classic British satire like Brass Eye. Mock sacred cows, poke fun at every demographic equally, and embrace taboo topics with gleeful abandon. Use dark humor, shock value, and absurdist takes on sensitive subjects. Nothing is off-limits except actual hate speech or calls to violence.',
     'Style: write like a hungover journalist who has stopped caring about keeping their job—biting sarcasm, cynical observations, and jokes that make readers say "they cant print that".',
-    `TOPIC DIRECTION (use as inspiration, NOT as your headline): ${randomFocus}`,
-    'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
+    topicInstruction,
     recentTitlesSection,
     headlinePatternsSection,
     'CRITICAL: Pick a categorySlug that BEST matches your assigned topic direction above.',
@@ -536,10 +552,24 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const categoriesList = safeStringList(input.categories)
   const authorsList = safeStringList(input.authors)
 
-  const topicsSection =
-    input.includeTopics && input.topicSummary.trim().length > 0
-      ? `Current real-world topics (optional inspiration):\n${input.topicSummary}\n`
-      : 'No external topics provided. Invent plausible current topics yourself.\n'
+  const topicsSection = hasRssTopics && selectedRssTopic
+    ? [
+        'CURRENT NEWS TOPIC TO SATIRIZE:',
+        selectedRssTopic,
+        '',
+        'CRITICAL INSTRUCTION: You MUST write a satirical article that connects this real-world news topic to Berlin.',
+        'Take the essence/theme of this news story and write about how it manifests in Berlin, Wedding, or the Berlin expat/local scene.',
+        'Examples of how to connect:',
+        '- If the news is about a tech company layoff, write about how Berlin startups are affected or how laid-off tech bros are now DJing',
+        '- If the news is about politics, write about how Berliners react to it at their local Späti or how it affects the bureaucracy',
+        '- If the news is about climate, write about Berlin climate activists or how Berliners are coping',
+        '- If the news is about economy/inflation, write about Berlin rent, döner prices, or club entry fees',
+        '',
+        'The connection to the real news should be CLEAR in the article, not just vaguely inspired.',
+        'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.',
+        '',
+      ].join('\n')
+    : 'No external topics provided. Invent plausible Berlin-related satire based on the topic focus above.\n'
 
   const userPrompt = [
     topicsSection,
