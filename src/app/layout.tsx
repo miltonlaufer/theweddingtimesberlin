@@ -19,7 +19,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  // Payload Admin's RootLayout renders its own <html>/<body>.
-  // To avoid invalid nested html/body tags, we delegate html/body to route-group layouts.
-  return children
+  // Next.js 15 requires root layout to have <html> and <body> tags
+  // Payload Admin's RootLayout will handle its own structure within the body
+  return (
+    <html lang="en">
+      <body className="antialiased">{children}</body>
+    </html>
+  )
 }

@@ -14,19 +14,17 @@ interface FrontendLayoutProps {
 
 export default function FrontendLayout({ children }: FrontendLayoutProps) {
   return (
-    <html lang="en">
-      <body className="antialiased frontend-app">
-        <GoogleAnalyticsClient />
-        <StoreProvider>
-          <div className="min-h-screen flex flex-col">
-            <SatiricalRibbon />
-            <Masthead />
-            <NavigationServer />
-            <main className="flex-1">{children}</main>
-            <FooterServer />
-          </div>
-        </StoreProvider>
-      </body>
-    </html>
+    <div className="frontend-app">
+      <GoogleAnalyticsClient />
+      <StoreProvider>
+        <div className="min-h-screen flex flex-col">
+          <SatiricalRibbon />
+          <Masthead />
+          <NavigationServer />
+          <main className="flex-1">{children}</main>
+          <FooterServer />
+        </div>
+      </StoreProvider>
+    </div>
   )
 }

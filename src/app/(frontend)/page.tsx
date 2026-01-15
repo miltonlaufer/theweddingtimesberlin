@@ -91,15 +91,66 @@ export default async function HomePage() {
   const distributableCount = otherArticles.length
   const ratioTotal = 12 + 14 + 24 // 50
   
-  // Calculate distribution based on ratio (proportional)
+  // Calculate initial distribution based on ratio (proportional)
   const leftCount = Math.round((distributableCount * 12) / ratioTotal)
-  const centerRegularCount = Math.round((distributableCount * 14) / ratioTotal)
-  // Right column gets all remaining articles (slice to end)
+  // Center column capacity in "slots" - articles with images count as 2 slots
+  const centerSlotCapacity = Math.round((distributableCount * 14) / ratioTotal)
   
-  // Distribute remaining articles
+  // Initial distribution - start with centerSlotCapacity articles
   const leftColumnArticles = otherArticles.slice(0, leftCount)
-  const centerColumnArticles = otherArticles.slice(leftCount, leftCount + centerRegularCount)
-  const rightColumnArticles = otherArticles.slice(leftCount + centerRegularCount)
+  let centerColumnArticles = otherArticles.slice(leftCount, leftCount + centerSlotCapacity)
+  const rightColumnArticles = otherArticles.slice(leftCount + centerSlotCapacity)
+  
+  // Adjust center column: articles with images count as 2 slots
+  // Count how many center articles have images
+  const centerArticlesWithImages = centerColumnArticles.filter((a) => a.featuredImageUrl).length
+  const centerArticlesWithoutImages = centerColumnArticles.length - centerArticlesWithImages
+  
+  // Calculate weighted count: images count as 2 slots, non-images count as 1 slot
+  const centerWeightedCount = centerArticlesWithImages * 2 + centerArticlesWithoutImages
+  
+  // If weighted count exceeds slot capacity, reduce center articles
+  // Each image article effectively takes 2 slots, so we need to reduce accordingly
+  if (centerWeightedCount > centerSlotCapacity) {
+    // Calculate how many slots we need to free
+    const excessWeight = centerWeightedCount - centerSlotCapacity
+    // Each image article we move out frees up 2 slots, each non-image frees 1
+    // Prefer moving image articles first (they free more slots)
+    
+    const articlesToMove: IArticle[] = []
+    let remainingExcess = excessWeight
+    
+    // First, try moving image articles (each frees 2 slots)
+    for (const article of centerColumnArticles) {
+      if (remainingExcess <= 0) break
+      if (article.featuredImageUrl) {
+        articlesToMove.push(article)
+        remainingExcess -= 2
+      }
+    }
+    
+    // Then move non-image articles if still needed (each frees 1 slot)
+    for (const article of centerColumnArticles) {
+      if (remainingExcess <= 0) break
+      if (!article.featuredImageUrl && !articlesToMove.includes(article)) {
+        articlesToMove.push(article)
+        remainingExcess -= 1
+      }
+    }
+    
+    // Remove moved articles from center
+    centerColumnArticles = centerColumnArticles.filter((a) => !articlesToMove.includes(a))
+    
+    // Redistribute moved articles: alternate between right and left
+    // Right column gets even indices, left gets odd indices
+    for (let i = 0; i < articlesToMove.length; i++) {
+      if (i % 2 === 0) {
+        rightColumnArticles.push(articlesToMove[i])
+      } else {
+        leftColumnArticles.push(articlesToMove[i])
+      }
+    }
+  }
 
   // Randomly decide which articles show photos (3/5 chance for left/right columns)
   // Center column articles always show images if available

@@ -48,6 +48,15 @@ function pickTwoThirds(): boolean {
   return Math.random() < 2 / 3
 }
 
+function slugToCategoryName(slug: string): string {
+  // Convert slug to readable category name
+  // e.g., "gentrification" -> "Gentrification", "food-drink" -> "Food & Drink"
+  return slug
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' & ')
+}
+
 /******************* ROUTE HANDLER ***********************/
 
 export async function GET(req: Request) {
@@ -78,7 +87,7 @@ export async function GET(req: Request) {
     }
 
     // Refresh categories after potential seeding
-    const categoriesFinal = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
+    let categoriesFinal = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
 
     // Ensure author pool is sufficient
     let authorsRes = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
@@ -192,16 +201,92 @@ export async function GET(req: Request) {
         // Track used category
         usedCategories.add(generated.categorySlug)
 
-        // Map slugs to IDs
-        const categoryDoc = (categoriesFinal.docs as Array<{ id: string; slug: string }>).find(
+        // Map slugs to IDs - create category if it doesn't exist
+        let categoryDoc = (categoriesFinal.docs as Array<{ id: string | number; slug: string }>).find(
           (c) => c.slug === generated.categorySlug,
         )
-        const authorDoc = (authorsRes.docs as Array<{ id: string; slug: string }>).find(
+
+        // If category doesn't exist, create it
+        if (!categoryDoc) {
+          try {
+            const categoryName = slugToCategoryName(generated.categorySlug)
+            const maxOrder = Math.max(
+              ...(categoriesFinal.docs as unknown as Array<{ order?: number }>).map((c) => c.order ?? 0),
+              0,
+            )
+            const newOrder = maxOrder + 1
+
+            const newCategory = await payload.create({
+              collection: 'categories',
+              data: {
+                name: categoryName,
+                slug: generated.categorySlug,
+                order: newOrder,
+              },
+            })
+            categoryDoc = { id: newCategory.id, slug: generated.categorySlug }
+
+            // Refresh categories list for next iteration
+            const refreshedCategories = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
+            categoriesFinal = refreshedCategories
+          } catch {
+            // If creation failed, try to find it again (might have been created concurrently)
+            const existingCategory = await payload.find({
+              collection: 'categories',
+              where: { slug: { equals: generated.categorySlug } },
+              limit: 1,
+            })
+            if (existingCategory.docs.length > 0) {
+              const found = existingCategory.docs[0] as { id: string | number; slug: string }
+              categoryDoc = { id: found.id, slug: found.slug }
+            } else {
+              errors.push(`Article ${i + 1}: Failed to create category "${generated.categorySlug}"`)
+              continue
+            }
+          }
+        }
+
+        // Check if author exists, or if we need to create a new one
+        let authorDoc: { id: string | number; slug: string } | undefined = (authorsRes.docs as Array<{ id: string | number; slug: string }>).find(
           (a) => a.slug === generated.authorSlug,
         )
 
-        if (!categoryDoc || !authorDoc) {
-          errors.push(`Article ${i + 1}: Generated slugs did not match existing documents`)
+        // If author doesn't exist and new author fields are provided, create the author
+        if (!authorDoc && generated.newAuthorName) {
+          try {
+            const newAuthor = await payload.create({
+              collection: 'authors',
+              data: {
+                name: generated.newAuthorName,
+                slug: generated.authorSlug,
+                title: generated.newAuthorTitle ?? undefined,
+                bio: generated.newAuthorBio ?? undefined,
+              },
+            })
+            authorDoc = { id: newAuthor.id, slug: generated.authorSlug }
+
+            // Refresh authors list for next iteration
+            const refreshedAuthors = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
+            authorsRes = refreshedAuthors
+          } catch {
+            // If creation failed, try to find it again (might have been created concurrently)
+            const existingAuthor = await payload.find({
+              collection: 'authors',
+              where: { slug: { equals: generated.authorSlug } },
+              limit: 1,
+            })
+            if (existingAuthor.docs.length > 0) {
+              const found = existingAuthor.docs[0] as { id: string | number; slug: string }
+              authorDoc = { id: found.id, slug: found.slug }
+            } else {
+              errors.push(`Article ${i + 1}: Failed to create author "${generated.authorSlug}"`)
+              continue
+            }
+          }
+        }
+
+        if (!authorDoc) {
+          errors.push(`Article ${i + 1}: Author slug "${generated.authorSlug}" not found and no newAuthorName provided`)
           continue
         }
 

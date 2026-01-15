@@ -22,13 +22,13 @@ export default function FrontendError({ reset }: FrontendErrorProps) {
   /******************* RENDER ***********************/
 
   return (
-    <main className="py-10 w-full">
+    <main className="flex items-center justify-center min-h-screen w-full">
       <div className="max-w-[680px] mx-auto px-5">
         <h1 className="font-headline text-3xl md:text-4xl font-bold text-[#121212]">
           Something went wrong
         </h1>
         <p className="mt-4 font-serif text-lg text-[#333] leading-relaxed">
-          If this is Germany’s internet, we apologize on its behalf.
+          If this is Germany&apos;s internet, we apologize on its behalf.
         </p>
 
         <div className="mt-8 flex items-center gap-4">

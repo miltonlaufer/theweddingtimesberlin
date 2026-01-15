@@ -41,6 +41,15 @@ function slugify(input: string): string {
     .slice(0, 80)
 }
 
+function slugToCategoryName(slug: string): string {
+  // Convert slug to readable category name
+  // e.g., "gentrification" -> "Gentrification", "food-drink" -> "Food & Drink"
+  return slug
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' & ')
+}
+
 function pickTwoThirds(): boolean {
   return Math.random() < 2 / 3
 }
@@ -236,9 +245,58 @@ export async function POST(req: Request) {
     isNewAuthor: Boolean(generated.newAuthorName),
   })
 
-  const categoryDoc = (categoriesResFinal.docs as Array<{ id: string | number; slug: string }>).find(
+  // Check if category exists, or if we need to create a new one
+  let categoryDoc: { id: string | number; slug: string } | undefined = (categoriesResFinal.docs as Array<{ id: string | number; slug: string }>).find(
     (c) => c.slug === generated.categorySlug,
   )
+
+  // If category doesn't exist, create it
+  if (!categoryDoc) {
+    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:150', 'creating_new_category', {
+      slug: generated.categorySlug,
+    })
+
+    try {
+      const categoryName = slugToCategoryName(generated.categorySlug)
+      // Get the highest order number and add 1, or default to 100
+      const maxOrder = Math.max(
+        ...(categoriesResFinal.docs as unknown as Array<{ order?: number }>).map((c) => c.order ?? 0),
+        0,
+      )
+      const newOrder = maxOrder + 1
+
+      const newCategory = await payload.create({
+        collection: 'categories',
+        data: {
+          name: categoryName,
+          slug: generated.categorySlug,
+          order: newOrder,
+        },
+      })
+      categoryDoc = { id: newCategory.id, slug: generated.categorySlug }
+
+      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:167', 'new_category_created', {
+        id: newCategory.id,
+        slug: generated.categorySlug,
+        name: categoryName,
+      })
+    } catch (e) {
+      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:172', 'new_category_creation_failed', {
+        slug: generated.categorySlug,
+        error: e instanceof Error ? e.message : 'unknown error',
+      })
+      // If creation failed (e.g., duplicate slug), try to find existing category again
+      const existingCategory = await payload.find({
+        collection: 'categories',
+        where: { slug: { equals: generated.categorySlug } },
+        limit: 1,
+      })
+      if (existingCategory.docs.length > 0) {
+        const found = existingCategory.docs[0] as { id: string | number; slug: string }
+        categoryDoc = { id: found.id, slug: found.slug }
+      }
+    }
+  }
   
   // Check if author exists, or if we need to create a new one
   let authorDoc: { id: string | number; slug: string } | undefined = (authorsResFinal.docs as Array<{ id: string | number; slug: string }>).find(
