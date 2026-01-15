@@ -10,6 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.15",
     "@langchain/openai": "^1.2.2",
     "@payloadcms/db-postgres": "^3.70.0",
     "@payloadcms/db-sqlite": "^3.70.0",
