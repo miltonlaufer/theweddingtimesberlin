@@ -4,61 +4,38 @@ import React from 'react'
 import Link from 'next/link'
 import { NytContainer } from './NytContainer'
 
+/******************* TYPES ***********************/
+
+interface FooterProps {
+  categories: Array<{ name: string; slug: string }>
+}
+
 /******************* FOOTER SECTIONS ***********************/
 
-const footerSections = [
-  {
-    title: 'NEWS',
-    links: [
-      { name: 'Home Page', href: '/' },
-      { name: 'Bureaucracy', href: '/section/bureaucracy' },
-      { name: 'Leopoldplatz', href: '/section/leopoldplatz' },
-      { name: 'Nightlife', href: '/section/nightlife' },
-      { name: 'Crime', href: '/section/crime' },
-      { name: 'Kiez News', href: '/section/kiez' },
-      { name: 'Gentrification', href: '/section/gentrification' },
-    ],
-  },
-  {
-    title: 'WEDDING LIFE',
-    links: [
-      { name: 'Doener & Drinks', href: '/section/food-drink' },
-      { name: 'Techno', href: '/section/techno' },
-      { name: 'Spaetkauf Reviews', href: '/section/spaeti' },
-      { name: 'BVG Delays', href: '/section/bvg' },
-      { name: 'Buergeramt Tips', href: '/section/buergeramt' },
-      { name: 'Muellerstrasse', href: '/section/muellerstrasse' },
-    ],
-  },
-  {
-    title: 'OPINION',
-    links: [
-      { name: "Today's Opinion", href: '/section/opinion' },
-      { name: 'Expat Complaints', href: '/expat-complaints' },
-      { name: 'Schwaben vs Berlin', href: '/schwaben' },
-      { name: 'Guest Essays', href: '/guest-essays' },
-      { name: 'Letters', href: '/letters' },
-    ],
-  },
-  {
-    title: 'MORE',
-    links: [
-      { name: 'About', href: '/about' },
-      { name: 'Contact Us', href: '/contact' },
-      { name: 'Advertise', href: '/advertise' },
-      { name: 'Submit a Story', href: '/submit' },
-      { name: 'Corrections', href: '/corrections' },
-      { name: 'Archive', href: '/archive' },
-    ],
-  },
+const newsLinks = [
+  { name: 'Home Page', href: '/' },
+]
+
+const moreLinks = [
+  { name: 'About', href: '/about' },
+  { name: 'Contact Us', href: '/contact' },
+  { name: 'Advertise', href: '/advertise' },
+  { name: 'Submit a Story', href: '/submit' },
+  { name: 'Corrections', href: '/corrections' },
+  { name: 'Archive', href: '/archive' },
 ]
 
 /******************* COMPONENT ***********************/
 
-export const Footer: React.FC = React.memo(function Footer() {
+export const Footer: React.FC<FooterProps> = React.memo(function Footer({ categories }) {
   /******************* COMPUTED ***********************/
 
   const currentYear = new Date().getFullYear()
+
+  // Split categories into two columns (left to right, then down)
+  const midPoint = Math.ceil(categories.length / 2)
+  const leftColumnCategories = categories.slice(0, midPoint)
+  const rightColumnCategories = categories.slice(midPoint)
 
   /******************* RENDER ***********************/
 
@@ -77,23 +54,66 @@ export const Footer: React.FC = React.memo(function Footer() {
         </div>
 
         {/* Footer columns */}
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-8 pb-8 border-b border-[#e2e2e2]">
-          {footerSections.map((section) => (
-            <div key={section.title}>
-              <h3 className="font-sans text-base font-bold tracking-wider text-[#121212] mb-3">
-                {section.title}
-              </h3>
-              <ul className="list-none m-0 p-0">
-                {section.links.map((link) => (
-                  <li key={link.name} className="mb-2">
-                    <Link href={link.href} className="font-sans text-[15px] text-[#121212]">
-                      {link.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-[#e2e2e2]">
+          {/* NEWS Column */}
+          <div>
+            <h3 className="font-sans text-base font-bold tracking-wider text-[#121212] mb-3">
+              NEWS
+            </h3>
+            <ul className="list-none m-0 p-0">
+              {newsLinks.map((link) => (
+                <li key={link.name} className="mb-2">
+                  <Link href={link.href} className="font-sans text-[15px] text-[#121212]">
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Navigation Categories - First Column */}
+          <div>
+            {leftColumnCategories.map((category) => (
+              <div key={category.slug} className="mb-2">
+                <Link
+                  href={`/section/${category.slug}`}
+                  className="font-sans text-[15px] text-[#121212]"
+                >
+                  {category.name}
+                </Link>
+              </div>
+            ))}
+          </div>
+
+          {/* Navigation Categories - Second Column */}
+          <div>
+            {rightColumnCategories.map((category) => (
+              <div key={category.slug} className="mb-2">
+                <Link
+                  href={`/section/${category.slug}`}
+                  className="font-sans text-[15px] text-[#121212]"
+                >
+                  {category.name}
+                </Link>
+              </div>
+            ))}
+          </div>
+
+          {/* MORE Column */}
+          <div>
+            <h3 className="font-sans text-base font-bold tracking-wider text-[#121212] mb-3">
+              MORE
+            </h3>
+            <ul className="list-none m-0 p-0">
+              {moreLinks.map((link) => (
+                <li key={link.name} className="mb-2">
+                  <Link href={link.href} className="font-sans text-[15px] text-[#121212]">
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         {/* Bottom footer */}

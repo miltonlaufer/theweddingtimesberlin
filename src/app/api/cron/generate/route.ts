@@ -14,7 +14,8 @@ import {
 
 const MIN_AUTHOR_POOL = Number(process.env.MIN_AUTHOR_POOL ?? 8)
 const MAX_NEW_AUTHORS_PER_RUN = Number(process.env.MAX_NEW_AUTHORS_PER_RUN ?? 3)
-const ARTICLES_PER_RUN = Number(process.env.ARTICLES_PER_RUN ?? 4)
+// Default to 8 articles per run for a fuller newspaper feel (can be overridden via ARTICLES_PER_RUN env var)
+const ARTICLES_PER_RUN = Number(process.env.ARTICLES_PER_RUN ?? 8)
 
 const BASELINE_CATEGORIES = [
   { name: 'Bureaucracy', slug: 'bureaucracy', order: 1 },
@@ -126,13 +127,13 @@ export async function GET(req: Request) {
     // Fetch RSS topics once for all articles
     const { topicSummary } = await fetchRssTopics()
 
-    // Fetch last 10 article titles to avoid repetition
+    // Fetch last 20 article titles to avoid repetition and extract patterns
     const recentArticlesRes = await payload.find({
       collection: 'articles',
       where: {
         status: { equals: 'published' },
       },
-      limit: 10,
+      limit: 20,
       sort: '-publishedAt',
     })
     const recentArticleTitles = recentArticlesRes.docs
@@ -141,6 +142,25 @@ export async function GET(req: Request) {
         return doc.headline
       })
       .filter((title): title is string => typeof title === 'string')
+
+    // Extract headline patterns to avoid repetition
+    const recentHeadlinePatterns: string[] = []
+    for (const title of recentArticleTitles) {
+      const berlinMatch = title.match(/^Berlin\s+(\w+)\s+(.+)$/i)
+      if (berlinMatch) {
+        recentHeadlinePatterns.push('Berlin [verb] [noun]')
+        continue
+      }
+      const weddingMatch = title.match(/^Wedding\s+(\w+)\s+(.+)$/i)
+      if (weddingMatch) {
+        recentHeadlinePatterns.push('Wedding [verb] [noun]')
+        continue
+      }
+      if (title.match(/^[A-Z][a-z]+\s+(Introduces|Launches|Announces|Declares|Unveils)/i)) {
+        recentHeadlinePatterns.push('[Location] [Announcement verb] [noun]')
+      }
+    }
+    const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
 
     // Prepare editor config once
     const sanitizedEditorConfig = await sanitizeServerEditorConfig(defaultEditorConfig, payload.config)
@@ -165,7 +185,8 @@ export async function GET(req: Request) {
           authors,
           topicSummary,
           includeTopics,
-          recentArticleTitles,
+          recentArticleTitles: recentArticleTitles.slice(0, 10), // Last 10 for topic avoidance
+          recentHeadlinePatterns: uniquePatterns, // Patterns to avoid
         })
 
         // Track used category

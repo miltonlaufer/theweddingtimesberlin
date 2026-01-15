@@ -1,5 +1,5 @@
 import React from 'react'
-import { Masthead, NavigationServer, SatiricalRibbon, Footer } from '@/components'
+import { Masthead, NavigationServer, SatiricalRibbon, FooterServer } from '@/components'
 import { StoreProvider } from '@/stores'
 import '../../styles/global.css'
 import { GoogleAnalyticsClient } from '@/components/GoogleAnalyticsClient'
@@ -23,7 +23,7 @@ export default function FrontendLayout({ children }: FrontendLayoutProps) {
             <Masthead />
             <NavigationServer />
             <main className="flex-1">{children}</main>
-            <Footer />
+            <FooterServer />
           </div>
         </StoreProvider>
       </body>

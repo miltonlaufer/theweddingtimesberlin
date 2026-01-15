@@ -184,13 +184,13 @@ export async function POST(req: Request) {
     topicSummaryLen: topicSummary.length,
   })
 
-  // Fetch last 10 article titles to avoid repetition
+  // Fetch last 20 article titles to avoid repetition and extract patterns
   const recentArticlesRes = await payload.find({
     collection: 'articles',
     where: {
       status: { equals: 'published' },
     },
-    limit: 10,
+    limit: 20,
     sort: '-publishedAt',
   })
   const recentArticleTitles = recentArticlesRes.docs
@@ -200,12 +200,32 @@ export async function POST(req: Request) {
     })
     .filter((title): title is string => typeof title === 'string')
 
+  // Extract headline patterns to avoid repetition
+  const recentHeadlinePatterns: string[] = []
+  for (const title of recentArticleTitles) {
+    const berlinMatch = title.match(/^Berlin\s+(\w+)\s+(.+)$/i)
+    if (berlinMatch) {
+      recentHeadlinePatterns.push('Berlin [verb] [noun]')
+      continue
+    }
+    const weddingMatch = title.match(/^Wedding\s+(\w+)\s+(.+)$/i)
+    if (weddingMatch) {
+      recentHeadlinePatterns.push('Wedding [verb] [noun]')
+      continue
+    }
+    if (title.match(/^[A-Z][a-z]+\s+(Introduces|Launches|Announces|Declares|Unveils)/i)) {
+      recentHeadlinePatterns.push('[Location] [Announcement verb] [noun]')
+    }
+  }
+  const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
+
   const generated = await generateArticle({
     categories,
     authors,
     topicSummary,
     includeTopics,
-    recentArticleTitles,
+    recentArticleTitles: recentArticleTitles.slice(0, 10), // Still pass last 10 for topic avoidance
+    recentHeadlinePatterns: uniquePatterns,
   })
 
   log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:132', 'llm_generated', {
@@ -269,12 +289,35 @@ export async function POST(req: Request) {
   }
 
   if (!categoryDoc || !authorDoc) {
+    const availableCategories = (categoriesResFinal.docs as unknown as Array<{ slug: string }>).map((c) => c.slug).join(', ')
+    const availableAuthors = (authorsResFinal.docs as unknown as Array<{ slug: string }>).map((a) => a.slug).join(', ')
+    
     log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:147', 'slug_mapping_failed', {
       categoryFound: Boolean(categoryDoc),
       authorFound: Boolean(authorDoc),
+      generatedCategorySlug: generated.categorySlug,
+      generatedAuthorSlug: generated.authorSlug,
+      hasNewAuthorName: Boolean(generated.newAuthorName),
+      availableCategories,
+      availableAuthors,
     })
+    
+    let errorMsg = 'Generated categorySlug/authorSlug did not match existing Payload docs. '
+    if (!categoryDoc) {
+      errorMsg += `Category slug "${generated.categorySlug}" not found. Available: ${availableCategories}. `
+    }
+    if (!authorDoc) {
+      errorMsg += `Author slug "${generated.authorSlug}" not found. `
+      if (generated.newAuthorName) {
+        errorMsg += `New author creation was attempted but failed. `
+      } else {
+        errorMsg += `No newAuthorName provided, so author creation was not attempted. `
+      }
+      errorMsg += `Available: ${availableAuthors}.`
+    }
+    
     return NextResponse.json(
-      { ok: false, error: 'Generated categorySlug/authorSlug did not match existing Payload docs' },
+      { ok: false, error: errorMsg },
       { status: 500 },
     )
   }

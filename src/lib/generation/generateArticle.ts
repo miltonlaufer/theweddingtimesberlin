@@ -21,6 +21,7 @@ export interface GenerateArticleInput {
   topicSummary: string
   includeTopics: boolean
   recentArticleTitles: string[] // Titles of recent articles to avoid repeating
+  recentHeadlinePatterns?: string[] // Patterns like "Berlin [verb] [noun]" to avoid
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -87,6 +88,32 @@ function safeStringList(items: Array<{ slug: string; name: string; title?: strin
       return `- ${i.slug}: ${i.name}${title}${trimmedBio}`
     })
     .join('\n')
+}
+
+function extractHeadlinePatterns(titles: string[]): string[] {
+  const patterns = new Set<string>()
+  
+  for (const title of titles) {
+    // Extract patterns like "Berlin [verb] [noun]" or "Wedding [verb] [noun]"
+    const berlinMatch = title.match(/^Berlin\s+(\w+)\s+(.+)$/i)
+    if (berlinMatch) {
+      patterns.add(`Berlin [verb] [noun]`)
+      continue
+    }
+    
+    const weddingMatch = title.match(/^Wedding\s+(\w+)\s+(.+)$/i)
+    if (weddingMatch) {
+      patterns.add(`Wedding [verb] [noun]`)
+      continue
+    }
+    
+    // Check for other common patterns
+    if (title.match(/^[A-Z][a-z]+\s+(Introduces|Launches|Announces|Declares|Unveils)/i)) {
+      patterns.add(`[Location] [Announcement verb] [noun]`)
+    }
+  }
+  
+  return Array.from(patterns)
 }
 
 /******************* VALIDATION / REPAIR ***********************/
@@ -314,12 +341,51 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'BVG transit delays, U-Bahn drama, or S-Bahn chaos',
     'new hipster café openings, shop closures, or rent hikes on your block',
     'passive-aggressive notes in apartment buildings, or neighbor feuds',
-    // Gentrification
+    // Gentrification - expanded
     'gentrification battles, rent protests, or neighborhood changes',
     'expat invasion, English menus everywhere, or "authentic" Berlin debates',
-    'startup culture, co-working spaces, or tech bros pricing out locals',
     'trust fund kids cosplaying as poor artists in Neukölln',
     'Americans ruining everything they touch in Berlin',
+    'the slow death of Spätis as organic juice bars take over',
+    'when your favorite dive bar becomes a craft cocktail lounge',
+    'neighborhoods that lost their soul to brunch culture',
+    'the great Neukölln exodus: where did all the artists go?',
+    'rent control protests that accomplish nothing but make everyone feel better',
+    'the gentrification Olympics: who can complain the loudest?',
+    // Startup culture - expanded
+    'startup culture, co-working spaces, or tech bros pricing out locals',
+    'the WeWorkification of Berlin: every café is now a co-working space',
+    'tech bros explaining blockchain to confused baristas',
+    'startup founders who think their app will save the world',
+    'the cult of productivity: why everyone in Berlin has a side hustle',
+    'venture capital money ruining perfectly good dive bars',
+    'the rise of "disruptive" companies that just sell coffee',
+    'startup pitch nights where dreams go to die',
+    'tech bros who moved here for "cheap rent" and immediately raised prices',
+    'the Berlin startup scene: where good ideas go to get funded and forgotten',
+    'co-working spaces that charge 500 euros for a desk and free kombucha',
+    'the performative minimalism of startup founders',
+    'when your startup fails but you still call yourself an entrepreneur',
+    // Yoga, mindfulness, veganism - expanded
+    'yoga studios opening where punk squats used to be',
+    'the performative wellness of Berlin Instagram',
+    'vegan restaurants that cost more than a steakhouse',
+    'mindfulness retreats for people who need therapy',
+    'the yoga-to-crypto pipeline: how spiritual became financial',
+    'vegan activists who still wear leather',
+    'meditation apps that make you more anxious',
+    'the gentrification of mindfulness: when self-care becomes a luxury good',
+    'yoga teachers who charge 30 euros for "finding your inner peace"',
+    'the absurdity of Berlin wellness culture',
+    'vegan brunch spots that serve avocado toast for 18 euros',
+    'mindfulness workshops for people who just need to touch grass',
+    'the hypocrisy of wellness influencers promoting detox while doing drugs',
+    'yoga retreats in Brandenburg: paying 500 euros to sleep in a tent',
+    'vegan cheese that tastes like sadness',
+    'the commodification of spirituality in Berlin',
+    'mindfulness as an excuse to avoid real problems',
+    'yoga pants that cost more than your rent',
+    'the Berlin wellness industrial complex',
     // General Berlin satire
     'tourist invasions in Kreuzberg, Mitte, or Friedrichshain',
     'expat life struggles, language barriers, or Anmeldung nightmares',
@@ -419,6 +485,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       ? `\nCRITICAL: DO NOT write about these recent article topics (avoid repetition):\n${input.recentArticleTitles.map((title, idx) => `${idx + 1}. ${title}`).join('\n')}\n\nYou must write about a DIFFERENT topic/subject matter.`
       : ''
 
+  const headlinePatterns = input.recentHeadlinePatterns ?? extractHeadlinePatterns(input.recentArticleTitles)
+  const headlinePatternsSection =
+    headlinePatterns.length > 0
+      ? `\nCRITICAL: AVOID these overused headline patterns (be creative with structure!):\n${headlinePatterns.map((p) => `- "${p}"`).join('\n')}\n\nYour headline MUST use a DIFFERENT structure. Examples of varied structures:\n- Question format: "Why [something]?" or "Is [something] the new [something]?"\n- Quotation/character focus: "[Character/Group] [does something absurd]"\n- Descriptive/observational: "The [absurd thing] of [location/group]"\n- Comparison: "[X] vs [Y]: The [absurd comparison]"\n- Direct statement: "[Something] is [absurd claim]"\n- Narrative: "How [something] became [absurd outcome]"\n- Listicle-style: "The [number] ways [something absurd]"\n- Absurd claim: "[Something] declares itself [absurd status]"\n\nVary your headline structure! Do NOT default to "Berlin [verb] [noun]" or "Wedding [verb] [noun]".`
+      : ''
+
   const systemPrompt = [
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
     'Language: write everything in US English (no German, no other languages).',
@@ -427,6 +499,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     `TOPIC DIRECTION (use as inspiration, NOT as your headline): ${randomFocus}`,
     'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
     recentTitlesSection,
+    headlinePatternsSection,
     'CRITICAL: Pick a categorySlug that BEST matches your assigned topic direction above.',
     'Category mapping guide:',
     '- Drugs/ketamine/club bathroom → drugs',
@@ -439,9 +512,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- Food/kebab/späti → food-drink',
     '- Crime/theft/police → crime',
     '- Local news/kiez/BVG → kiez',
-    '- Rent/gentrification/expats → gentrification',
+    '- Rent/gentrification/expats/startup culture/co-working/tech bros → gentrification',
+    '- Yoga/mindfulness/veganism/wellness/meditation → gentrification (wellness gentrification)',
     '- Opinion/editorial → opinion',
     'DO NOT default to bureaucracy, nightlife, or opinion unless your topic truly matches.',
+    'IMPORTANT: Startup culture, yoga studios, mindfulness retreats, and vegan restaurants are forms of gentrification—map them to "gentrification" category.',
     '',
     'OPINION PIECE FORMAT (when categorySlug is "opinion" and layout is "opinion"):',
     '- Write as a PERSONAL ESSAY, not a news article.',
@@ -482,6 +557,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- MUST provide newAuthorBio (2-3 sentences about them - make it funny, sarcastic, and fitting for a satirical paper)',
     '',
     'Return an article that could plausibly run on the front page of a satirical local paper.',
+    '',
+    'HEADLINE VARIETY IS CRITICAL:',
+    'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
+    'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
+    'Think like a real newspaper: headlines should grab attention with wit, not formula.',
     '',
     'categorySlug options:',
     categoriesList,

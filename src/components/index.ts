@@ -4,5 +4,6 @@ export { NavigationServer } from './NavigationServer'
 export { SatiricalRibbon } from './SatiricalRibbon'
 export { ArticleCard } from './ArticleCard'
 export { Footer } from './Footer'
+export { FooterServer } from './FooterServer'
 export { NytContainer } from './NytContainer'
 
