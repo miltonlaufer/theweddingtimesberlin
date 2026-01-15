@@ -31,6 +31,8 @@ Minimum:
 
 - `PAYLOAD_SECRET` (required)
 - `DATABASE_URI` (optional locally; required for Postgres)
+- `RESEND_API_KEY` (required for password reset emails)
+- `RESEND_FROM_ADDRESS` (required; must be a verified sender in Resend)
 
 Example local `.env.local` (SQLite):
 
@@ -43,7 +45,24 @@ Example `.env.local` (Supabase Postgres):
 ```bash
 PAYLOAD_SECRET="change-me"
 DATABASE_URI="postgres://USER:PASSWORD@HOST:5432/DBNAME"
+RESEND_API_KEY="re_xxxxxxxxxxxxx"
+RESEND_FROM_ADDRESS="admin@yourdomain.com"
 ```
+
+## Email Configuration (Resend)
+
+Payload CMS uses **Resend** for sending password reset emails and other transactional emails.
+
+### Setup
+
+1. Create a free account at [Resend](https://resend.com)
+2. Get your API key from the [Resend dashboard](https://resend.com/api-keys)
+3. Add and verify a sender domain/email address in the Resend dashboard
+4. Set the following environment variables:
+   - `RESEND_API_KEY` - Your Resend API key
+   - `RESEND_FROM_ADDRESS` - A verified sender email address
+
+**Note:** Resend offers a generous free tier (3,000 emails/month) which is perfect for development and small projects.
 
 ## RSS + LLM Article Generation
 

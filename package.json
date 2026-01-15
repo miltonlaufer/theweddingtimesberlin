@@ -13,6 +13,7 @@
     "@langchain/openai": "^1.2.2",
     "@payloadcms/db-postgres": "^3.70.0",
     "@payloadcms/db-sqlite": "^3.70.0",
+    "@payloadcms/email-resend": "^3.71.1",
     "@payloadcms/next": "^3.70.0",
     "@payloadcms/richtext-lexical": "^3.70.0",
     "@supabase/supabase-js": "^2.90.1",

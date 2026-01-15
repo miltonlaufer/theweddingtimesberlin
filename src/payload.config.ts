@@ -2,6 +2,7 @@ import { buildConfig } from 'payload'
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { resendAdapter } from '@payloadcms/email-resend'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
@@ -24,6 +25,11 @@ export default buildConfig({
   },
   collections: [Users, Articles, Categories, Authors, Media],
   editor: lexicalEditor(),
+  email: resendAdapter({
+    apiKey: process.env.RESEND_API_KEY!,
+    defaultFromAddress: process.env.RESEND_FROM_ADDRESS!,
+    defaultFromName: 'Wedding Times Berlin',
+  }),
   secret: process.env.PAYLOAD_SECRET || 'your-super-secret-key-change-in-production',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
