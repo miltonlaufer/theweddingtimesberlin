@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import React from 'react'
+import { Analytics } from '@vercel/analytics/react'
 
 export const metadata: Metadata = {
   title: 'The Wedding Times | Berlin',
@@ -23,7 +24,10 @@ export default function RootLayout({
   // Payload Admin's RootLayout will handle its own structure within the body
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {children}
+        <Analytics />
+      </body>
     </html>
   )
 }

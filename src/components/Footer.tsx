@@ -23,6 +23,7 @@ const moreLinks = [
   { name: 'Submit a Story', href: '/submit' },
   { name: 'Corrections', href: '/corrections' },
   { name: 'Archive', href: '/archive' },
+  { name: 'RSS Feed', href: '/feed.xml' },
 ]
 
 /******************* COMPONENT ***********************/
