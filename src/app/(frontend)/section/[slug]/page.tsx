@@ -8,6 +8,7 @@ import {
   mapPayloadArticleToIArticle,
   type PayloadArticleLike,
 } from '@/lib/articles/mapPayloadArticleToIArticle'
+import { calculateReadingTime } from '@/lib/articles/readingTime'
 import type { IArticle } from '@/types/article'
 
 /******************* RENDERING CONFIG ***********************/
@@ -19,14 +20,6 @@ export const revalidate = 3600 // Revalidate every hour
 // Return empty array = no build-time generation, pages generated on first request
 export async function generateStaticParams() {
   return []
-}
-
-/******************* HELPERS ***********************/
-
-function calculateReadingTime(content: string): number {
-  const text = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-  const wordCount = text.split(' ').filter((w) => w.length > 0).length
-  return Math.max(1, Math.ceil(wordCount / 200))
 }
 
 /******************* PAGE PROPS ***********************/
@@ -58,7 +51,12 @@ export default async function SectionPage({ params }: SectionPageProps) {
     notFound()
   }
 
-  const category = categoryResult.docs[0] as { id: string; name: string; slug: string; description?: string }
+  const category = categoryResult.docs[0] as {
+    id: string
+    name: string
+    slug: string
+    description?: string
+  }
 
   // Find articles in this category
   const articlesResult = await payload.find({

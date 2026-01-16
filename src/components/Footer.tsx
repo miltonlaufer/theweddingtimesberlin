@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { NytContainer } from './NytContainer'
 
@@ -12,16 +13,12 @@ interface FooterProps {
 
 /******************* FOOTER SECTIONS ***********************/
 
-const newsLinks = [
-  { name: 'Home Page', href: '/' },
-]
+const newsLinks = [{ name: 'Home Page', href: '/' }]
 
 const moreLinks = [
   { name: 'About', href: '/about' },
   { name: 'Contact Us', href: '/contact' },
-  { name: 'Advertise', href: '/advertise' },
   { name: 'Submit a Story', href: '/submit' },
-  { name: 'Corrections', href: '/corrections' },
   { name: 'Archive', href: '/archive' },
   { name: 'RSS Feed', href: '/feed.xml' },
 ]
@@ -113,6 +110,17 @@ export const Footer: React.FC<FooterProps> = React.memo(function Footer({ catego
                   </Link>
                 </li>
               ))}
+              <li className="mb-2">
+                <a
+                  href="https://github.com/miltonlaufer/theweddingtimesberlin"
+                  className="font-sans text-[15px] text-[#121212] inline-flex items-center"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Image src="/github.svg" alt="GitHub" width={12} height={12} className="mr-2" />
+                  Source Code
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -122,24 +130,30 @@ export const Footer: React.FC<FooterProps> = React.memo(function Footer({ catego
           <div className="flex flex-wrap items-center gap-2 font-sans text-[13px] text-[#666]">
             <span>&copy; {currentYear} The Wedding Times Berlin</span>
             <span className="mx-1">|</span>
-            <Link href="/contact" className="text-inherit">Contact Us</Link>
+            <Link href="/contact" className="text-inherit">
+              Contact Us
+            </Link>
             <span className="mx-1">|</span>
-            <Link href="/accessibility" className="text-inherit">Accessibility</Link>
+            <Link href="/accessibility" className="text-inherit">
+              Accessibility
+            </Link>
             <span className="mx-1">|</span>
-            <Link href="/advertise" className="text-inherit">Advertise</Link>
+            <Link href="/privacy" className="text-inherit">
+              Privacy Policy
+            </Link>
             <span className="mx-1">|</span>
-            <Link href="/privacy" className="text-inherit">Privacy Policy</Link>
-            <span className="mx-1">|</span>
-            <Link href="/terms" className="text-inherit">Terms of Service</Link>
+            <Link href="/terms" className="text-inherit">
+              Terms of Service
+            </Link>
           </div>
         </div>
 
         {/* Disclaimer */}
         <p className="font-sans text-[13px] text-[#666] mt-4 leading-relaxed">
           THE WEDDING TIMES is a satirical publication about Berlin&apos;s Wedding neighbourhood.
-          All articles, stories, and characters appearing in this publication are fictitious.
-          Any resemblance to real persons, living or dead, is purely coincidental and unintentional.
-          No actual Wedding residents were harmed in the making of this publication.
+          All articles, stories, and characters appearing in this publication are fictitious. Any
+          resemblance to real persons, living or dead, is purely coincidental and unintentional. No
+          actual Wedding residents were harmed in the making of this publication.
         </p>
       </NytContainer>
     </footer>

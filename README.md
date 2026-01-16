@@ -1,6 +1,20 @@
 ## The Wedding Times Berlin
 
+[![CI](https://github.com/miltonlaufer/theweddingtimesberlin/actions/workflows/ci.yml/badge.svg)](https://github.com/miltonlaufer/theweddingtimesberlin/actions/workflows/ci.yml)
+[![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?logo=vercel&logoColor=white)](https://theweddingtimesberlin.de/)
+[![Website](https://img.shields.io/badge/Website-Live-1f2937)](https://theweddingtimesberlin.de/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Payload](https://img.shields.io/badge/Payload-CMS-1a1a1a?logo=payloadcms&logoColor=white)](https://payloadcms.com/)
+[![Vitest](https://img.shields.io/badge/Vitest-Unit%20Tests-6e9f18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Playwright](https://img.shields.io/badge/Playwright-E2E-2e2e2e?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![ESLint](https://img.shields.io/badge/ESLint-9-4B32C3?logo=eslint&logoColor=white)](https://eslint.org/)
+
 Satirical news site built with **Next.js (App Router)** + **Payload CMS**.
+
+Live site: https://theweddingtimesberlin.de/
+
+![Homepage layout](public/layout.png)
 
 ## Getting Started
 

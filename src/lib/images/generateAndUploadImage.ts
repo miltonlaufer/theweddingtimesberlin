@@ -13,29 +13,6 @@ export interface GenerateAndUploadImageInput {
   fileBaseName: string
 }
 
-/******************* LOGGING ***********************/
-
-const LOG_ENDPOINT =
-  'http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c'
-
-function log(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch(LOG_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'image-upload',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion agent log
-}
-
 /******************* HELPERS ***********************/
 
 function sanitizeFileBaseName(input: string): string {
@@ -78,14 +55,6 @@ export async function generateAndUploadImage(
   const bucket = process.env.SUPABASE_BUCKET ?? ''
   const imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'dall-e-3'
 
-  log('A', 'src/lib/images/generateAndUploadImage.ts:96', 'env_presence', {
-    hasOpenAIKey: openaiKey.length > 0,
-    hasSupabaseUrl: supabaseUrl.length > 0,
-    hasServiceRoleKey: supabaseServiceRole.length > 0,
-    hasBucket: bucket.length > 0,
-    imageModel,
-  })
-
   if (!openaiKey || !supabaseUrl || !supabaseServiceRole || !bucket) {
     throw new Error('Missing required env vars for image upload')
   }
@@ -93,11 +62,6 @@ export async function generateAndUploadImage(
   const openai = new OpenAI({ apiKey: openaiKey })
   const safeName = sanitizeFileBaseName(input.fileBaseName)
   const objectPath = `${nowPathPrefix()}/${safeName}-${Date.now()}.png`
-
-  log('B', 'src/lib/images/generateAndUploadImage.ts:114', 'openai_image_request', {
-    promptLen: input.prompt.length,
-    objectPath,
-  })
 
   const generateWithModel = async (model: string) => {
     return await openai.images.generate({
@@ -111,18 +75,9 @@ export async function generateAndUploadImage(
   try {
     imageRes = await generateWithModel(imageModel)
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'unknown error'
-    log('B', 'src/lib/images/generateAndUploadImage.ts:135', 'openai_image_error', {
-      model: imageModel,
-      message,
-    })
-
     // Fallback: if a user picked a restricted model, try a more broadly available one.
     if (imageModel !== 'dall-e-3') {
       imageRes = await generateWithModel('dall-e-3')
-      log('B', 'src/lib/images/generateAndUploadImage.ts:144', 'openai_image_fallback_used', {
-        fallbackModel: 'dall-e-3',
-      })
     } else {
       throw e
     }
@@ -131,12 +86,6 @@ export async function generateAndUploadImage(
   const first = imageRes.data?.[0]
   const imageUrl = first?.url ?? null
   const hasB64 = typeof (first as { b64_json?: unknown } | undefined)?.b64_json === 'string'
-  log('B', 'src/lib/images/generateAndUploadImage.ts:129', 'openai_image_response', {
-    hasUrl: Boolean(imageUrl),
-    hasB64,
-    dataLen: imageRes.data?.length ?? null,
-  })
-
   let bytes: ArrayBuffer
   if (imageUrl) {
     bytes = await imageUrlToArrayBuffer(imageUrl)
@@ -147,10 +96,6 @@ export async function generateAndUploadImage(
     throw new Error('OpenAI image generation returned neither url nor b64_json')
   }
 
-  log('B', 'src/lib/images/generateAndUploadImage.ts:138', 'downloaded_image', {
-    byteLength: bytes.byteLength,
-  })
-
   const supabase = createClient(supabaseUrl, supabaseServiceRole, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
@@ -160,11 +105,6 @@ export async function generateAndUploadImage(
     upsert: true,
   })
 
-  log('C', 'src/lib/images/generateAndUploadImage.ts:153', 'supabase_upload_result', {
-    ok: uploadRes.error == null,
-    error: uploadRes.error?.message ?? null,
-  })
-
   if (uploadRes.error) {
     throw new Error(`Supabase upload failed: ${uploadRes.error.message}`)
   }
@@ -172,19 +112,8 @@ export async function generateAndUploadImage(
   const publicRes = supabase.storage.from(bucket).getPublicUrl(objectPath)
   const publicUrl = publicRes.data.publicUrl
 
-  log('D', 'src/lib/images/generateAndUploadImage.ts:168', 'public_url_result', {
-    publicUrlHost: (() => {
-      try {
-        return new URL(publicUrl).host
-      } catch {
-        return 'invalid-url'
-      }
-    })(),
-  })
-
   return {
     objectPath,
     publicUrl,
   }
 }
-

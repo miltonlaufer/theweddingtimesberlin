@@ -18,29 +18,6 @@ export const GeneratedAuthorsSchema = z.object({
 
 export type GeneratedAuthors = z.infer<typeof GeneratedAuthorsSchema>
 
-/******************* LOGGING ***********************/
-
-const LOG_ENDPOINT =
-  'http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c'
-
-function log(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch(LOG_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'author-gen',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion agent log
-}
-
 /******************* HELPERS ***********************/
 
 function extractFirstJsonObject(text: string): string {
@@ -50,15 +27,6 @@ function extractFirstJsonObject(text: string): string {
     throw new Error('Model did not return a JSON object')
   }
   return text.slice(firstBrace, lastBrace + 1)
-}
-
-function safeErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  try {
-    return JSON.stringify(err)
-  } catch {
-    return 'unknown error'
-  }
 }
 
 /******************* MAIN ***********************/
@@ -97,16 +65,12 @@ export async function generateAuthors(args: { count: number }): Promise<Generate
   ])
 
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
-  log('A', 'src/lib/generation/generateAuthors.ts:91', 'primary_response', { modelName, len: text.length })
-
   try {
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
     const validated = GeneratedAuthorsSchema.parse(parsed)
     return validated.authors.slice(0, args.count)
-  } catch (err) {
-    log('A', 'src/lib/generation/generateAuthors.ts:101', 'primary_failed', { error: safeErrorMessage(err) })
-
+  } catch {
     const repairSystem = [
       'You are a JSON repair tool.',
       'Output STRICT JSON that matches the required schema. No extra text.',
@@ -125,14 +89,11 @@ export async function generateAuthors(args: { count: number }): Promise<Generate
       { role: 'user', content: repairUser },
     ])
 
-    const repairedText = typeof repaired.content === 'string' ? repaired.content : JSON.stringify(repaired.content)
-    log('B', 'src/lib/generation/generateAuthors.ts:125', 'repair_response', { repairModelName, len: repairedText.length })
-
+    const repairedText =
+      typeof repaired.content === 'string' ? repaired.content : JSON.stringify(repaired.content)
     const repairedJson = extractFirstJsonObject(repairedText)
     const repairedParsed = JSON.parse(repairedJson) as unknown
     const repairedValidated = GeneratedAuthorsSchema.parse(repairedParsed)
-    log('B', 'src/lib/generation/generateAuthors.ts:132', 'repair_success', { count: repairedValidated.authors.length })
     return repairedValidated.authors.slice(0, args.count)
   }
 }
-

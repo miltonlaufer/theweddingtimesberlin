@@ -2,29 +2,6 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 
-/******************* CONSTANTS ***********************/
-
-const LOG_ENDPOINT =
-  'http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c'
-
-function log(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch(LOG_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'supabase-smoke',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion agent log
-}
-
 /******************* ROUTE ***********************/
 
 export async function GET(req: Request) {
@@ -42,20 +19,7 @@ export async function GET(req: Request) {
   const requestUrl = new URL(req.url)
   const forceUpload = requestUrl.searchParams.get('upload') === '1'
 
-  log('A', 'src/app/(payload)/api/debug/supabase/route.ts:44', 'env_presence', {
-    hasSupabaseUrl: supabaseUrl.length > 0,
-    hasServiceRoleKey: supabaseServiceRole.length > 0,
-    hasBucket: bucket.length > 0,
-    debugUploadEnv,
-    forceUpload,
-  })
-
   if (!supabaseUrl || !supabaseServiceRole || !bucket) {
-    log('A', 'src/app/(payload)/api/debug/supabase/route.ts:46', 'missing_env', {
-      supabaseUrlLen: supabaseUrl.length,
-      serviceRoleKeyLen: supabaseServiceRole.length,
-      bucketLen: bucket.length,
-    })
     return NextResponse.json(
       {
         ok: false,
@@ -69,16 +33,6 @@ export async function GET(req: Request) {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  log('D', 'src/app/(payload)/api/debug/supabase/route.ts:68', 'client_created', {
-    supabaseUrlHost: (() => {
-      try {
-        return new URL(supabaseUrl).host
-      } catch {
-        return 'invalid-url'
-      }
-    })(),
-  })
-
   const result: Record<string, unknown> = {
     ok: true,
     bucket,
@@ -88,12 +42,6 @@ export async function GET(req: Request) {
   try {
     // Check 1: list buckets (permission-sensitive)
     const bucketsRes = await client.storage.listBuckets()
-    log('C', 'src/app/(payload)/api/debug/supabase/route.ts:87', 'listBuckets_result', {
-      hasError: Boolean(bucketsRes.error),
-      errorCode: bucketsRes.error?.name ?? null,
-      bucketCount: bucketsRes.data?.length ?? null,
-    })
-
     result.checks = {
       ...((result.checks as object) || {}),
       listBuckets: {
@@ -105,12 +53,6 @@ export async function GET(req: Request) {
 
     // Check 2: list objects in the configured bucket root
     const listRes = await client.storage.from(bucket).list('', { limit: 1 })
-    log('B', 'src/app/(payload)/api/debug/supabase/route.ts:105', 'bucket_list_result', {
-      hasError: Boolean(listRes.error),
-      errorCode: listRes.error?.name ?? null,
-      returnedCount: listRes.data?.length ?? null,
-    })
-
     result.checks = {
       ...((result.checks as object) || {}),
       listFromBucket: {
@@ -125,14 +67,10 @@ export async function GET(req: Request) {
     // - env: DEBUG_SUPABASE_UPLOAD=1
     // - or query: ?upload=1
     const doUpload = debugUploadEnv === '1' || forceUpload
-    log('A', 'src/app/(payload)/api/debug/supabase/route.ts:147', 'upload_branch', {
-      doUpload,
-      debugUploadEnv,
-      forceUpload,
-    })
     if (doUpload) {
       const uploaded = await generateAndUploadImage({
-        prompt: 'A photo-like satirical newspaper illustration of Berlin Wedding, wide street scene, no text',
+        prompt:
+          'A photo-like satirical newspaper illustration of Berlin Wedding, wide street scene, no text',
         fileBaseName: 'debug-upload',
       })
       result.checks = {
@@ -155,13 +93,8 @@ export async function GET(req: Request) {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown error'
-    log('D', 'src/app/(payload)/api/debug/supabase/route.ts:126', 'exception', { message })
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 
-  log('A', 'src/app/(payload)/api/debug/supabase/route.ts:132', 'success_response', {
-    ok: true,
-  })
   return NextResponse.json(result)
 }
-

@@ -1,0 +1,11 @@
+.next
+build
+dist
+out
+payload.db
+public/*.xml
+public/robots.txt
+public/sw.js
+public/swe-worker-*.js
+public/swe-worker-*.js.map
+node_modules

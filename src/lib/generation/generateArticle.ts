@@ -44,29 +44,6 @@ export const GeneratedArticleSchema = z.object({
 
 export type GeneratedArticle = z.infer<typeof GeneratedArticleSchema>
 
-/******************* LOGGING ***********************/
-
-const LOG_ENDPOINT =
-  'http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c'
-
-function log(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch(LOG_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'llm-schema',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion agent log
-}
-
 /******************* HELPERS ***********************/
 
 function extractFirstJsonObject(text: string): string {
@@ -78,7 +55,9 @@ function extractFirstJsonObject(text: string): string {
   return text.slice(firstBrace, lastBrace + 1)
 }
 
-function safeStringList(items: Array<{ slug: string; name: string; title?: string; bio?: string }>): string {
+function safeStringList(
+  items: Array<{ slug: string; name: string; title?: string; bio?: string }>,
+): string {
   return items
     .map((i) => {
       const title = i.title ? ` — ${i.title}` : ''
@@ -92,7 +71,7 @@ function safeStringList(items: Array<{ slug: string; name: string; title?: strin
 
 export function extractHeadlinePatterns(titles: string[]): string[] {
   const patterns = new Set<string>()
-  
+
   for (const title of titles) {
     // Extract patterns like "Berlin [verb] [noun]" or "Wedding [verb] [noun]"
     const berlinMatch = title.match(/^Berlin\s+(\w+)\s+(.+)$/i)
@@ -100,77 +79,79 @@ export function extractHeadlinePatterns(titles: string[]): string[] {
       patterns.add(`Berlin [verb] [noun]`)
       continue
     }
-    
+
     const weddingMatch = title.match(/^Wedding\s+(\w+)\s+(.+)$/i)
     if (weddingMatch) {
       patterns.add(`Wedding [verb] [noun]`)
       continue
     }
-    
+
     // Check for other common patterns
     if (title.match(/^[A-Z][a-z]+\s+(Introduces|Launches|Announces|Declares|Unveils)/i)) {
       patterns.add(`[Location] [Announcement verb] [noun]`)
     }
-    
+
     // Question patterns
     if (title.match(/^(Why|How|What|When|Where|Is|Are|Do|Does|Did)\s+/i)) {
       patterns.add(`[Question word] [rest]`)
     }
-    
+
     // "The [noun] of [location]" pattern
     if (title.match(/^The\s+\w+\s+of\s+/i)) {
       patterns.add(`The [noun] of [location]`)
     }
-    
+
     // "[Location] [verb]s [noun]" pattern
     if (title.match(/^[A-Z][a-z]+\s+\w+s\s+/i)) {
       patterns.add(`[Location] [verb]s [noun]`)
     }
-    
+
     // "[Number] [things]" pattern
     if (title.match(/^(The\s+)?\d+\s+/i)) {
       patterns.add(`[Number] [things]`)
     }
-    
+
     // "[Something] is [something]" pattern
     if (title.match(/\s+is\s+(the|a|an)\s+/i)) {
       patterns.add(`[Something] is [something]`)
     }
-    
+
     // "[Something] vs [Something]" pattern
     if (title.match(/\s+vs\s+/i)) {
       patterns.add(`[Something] vs [Something]`)
     }
-    
+
     // "How [something] [verb]" pattern
     if (title.match(/^How\s+\w+\s+\w+/i)) {
       patterns.add(`How [something] [verb]`)
     }
-    
+
     // "[Location]'s [something]" pattern
     if (title.match(/^[A-Z][a-z]+'s\s+/i)) {
       patterns.add(`[Location]'s [something]`)
     }
   }
-  
+
   return Array.from(patterns)
 }
 
 /******************* VALIDATION / REPAIR ***********************/
 
-function safeErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  try {
-    return JSON.stringify(err)
-  } catch {
-    return 'unknown error'
-  }
-}
-
 function looksNonEnglish(text: string): boolean {
   // Heuristic: detect common German function words and umlauts.
   const lower = text.toLowerCase()
-  const germanMarkers = [' der ', ' die ', ' das ', ' und ', ' nicht ', ' ist ', ' mit ', ' für ', ' im ', ' auf ']
+  const germanMarkers = [
+    ' der ',
+    ' die ',
+    ' das ',
+    ' und ',
+    ' nicht ',
+    ' ist ',
+    ' mit ',
+    ' für ',
+    ' im ',
+    ' auf ',
+  ]
   const hasMarkers = germanMarkers.some((m) => lower.includes(m))
   const hasUmlaut = /[äöüß]/i.test(text)
   return hasMarkers || hasUmlaut
@@ -190,17 +171,13 @@ async function translateToEnglish(args: {
     throw new Error('Missing OPENAI_API_KEY')
   }
 
-  const translateModelName = process.env.OPENAI_TRANSLATE_MODEL ?? process.env.OPENAI_REPAIR_MODEL ?? 'gpt-4o-mini'
+  const translateModelName =
+    process.env.OPENAI_TRANSLATE_MODEL ?? process.env.OPENAI_REPAIR_MODEL ?? 'gpt-4o-mini'
 
   const llm = new ChatOpenAI({
     apiKey,
     model: translateModelName,
     temperature: 0,
-  })
-
-  log('F', 'src/lib/generation/generateArticle.ts:121', 'translate_invoke', {
-    translateModelName,
-    headlineLen: args.bad.headline.length,
   })
 
   const categoriesList = safeStringList(args.categories)
@@ -237,10 +214,6 @@ async function translateToEnglish(args: {
   const parsed = JSON.parse(jsonText) as unknown
   const validated = GeneratedArticleSchema.parse(parsed)
 
-  log('F', 'src/lib/generation/generateArticle.ts:167', 'translate_success', {
-    headlineLen: validated.headline.length,
-  })
-
   return validated
 }
 
@@ -270,11 +243,6 @@ async function repairToSchema(args: {
 
   const categoriesList = safeStringList(args.categories)
   const authorsList = safeStringList(args.authors)
-
-  log('D', 'src/lib/generation/generateArticle.ts:106', 'repair_invoke', {
-    repairModelName,
-    badOutputLen: args.badOutput.length,
-  })
 
   const systemPrompt = [
     'You are a JSON repair tool.',
@@ -323,11 +291,6 @@ async function repairToSchema(args: {
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
   const validated = GeneratedArticleSchema.parse(parsed)
-
-  log('D', 'src/lib/generation/generateArticle.ts:161', 'repair_success', {
-    headlineLen: validated.headline.length,
-    hasImagePrompt: Boolean(validated.imagePrompt),
-  })
 
   return validated
 }
@@ -415,7 +378,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'A Neukölln shisha bar owner discovers his business is being used as a front for organized crime, but the crime is more efficient than his actual business',
     'The great Clan wedding scandal: a family crime network throws a wedding that costs more than the average Berlin apartment, paid for in cash',
     'Police investigate why a Clan-controlled döner shop has better customer service than Deutsche Bahn',
-    'A Wedding resident discovers their new neighbor is a Clan member, but he\'s more polite than their last neighbor',
+    "A Wedding resident discovers their new neighbor is a Clan member, but he's more polite than their last neighbor",
     'The case of the gentrified crime: Berlin Clans start opening artisanal coffee shops as fronts',
     'A Neukölln Clan family opens a "legitimate" business empire, but their accounting is more organized than the German tax office',
     'The great Clan turf war: two families fight over control of a Späti, but the conflict is resolved faster than a Bürgeramt appointment',
@@ -432,7 +395,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'The great Berlin WiFi crisis: public networks now require a 3-hour orientation session',
     'Wedding district votes to make every day "Späti Appreciation Day"',
   ]
-  const selectedScenario = concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
+  const selectedScenario =
+    concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
 
   // Randomly pick a topic focus to force variety (aligned with site categories)
   const topicFocuses = [
@@ -615,9 +579,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const randomFocus = topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
 
   // When RSS topics are available, pick one to base the article on
-  const rssTopics = input.topicSummary.trim().split('\n').filter((line) => line.length > 0)
+  const rssTopics = input.topicSummary
+    .trim()
+    .split('\n')
+    .filter((line) => line.length > 0)
   const hasRssTopics = input.includeTopics && rssTopics.length > 0
-  const selectedRssTopic = hasRssTopics ? rssTopics[Math.floor(Math.random() * rssTopics.length)] : null
+  const selectedRssTopic = hasRssTopics
+    ? rssTopics[Math.floor(Math.random() * rssTopics.length)]
+    : null
 
   const recentTitlesSection =
     input.recentArticleTitles.length > 0
@@ -631,7 +600,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ].join('\n')
       : ''
 
-  const headlinePatterns = input.recentHeadlinePatterns ?? extractHeadlinePatterns(input.recentArticleTitles)
+  const headlinePatterns =
+    input.recentHeadlinePatterns ?? extractHeadlinePatterns(input.recentArticleTitles)
   const headlinePatternsSection =
     headlinePatterns.length > 0
       ? [
@@ -684,15 +654,15 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         'This is NOT an opinion piece or abstract satire. This is a NEWS STORY about something absurd but specific.',
       ].join('\n')
     : hasRssTopics && selectedRssTopic
-    ? [
-        'PRIMARY TOPIC SOURCE: A real-world news headline will be provided. You MUST write a satirical Berlin angle on that news story.',
-        `SECONDARY/BACKUP THEME (use only if the news topic is too narrow): ${randomFocus}`,
-        'The real news topic takes PRIORITY - find a clever Berlin connection to it.',
-      ].join('\n')
-    : [
-        `TOPIC DIRECTION (use as inspiration, NOT as your headline): ${randomFocus}`,
-        'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
-      ].join('\n')
+      ? [
+          'PRIMARY TOPIC SOURCE: A real-world news headline will be provided. You MUST write a satirical Berlin angle on that news story.',
+          `SECONDARY/BACKUP THEME (use only if the news topic is too narrow): ${randomFocus}`,
+          'The real news topic takes PRIORITY - find a clever Berlin connection to it.',
+        ].join('\n')
+      : [
+          `TOPIC DIRECTION (use as inspiration, NOT as your headline): ${randomFocus}`,
+          'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
+        ].join('\n')
 
   const systemPrompt = [
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
@@ -716,7 +686,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
           '- Push boundaries. Be provocative. Make people think "can they say that?"',
           '- Use dark humor, shock value, and uncomfortable truths wrapped in absurdity',
-          '- Don\'t be mean-spirited, but don\'t be safe either. Make readers squirm a little.',
+          "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
           '',
           'SPICE IT UP (subtle sexual innuendo):',
           '- Include 2-3 subtle double entendres or sexual innuendo that can be read innocently or suggestively',
@@ -727,13 +697,13 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
           '- Include 3-5 intellectual/academic references per article—make them MORE visible, not hidden',
           '- Reference academic subjects, literature, movies, contemporary art, philosophy, or cultural theory',
-          '- These should be recognizable to educated readers—not so subtle that they\'re missed',
+          "- These should be recognizable to educated readers—not so subtle that they're missed",
           '- You can name-drop concepts, theories, or movements (e.g., "a Kafkaesque situation", "Foucault\'s panopticon", "Situationist psychogeography", "Baudrillard\'s simulacra")',
           '- Weave in literary allusions, film references, philosophical concepts, art movements',
           '- Reference: Foucault, Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, architectural theory, urban studies, cultural criticism',
           '- Make the references clear enough that educated readers will recognize them, but natural enough that the article still works without them',
           '- Think: "This bureaucratic nightmare is straight out of Kafka\'s The Trial" or "The surveillance feels like Foucault\'s panopticon made manifest"',
-          '- Don\'t be afraid to be more explicit with academic references—they should be noticeable, not hidden',
+          "- Don't be afraid to be more explicit with academic references—they should be noticeable, not hidden",
         ].join('\n')
       : [
           'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel the spirit of early South Park, Anthony Jeselnik, and classic British satire like Brass Eye. Mock sacred cows, poke fun at every demographic equally, and embrace taboo topics with gleeful abandon. Use dark humor, shock value, and absurdist takes on sensitive subjects. Nothing is off-limits except actual hate speech or calls to violence.',
@@ -744,7 +714,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
           '- Push boundaries. Be provocative. Make people think "can they say that?"',
           '- Use dark humor, shock value, and uncomfortable truths wrapped in absurdity',
-          '- Don\'t be mean-spirited, but don\'t be safe either. Make readers squirm a little.',
+          "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
           '- Tackle taboo subjects. Make fun of everyone equally—no sacred cows.',
           '',
           'SPICE IT UP (subtle sexual innuendo):',
@@ -756,13 +726,13 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
           '- Include 3-5 intellectual/academic references per article—make them MORE visible, not hidden',
           '- Reference academic subjects, literature, movies, contemporary art, philosophy, or cultural theory',
-          '- These should be recognizable to educated readers—not so subtle that they\'re missed',
+          "- These should be recognizable to educated readers—not so subtle that they're missed",
           '- You can name-drop concepts, theories, or movements (e.g., "a Kafkaesque situation", "Foucault\'s panopticon", "Situationist psychogeography", "Baudrillard\'s simulacra")',
           '- Weave in literary allusions, film references, philosophical concepts, art movements',
           '- Reference: Foucault, Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, architectural theory, urban studies, cultural criticism',
           '- Make the references clear enough that educated readers will recognize them, but natural enough that the article still works without them',
           '- Think: "This bureaucratic nightmare is straight out of Kafka\'s The Trial" or "The surveillance feels like Foucault\'s panopticon made manifest"',
-          '- Don\'t be afraid to be more explicit with academic references—they should be noticeable, not hidden',
+          "- Don't be afraid to be more explicit with academic references—they should be noticeable, not hidden",
         ].join('\n'),
     topicInstruction,
     recentTitlesSection,
@@ -847,28 +817,28 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         '- Reference: Foucault, Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, architectural theory, urban studies',
         '- Make references clear enough that educated readers recognize them, but natural enough that the article works without them',
         '- Examples: "This bureaucratic nightmare is straight out of Kafka\'s The Trial" or "The surveillance feels like Foucault\'s panopticon made manifest"',
-        '- Don\'t hide them—make them noticeable but integrated naturally',
+        "- Don't hide them—make them noticeable but integrated naturally",
         '',
       ].join('\n')
     : hasRssTopics && selectedRssTopic
-    ? [
-        'CURRENT NEWS TOPIC TO SATIRIZE:',
-        selectedRssTopic,
-        '',
-        'CRITICAL INSTRUCTION: You MUST write a satirical article that connects this real-world news topic to Berlin.',
-        'Take the essence/theme of this news story and write about how it manifests in Berlin, the Wedding neighborhood, or the Berlin expat/local scene.',
-        'REMINDER: "Wedding" refers to the Berlin neighborhood, NOT wedding ceremonies. Do NOT write about weddings, marriage, or wedding-related topics.',
-        'Examples of how to connect:',
-        '- If the news is about a tech company layoff, write about how Berlin startups are affected or how laid-off tech bros are now DJing',
-        '- If the news is about politics, write about how Berliners react to it at their local Späti or how it affects the bureaucracy',
-        '- If the news is about climate, write about Berlin climate activists or how Berliners are coping',
-        '- If the news is about economy/inflation, write about Berlin rent, döner prices, or club entry fees',
-        '',
-        'The connection to the real news should be CLEAR in the article, not just vaguely inspired.',
-        'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.',
-        '',
-      ].join('\n')
-    : 'No external topics provided. Invent plausible Berlin-related satire based on the topic focus above.\n'
+      ? [
+          'CURRENT NEWS TOPIC TO SATIRIZE:',
+          selectedRssTopic,
+          '',
+          'CRITICAL INSTRUCTION: You MUST write a satirical article that connects this real-world news topic to Berlin.',
+          'Take the essence/theme of this news story and write about how it manifests in Berlin, the Wedding neighborhood, or the Berlin expat/local scene.',
+          'REMINDER: "Wedding" refers to the Berlin neighborhood, NOT wedding ceremonies. Do NOT write about weddings, marriage, or wedding-related topics.',
+          'Examples of how to connect:',
+          '- If the news is about a tech company layoff, write about how Berlin startups are affected or how laid-off tech bros are now DJing',
+          '- If the news is about politics, write about how Berliners react to it at their local Späti or how it affects the bureaucracy',
+          '- If the news is about climate, write about Berlin climate activists or how Berliners are coping',
+          '- If the news is about economy/inflation, write about Berlin rent, döner prices, or club entry fees',
+          '',
+          'The connection to the real news should be CLEAR in the article, not just vaguely inspired.',
+          'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.',
+          '',
+        ].join('\n')
+      : 'No external topics provided. Invent plausible Berlin-related satire based on the topic focus above.\n'
 
   const userPrompt = [
     topicsSection,
@@ -900,7 +870,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Weave them naturally: describe something as "Kafkaesque" without naming Kafka, reference Situationist ideas through the narrative, allude to Foucault\'s panopticon through description',
           '- Think: educated readers will recognize the reference, but the article still works without it',
           '- Examples: describe bureaucratic absurdity in ways that echo "The Trial", reference surveillance in ways that echo "1984" or panopticon theory, describe urban space in ways that reference Situationist psychogeography',
-          '- Don\'t name-drop—embed the concepts in the narrative',
+          "- Don't name-drop—embed the concepts in the narrative",
           '',
         ].join('\n')
       : '',
@@ -921,28 +891,30 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'DO NOT write about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
     'The newspaper covers the Wedding neighborhood in Berlin. Write about life in Wedding, not about weddings as events.',
     '',
-    !useFeatureStoryPrompt ? [
-      'EDGE AND POLITICAL INCORRECTNESS:',
-      '- Push beyond "nice absurdity". Make readers uncomfortable. Challenge assumptions.',
-      '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
-      '- Tackle taboo subjects with dark humor. Make fun of everyone equally.',
-      '- Use uncomfortable truths wrapped in absurdity. Make readers squirm.',
-      '',
-      'SPICE IT UP - Subtle Sexual Innuendo:',
-      '- Include 2-3 subtle double entendres naturally woven into the text',
-      '- Examples: "residents found it hard to swallow the new policy", "the committee struggled to penetrate the bureaucracy", "the proposal met with stiff resistance"',
-      '- Keep it clever—readers should catch the double meaning',
-      '- NOT explicit or vulgar—just playful wordplay',
-      '',
-      'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
-      '- Include 3-5 intellectual/academic references per article—make them MORE visible',
-      '- You can name-drop concepts, theories, or movements: "Kafkaesque", "Foucault\'s panopticon", "Situationist psychogeography", "Baudrillard\'s simulacra"',
-      '- Reference: Foucault, Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, architectural theory, urban studies',
-      '- Make references clear enough that educated readers recognize them, but natural enough that the article works without them',
-      '- Examples: "This bureaucratic nightmare is straight out of Kafka\'s The Trial" or "The surveillance feels like Foucault\'s panopticon made manifest"',
-      '- Don\'t hide them—make them noticeable but integrated naturally',
-      '',
-    ].join('\n') : '',
+    !useFeatureStoryPrompt
+      ? [
+          'EDGE AND POLITICAL INCORRECTNESS:',
+          '- Push beyond "nice absurdity". Make readers uncomfortable. Challenge assumptions.',
+          '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
+          '- Tackle taboo subjects with dark humor. Make fun of everyone equally.',
+          '- Use uncomfortable truths wrapped in absurdity. Make readers squirm.',
+          '',
+          'SPICE IT UP - Subtle Sexual Innuendo:',
+          '- Include 2-3 subtle double entendres naturally woven into the text',
+          '- Examples: "residents found it hard to swallow the new policy", "the committee struggled to penetrate the bureaucracy", "the proposal met with stiff resistance"',
+          '- Keep it clever—readers should catch the double meaning',
+          '- NOT explicit or vulgar—just playful wordplay',
+          '',
+          'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
+          '- Include 3-5 intellectual/academic references per article—make them MORE visible',
+          '- You can name-drop concepts, theories, or movements: "Kafkaesque", "Foucault\'s panopticon", "Situationist psychogeography", "Baudrillard\'s simulacra"',
+          '- Reference: Foucault, Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, architectural theory, urban studies',
+          '- Make references clear enough that educated readers recognize them, but natural enough that the article works without them',
+          '- Examples: "This bureaucratic nightmare is straight out of Kafka\'s The Trial" or "The surveillance feels like Foucault\'s panopticon made manifest"',
+          "- Don't hide them—make them noticeable but integrated naturally",
+          '',
+        ].join('\n')
+      : '',
     'HEADLINE VARIETY IS CRITICAL:',
     useFeatureStoryPrompt
       ? [
@@ -996,18 +968,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- Only omit imagePrompt if the story is truly unillustratable (very rare)',
   ].join('\n')
 
-  console.log('\n' + '='.repeat(80))
-  console.log('LLM PROMPT - generateArticle')
-  console.log('='.repeat(80))
-  console.log('\n--- CATEGORIES FROM DB ---\n')
-  console.log(`Total categories: ${input.categories.length}`)
-  console.log(categoriesList)
-  console.log('\n--- SYSTEM PROMPT ---\n')
-  console.log(systemPrompt)
-  console.log('\n--- USER PROMPT ---\n')
-  console.log(userPrompt)
-  console.log('\n' + '='.repeat(80) + '\n')
-
   const raw = await llm.invoke([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
@@ -1015,23 +975,16 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
 
-  log('A', 'src/lib/generation/generateArticle.ts:239', 'primary_response_received', {
-    modelName,
-    contentLen: text.length,
-    includeTopics: input.includeTopics,
-  })
-
   try {
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
     const validated = GeneratedArticleSchema.parse(parsed)
-    log('B', 'src/lib/generation/generateArticle.ts:250', 'primary_validation_success', {
-      headlineLen: validated.headline.length,
-      hasImagePrompt: Boolean(validated.imagePrompt),
-    })
-    const langSample = `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(0, 1200)
+    const langSample =
+      `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
+        0,
+        1200,
+      )
     const nonEnglish = looksNonEnglish(langSample)
-    log('E', 'src/lib/generation/generateArticle.ts:258', 'language_check', { nonEnglish })
 
     if (nonEnglish) {
       return await translateToEnglish({
@@ -1042,10 +995,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     }
 
     return validated
-  } catch (err) {
-    log('B', 'src/lib/generation/generateArticle.ts:258', 'primary_validation_failed', {
-      error: safeErrorMessage(err),
-    })
+  } catch {
     // Fallback: deterministic repair using cheaper model
     return await repairToSchema({
       badOutput: text,
@@ -1054,4 +1004,3 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     })
   }
 }
-

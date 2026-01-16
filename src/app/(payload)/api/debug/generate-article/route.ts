@@ -4,30 +4,11 @@ import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import { generateArticle, extractHeadlinePatterns } from '@/lib/generation/generateArticle'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
-import { convertMarkdownToLexical, defaultEditorConfig, sanitizeServerEditorConfig } from '@payloadcms/richtext-lexical'
-
-/******************* LOGGING ***********************/
-
-const LOG_ENDPOINT =
-  'http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c'
-
-function log(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch(LOG_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'manual-generate',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion agent log
-}
+import {
+  convertMarkdownToLexical,
+  defaultEditorConfig,
+  sanitizeServerEditorConfig,
+} from '@payloadcms/richtext-lexical'
 
 /******************* HELPERS ***********************/
 
@@ -70,20 +51,11 @@ export async function POST(req: Request) {
   // In production, require the secret (this endpoint writes into the DB).
   // In dev, allow manual triggering without needing to set/copy headers.
   if (isProd && cronSecret && providedSecret !== cronSecret) {
-    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:70', 'unauthorized', {
-      hasCronSecret: true,
-      provided: Boolean(providedSecret),
-    })
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
   const url = new URL(req.url)
   const publish = url.searchParams.get('publish') !== '0'
-
-  log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:84', 'request', {
-    publish,
-    isProd,
-  })
 
   const payload = await getPayload()
 
@@ -97,10 +69,6 @@ export async function POST(req: Request) {
   // Auto-bootstrap: if the DB is empty, seed minimal categories so generation can always run.
   const shouldSeedCategories = (categoriesRes.totalDocs ?? 0) === 0
   if (shouldSeedCategories) {
-    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:96', 'seeding_categories', {
-      reason: 'no categories',
-    })
-
     const baselineCategories = [
       { name: 'Bureaucracy', slug: 'bureaucracy', order: 1 },
       { name: 'Leopoldplatz', slug: 'leopoldplatz', order: 2 },
@@ -124,12 +92,6 @@ export async function POST(req: Request) {
 
   if (currentAuthorsCount < minAuthors) {
     const toCreate = Math.max(1, Math.min(maxNewAuthorsPerRun, minAuthors - currentAuthorsCount))
-    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:124', 'author_pool_low', {
-      currentAuthorsCount,
-      minAuthors,
-      toCreate,
-    })
-
     const generatedAuthors = await generateAuthors({ count: toCreate })
 
     for (const a of generatedAuthors) {
@@ -143,37 +105,37 @@ export async function POST(req: Request) {
             bio: a.bio,
           },
         })
-      } catch (e) {
+      } catch {
         // Ignore duplicates/uniques; just move on.
-        log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:151', 'author_create_failed', {
-          slug: a.slug,
-          message: e instanceof Error ? e.message : 'unknown error',
-        })
       }
     }
   }
 
-  const categoriesResFinal =
-    shouldSeedCategories
-      ? await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
-      : categoriesRes
+  const categoriesResFinal = shouldSeedCategories
+    ? await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
+    : categoriesRes
   const authorsResFinal = await payload.find({ collection: 'authors', limit: 200, sort: 'name' })
 
-  const categories = (categoriesResFinal.docs as Array<{ id: string; slug: string; name: string }>).map((c) => ({
+  const categories = (
+    categoriesResFinal.docs as Array<{ id: string; slug: string; name: string }>
+  ).map((c) => ({
     slug: c.slug,
     name: c.name,
   }))
-  const authors = (authorsResFinal.docs as Array<{ id: string; slug: string; name: string; title?: string; bio?: string }>).map((a) => ({
+  const authors = (
+    authorsResFinal.docs as Array<{
+      id: string
+      slug: string
+      name: string
+      title?: string
+      bio?: string
+    }>
+  ).map((a) => ({
     slug: a.slug,
     name: a.name,
     title: a.title,
     bio: a.bio,
   }))
-
-  log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:101', 'options_loaded', {
-    categories: categories.length,
-    authors: authors.length,
-  })
 
   if (categories.length === 0 || authors.length === 0) {
     return NextResponse.json(
@@ -187,11 +149,6 @@ export async function POST(req: Request) {
 
   const includeTopics = pickTwoThirds()
   const { topicSummary } = await fetchRssTopics()
-
-  log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:121', 'topics', {
-    includeTopics,
-    topicSummaryLen: topicSummary.length,
-  })
 
   // Fetch last 50 article titles to avoid repetition and extract patterns
   const recentArticlesRes = await payload.find({
@@ -222,30 +179,20 @@ export async function POST(req: Request) {
     recentHeadlinePatterns: uniquePatterns,
   })
 
-  log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:132', 'llm_generated', {
-    headlineLen: generated.headline.length,
-    categorySlug: generated.categorySlug,
-    authorSlug: generated.authorSlug,
-    hasImagePrompt: Boolean(generated.imagePrompt),
-    isNewAuthor: Boolean(generated.newAuthorName),
-  })
-
   // Check if category exists, or if we need to create a new one
-  let categoryDoc: { id: string | number; slug: string } | undefined = (categoriesResFinal.docs as Array<{ id: string | number; slug: string }>).find(
-    (c) => c.slug === generated.categorySlug,
-  )
+  let categoryDoc: { id: string | number; slug: string } | undefined = (
+    categoriesResFinal.docs as Array<{ id: string | number; slug: string }>
+  ).find((c) => c.slug === generated.categorySlug)
 
   // If category doesn't exist, create it
   if (!categoryDoc) {
-    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:150', 'creating_new_category', {
-      slug: generated.categorySlug,
-    })
-
     try {
       const categoryName = slugToCategoryName(generated.categorySlug)
       // Get the highest order number and add 1, or default to 100
       const maxOrder = Math.max(
-        ...(categoriesResFinal.docs as unknown as Array<{ order?: number }>).map((c) => c.order ?? 0),
+        ...(categoriesResFinal.docs as unknown as Array<{ order?: number }>).map(
+          (c) => c.order ?? 0,
+        ),
         0,
       )
       const newOrder = maxOrder + 1
@@ -259,17 +206,7 @@ export async function POST(req: Request) {
         },
       })
       categoryDoc = { id: newCategory.id, slug: generated.categorySlug }
-
-      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:167', 'new_category_created', {
-        id: newCategory.id,
-        slug: generated.categorySlug,
-        name: categoryName,
-      })
-    } catch (e) {
-      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:172', 'new_category_creation_failed', {
-        slug: generated.categorySlug,
-        error: e instanceof Error ? e.message : 'unknown error',
-      })
+    } catch {
       // If creation failed (e.g., duplicate slug), try to find existing category again
       const existingCategory = await payload.find({
         collection: 'categories',
@@ -282,20 +219,14 @@ export async function POST(req: Request) {
       }
     }
   }
-  
+
   // Check if author exists, or if we need to create a new one
-  let authorDoc: { id: string | number; slug: string } | undefined = (authorsResFinal.docs as Array<{ id: string | number; slug: string }>).find(
-    (a) => a.slug === generated.authorSlug,
-  )
+  let authorDoc: { id: string | number; slug: string } | undefined = (
+    authorsResFinal.docs as Array<{ id: string | number; slug: string }>
+  ).find((a) => a.slug === generated.authorSlug)
 
   // If author doesn't exist and new author fields are provided, create the author
   if (!authorDoc && generated.newAuthorName) {
-    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:150', 'creating_new_author', {
-      slug: generated.authorSlug,
-      name: generated.newAuthorName,
-      title: generated.newAuthorTitle,
-    })
-
     try {
       const newAuthor = await payload.create({
         collection: 'authors',
@@ -308,16 +239,7 @@ export async function POST(req: Request) {
       })
       // Keep ID in original format (could be number or string depending on DB)
       authorDoc = { id: newAuthor.id, slug: generated.authorSlug }
-      
-      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:167', 'new_author_created', {
-        id: newAuthor.id,
-        slug: generated.authorSlug,
-      })
-    } catch (e) {
-      log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:172', 'new_author_creation_failed', {
-        slug: generated.authorSlug,
-        error: e instanceof Error ? e.message : 'unknown error',
-      })
+    } catch {
       // If creation failed (e.g., duplicate slug), try to find existing author again
       const existingAuthor = await payload.find({
         collection: 'authors',
@@ -332,19 +254,13 @@ export async function POST(req: Request) {
   }
 
   if (!categoryDoc || !authorDoc) {
-    const availableCategories = (categoriesResFinal.docs as unknown as Array<{ slug: string }>).map((c) => c.slug).join(', ')
-    const availableAuthors = (authorsResFinal.docs as unknown as Array<{ slug: string }>).map((a) => a.slug).join(', ')
-    
-    log('A', 'src/app/(payload)/api/debug/generate-article/route.ts:147', 'slug_mapping_failed', {
-      categoryFound: Boolean(categoryDoc),
-      authorFound: Boolean(authorDoc),
-      generatedCategorySlug: generated.categorySlug,
-      generatedAuthorSlug: generated.authorSlug,
-      hasNewAuthorName: Boolean(generated.newAuthorName),
-      availableCategories,
-      availableAuthors,
-    })
-    
+    const availableCategories = (categoriesResFinal.docs as unknown as Array<{ slug: string }>)
+      .map((c) => c.slug)
+      .join(', ')
+    const availableAuthors = (authorsResFinal.docs as unknown as Array<{ slug: string }>)
+      .map((a) => a.slug)
+      .join(', ')
+
     let errorMsg = 'Generated categorySlug/authorSlug did not match existing Payload docs. '
     if (!categoryDoc) {
       errorMsg += `Category slug "${generated.categorySlug}" not found. Available: ${availableCategories}. `
@@ -358,21 +274,17 @@ export async function POST(req: Request) {
       }
       errorMsg += `Available: ${availableAuthors}.`
     }
-    
-    return NextResponse.json(
-      { ok: false, error: errorMsg },
-      { status: 500 },
-    )
+
+    return NextResponse.json({ ok: false, error: errorMsg }, { status: 500 })
   }
 
-  const sanitizedEditorConfig = await sanitizeServerEditorConfig(defaultEditorConfig, payload.config)
+  const sanitizedEditorConfig = await sanitizeServerEditorConfig(
+    defaultEditorConfig,
+    payload.config,
+  )
   const lexical = convertMarkdownToLexical({
     editorConfig: sanitizedEditorConfig,
     markdown: generated.bodyMarkdown,
-  })
-
-  log('B', 'src/app/(payload)/api/debug/generate-article/route.ts:165', 'lexical_converted', {
-    bodyMarkdownLen: generated.bodyMarkdown.length,
   })
 
   const slug = `${slugify(generated.headline)}-${Date.now()}`
@@ -388,14 +300,7 @@ export async function POST(req: Request) {
         fileBaseName: slug,
       })
       featuredImageUrl = uploaded.publicUrl
-      log('D', 'src/app/(payload)/api/debug/generate-article/route.ts:184', 'image_uploaded', {
-        hasUrl: Boolean(featuredImageUrl),
-      })
-    } catch (e) {
-      log('D', 'src/app/(payload)/api/debug/generate-article/route.ts:191', 'image_failed', {
-        message: e instanceof Error ? e.message : 'unknown error',
-      })
-    }
+    } catch {}
   }
 
   if (!publish) {
@@ -430,15 +335,9 @@ export async function POST(req: Request) {
     },
   })
 
-  log('C', 'src/app/(payload)/api/debug/generate-article/route.ts:235', 'payload_created', {
-    id: created.id,
-    slug,
-  })
-
   return NextResponse.json({
     ok: true,
     created: { id: created.id, slug },
     featuredImageUrl: featuredImageUrl ?? null,
   })
 }
-
