@@ -376,14 +376,38 @@ export default async function HomePage() {
   let centerTopHeight = centerTopFixedHeight
   
   // Add center articles until we roughly match left-top height
+  // Use larger tolerance and try to get as close as possible
   let centerBeforeCount = 0
+  let bestMatch = Infinity
+  let bestCount = 0
+  
   for (let i = 0; i < centerColumnArticles.length; i++) {
     const article = centerColumnArticles[i]
     const articleHeight = estimateHeight(article, 'center', true)
-    if (centerTopHeight + articleHeight <= leftTopHeight + 50) { // Allow 50px tolerance
-      centerTopHeight += articleHeight
-      centerBeforeCount++
+    const newHeight = centerTopHeight + articleHeight
+    const difference = Math.abs(newHeight - leftTopHeight)
+    
+    // Track the best match (closest to left-top height)
+    if (difference < bestMatch) {
+      bestMatch = difference
+      bestCount = i + 1
+    }
+    
+    // Continue adding if we're still within reasonable range (200px tolerance)
+    if (newHeight <= leftTopHeight + 200) {
+      centerTopHeight = newHeight
+      centerBeforeCount = i + 1
     } else {
+      // We've gone too far - use the best match we found (if it's better than current)
+      const currentDiff = Math.abs(centerTopHeight - leftTopHeight)
+      if (bestCount > 0 && bestMatch < currentDiff) {
+        centerBeforeCount = bestCount
+        // Recalculate centerTopHeight for the best match
+        centerTopHeight = centerTopFixedHeight
+        for (let j = 0; j < bestCount; j++) {
+          centerTopHeight += estimateHeight(centerColumnArticles[j], 'center', true)
+        }
+      }
       break
     }
   }
@@ -393,7 +417,22 @@ export default async function HomePage() {
   // #region agent log
   const centerAfterCount = centerColumnArticles.length - centerBeforeCount
   const leftBottomCount = leftColumnBottomArticles.length
-  fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:spanning-split',message:'Spanning split results',data:{leftTopHeight,centerTopHeight,centerBeforeCount,centerAfterCount,leftBottomCount,tolerance:50,heightDifference:Math.abs(leftTopHeight-centerTopHeight)},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H1,H4'})}).catch(()=>{});
+  
+  // Calculate actual heights for bottom sections
+  let leftBottomHeight = 0
+  leftColumnBottomArticles.forEach((article) => {
+    const showImg = articlesWithImages.has(normalizeId(article.id))
+    leftBottomHeight += estimateHeight(article, 'left', showImg)
+  })
+  
+  let centerAfterHeight = 0
+  const centerAfterArticles = centerColumnArticles.slice(centerBeforeCount)
+  centerAfterArticles.forEach((article) => {
+    const showImg = articlesWithImages.has(normalizeId(article.id))
+    centerAfterHeight += estimateHeight(article, 'center', showImg)
+  })
+  
+  fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:spanning-split',message:'Spanning split results',data:{leftTopHeight,centerTopHeight,centerBeforeCount,centerAfterCount,leftBottomCount,leftBottomHeight,centerAfterHeight,topHeightDifference:Math.abs(leftTopHeight-centerTopHeight),bottomHeightDifference:Math.abs(leftBottomHeight-centerAfterHeight),bestMatch},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H1,H4',runId:'post-fix-v2'})}).catch(()=>{});
   // #endregion
   
   const centerColumnBeforeSpanning = centerColumnArticles.slice(0, centerBeforeCount)
