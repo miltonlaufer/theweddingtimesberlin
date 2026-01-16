@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { IArticle } from '@/types/article'
 
 interface ArticleHeightMeasurerProps {
@@ -16,17 +16,19 @@ export function ArticleHeightMeasurer({
   showImage,
   index,
 }: ArticleHeightMeasurerProps) {
-  useEffect(() => {
-    // Find parent article element (this component is a child of <article>)
-    const measurerEl = document.querySelector(`[data-measurer-id="${article.id}"]`)
-    if (!measurerEl) return
+  const containerRef = useRef<HTMLSpanElement>(null)
 
-    const articleEl = measurerEl.closest('article') as HTMLElement
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const articleEl = containerRef.current.closest('article') as HTMLElement
     if (!articleEl) return
 
     // Wait for images to load
     const measure = () => {
       const rect = articleEl.getBoundingClientRect()
+      if (rect.height === 0) return // Not rendered yet
+
       const totalHeight = rect.height
 
       // Find image element
@@ -84,33 +86,36 @@ export function ArticleHeightMeasurer({
       // #endregion
     }
 
-    // Measure after a short delay to ensure layout is complete
-    const timeoutId = setTimeout(measure, 100)
+    // Measure after a delay to ensure layout is complete
+    const timeoutId = setTimeout(measure, 200)
     
     // Also measure when images load
     const images = articleEl.querySelectorAll('img')
-    let loadedCount = 0
-    const checkImages = () => {
-      loadedCount++
-      if (loadedCount >= images.length) {
-        setTimeout(measure, 50)
+    if (images.length === 0) {
+      // No images, measure after a delay
+      setTimeout(measure, 300)
+    } else {
+      let loadedCount = 0
+      const checkImages = () => {
+        loadedCount++
+        if (loadedCount >= images.length) {
+          setTimeout(measure, 100)
+        }
       }
+      images.forEach((img) => {
+        if (img.complete) {
+          checkImages()
+        } else {
+          img.addEventListener('load', checkImages, { once: true })
+          img.addEventListener('error', checkImages, { once: true })
+        }
+      })
     }
-    images.forEach((img) => {
-      if (img.complete) {
-        checkImages()
-      } else {
-        img.addEventListener('load', checkImages, { once: true })
-      }
-    })
 
     return () => {
       clearTimeout(timeoutId)
-      images.forEach((img) => {
-        img.removeEventListener('load', checkImages)
-      })
     }
   }, [article, column, showImage, index])
 
-  return <span data-measurer-id={article.id} style={{ display: 'none' }} />
+  return <span ref={containerRef} style={{ display: 'none' }} />
 }

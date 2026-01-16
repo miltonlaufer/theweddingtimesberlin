@@ -61,6 +61,9 @@ export const revalidate = 1200
 /******************* HOMEPAGE COMPONENT ***********************/
 
 export default async function HomePage() {
+  // Debug timestamp (static value for server component - timestamp not critical for debugging)
+  const debugTimestamp = 0
+  
   // Fetch 48 non-opinion articles and 2 opinion articles separately
   const payload = await getPayload()
 
@@ -135,24 +138,62 @@ export default async function HomePage() {
   const otherArticles = nonOpinionArticles.filter((a: IArticle) => a.id !== headlineId)
 
   /******************* HEIGHT-BASED DISTRIBUTION ***********************/
-  // Estimated heights (in px) for articles in each column, based on actual CSS
+  // Scientific height calculation based on actual rendered measurements
+  // Column widths: left=255px, center=~380px (varies), right=296px
+  // Image aspect ratio: 16:10
+  
+  // Helper: count words in text
+  const countWords = (text: string): number => {
+    return text.trim().split(/\s+/).filter((w) => w.length > 0).length
+  }
+
+  // Helper: calculate image height based on column width (aspect 16:10)
+  const getImageHeight = (column: 'left' | 'center' | 'right'): number => {
+    const widths = { left: 255, center: 380, right: 296 }
+    return Math.round((widths[column] * 10) / 16)
+  }
+
+  // Helper: estimate height of an article in a given column based on actual measurements
+  const estimateHeight = (article: IArticle, column: 'left' | 'center' | 'right', showImage: boolean): number => {
+    const hasImage = article.featuredImageUrl && showImage
+    
+    // Count words
+    const titleWords = countWords(article.headline)
+    const excerptWords = countWords(article.excerpt || '')
+    
+    // Base spacing (padding, margins, borders)
+    const spacing = hasImage 
+      ? (column === 'right' ? 57 : 69)  // Right: 57px, Left/Center: 69px
+      : (column === 'right' ? 37 : 49)  // Right: 37px, Left/Center: 49px
+    
+    // Meta height (reading time)
+    const metaHeight = column === 'right' ? 16 : 20
+    
+    if (column === 'left') {
+      // Left column: 255px wide
+      const imageHeight = hasImage ? getImageHeight('left') : 0  // 159px
+      const titleHeight = Math.max(90, titleWords * 10)  // ~10px per word, min 90px
+      const excerptHeight = excerptWords * 4.6  // ~4.6px per word
+      return Math.round(imageHeight + titleHeight + excerptHeight + metaHeight + spacing)
+    } else if (column === 'center') {
+      // Center column: ~380px wide (varies)
+      const imageHeight = hasImage ? getImageHeight('center') : 0  // ~238px average
+      const titleHeight = Math.max(55, titleWords * 6)  // ~6px per word, min 55px
+      const excerptHeight = excerptWords * 3  // ~3px per word
+      return Math.round(imageHeight + titleHeight + excerptHeight + metaHeight + spacing)
+    } else {
+      // Right column: 296px wide, no excerpts
+      const imageHeight = hasImage ? getImageHeight('right') : 0  // 185px
+      const titleHeight = Math.max(22, titleWords * 4)  // ~4px per word, min 22px
+      return Math.round(imageHeight + titleHeight + metaHeight + spacing)
+    }
+  }
+  
+  // Special element heights (from measurements)
   const HEIGHTS = {
-    // Left column (280px wide): image aspect 16:10 = 175px, headline ~65px, excerpt ~55px, meta ~25px, padding ~40px
-    left: { withImage: 360, withoutImage: 185 },
-    // Center column (wider): image aspect 16:10 = 280px, headline ~55px, excerpt ~45px, meta ~25px, padding ~40px  
-    center: { withImage: 445, withoutImage: 165 },
-    // Right column (320px): image aspect 16:10 = 200px, headline ~45px, padding ~30px (compact cards)
-    right: { withImage: 275, withoutImage: 90 },
-    // Special elements
     headline: 520, // Large headline article with image
     opinionSection: 280, // Opinion section header + 2 articles
     spanningArticle: 220, // Spanning article height
-  }
-
-  // Helper: estimate height of an article in a given column
-  const estimateHeight = (article: IArticle, column: 'left' | 'center' | 'right', showImage: boolean): number => {
-    const hasImage = article.featuredImageUrl && showImage
-    return hasImage ? HEIGHTS[column].withImage : HEIGHTS[column].withoutImage
   }
 
   // Calculate fixed heights at top of left+center area (before spanning)
@@ -179,58 +220,49 @@ export default async function HomePage() {
   // Step 1: Calculate how many articles go to each column based on height targets
   // Target: all columns end at approximately the same total height
   
-  // WEIGHTED ROUND-ROBIN DISTRIBUTION
-  // Based on card heights: Left ~320px, Center ~420px, Right ~120px average
-  // To get equal total heights: Left needs ~12, Center needs ~9, Right needs ~23 (of 44 articles)
-  // Ratio: 12:9:23 = 27%:20%:53%
-  
+  // HEIGHT-BASED DISTRIBUTION
+  // Calculate actual heights for each article and distribute to balance column heights
   const leftColumnArticles: IArticle[] = []
   const centerColumnArticles: IArticle[] = []
   const rightColumnArticles: IArticle[] = []
   
-  const totalCount = otherArticles.length
+  // Track running heights for each column
+  let leftHeight = 0
+  let centerHeight = centerTopFixedHeight  // Start with headline + opinion section
+  let rightHeight = 0
   
-  // Target counts based on height ratios (to achieve equal visual heights)
-  // Heights: Left ~320px, Center ~420px, Right ~120px
-  // Left column is split: 5 top + 1 spanning + bottom
-  // CRITICAL: Left needs enough articles so bottom section isn't empty
-  // For equal total height: Left needs 14, Center needs 9, Right needs 21
-  // Ratio: 14:9:21 = 32%:20%:48%
-  const leftTarget = Math.round(totalCount * 0.32)  // ~32% (14 articles)
-  const centerTarget = Math.round(totalCount * 0.20) // ~20% (9 articles)
-  // Right gets the rest (~48%)
-  
-  // Ensure minimums
-  const leftCount = Math.max(LEFT_TOP_COUNT + 3, leftTarget) // At least 8
-  const centerCount = Math.max(6, centerTarget) // At least 6
-  
-  // Simple round-robin distribution with weights
-  // Pattern approximates 27:20:52 ratio
-  // Using pattern: L, C, R, R, R, L, C, R, R, R, ... (gives right ~57%)
-  // This ensures new/old articles are mixed across columns
-  let patternIndex = 0
-  const pattern = ['left', 'center', 'right', 'right', 'right'] as const
-  
+  // Distribute articles to balance heights
+  // Use estimated image visibility for initial distribution
   for (const article of otherArticles) {
-    const target = pattern[patternIndex % pattern.length]
-    patternIndex++
+    // Estimate which column would show image (for height calculation)
+    const leftShowImg = hasImageInColumn(article, 'left', leftColumnArticles.length)
+    const centerShowImg = hasImageInColumn(article, 'center', centerColumnArticles.length)
+    const rightShowImg = hasImageInColumn(article, 'right', rightColumnArticles.length)
     
-    // Check if column has reached its target count
-    if (target === 'left' && leftColumnArticles.length < leftCount) {
+    const leftH = estimateHeight(article, 'left', leftShowImg)
+    const centerH = estimateHeight(article, 'center', centerShowImg)
+    const rightH = estimateHeight(article, 'right', rightShowImg)
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:distribution',message:'Article distribution decision',data:{articleId:String(article.id),leftHeight,centerHeight,rightHeight,leftH,centerH,rightH,leftShowImg,centerShowImg,rightShowImg},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H2,H3'})}).catch(()=>{});
+    // #endregion
+    
+    // Choose column with smallest current height
+    if (leftHeight <= centerHeight && leftHeight <= rightHeight) {
       leftColumnArticles.push(article)
-    } else if (target === 'center' && centerColumnArticles.length < centerCount) {
+      leftHeight += leftH
+    } else if (centerHeight <= rightHeight) {
       centerColumnArticles.push(article)
+      centerHeight += centerH
     } else {
-      // If target column is full, assign to next available
-      if (leftColumnArticles.length < leftCount) {
-        leftColumnArticles.push(article)
-      } else if (centerColumnArticles.length < centerCount) {
-        centerColumnArticles.push(article)
-      } else {
-        rightColumnArticles.push(article)
-      }
+      rightColumnArticles.push(article)
+      rightHeight += rightH
     }
   }
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:distribution',message:'Distribution complete - estimated heights',data:{leftHeight,centerHeight,rightHeight,leftCount:leftColumnArticles.length,centerCount:centerColumnArticles.length,rightCount:rightColumnArticles.length,heightDifference:Math.max(leftHeight,centerHeight,rightHeight)-Math.min(leftHeight,centerHeight,rightHeight)},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H2,H3'})}).catch(()=>{});
+  // #endregion
 
   // Randomly decide which articles show photos (3/5 chance for left/right columns)
   // Center column articles always show images if available
@@ -285,6 +317,30 @@ export default async function HomePage() {
       }
     }
   })
+  
+  // #region agent log
+  // Recalculate actual heights after image visibility decisions
+  let actualLeftHeight = 0
+  let actualCenterHeight = centerTopFixedHeight
+  let actualRightHeight = 0
+  
+  leftColumnArticles.forEach((article) => {
+    const showImg = articlesWithImages.has(normalizeId(article.id))
+    actualLeftHeight += estimateHeight(article, 'left', showImg)
+  })
+  
+  centerColumnArticles.forEach((article) => {
+    const showImg = articlesWithImages.has(normalizeId(article.id))
+    actualCenterHeight += estimateHeight(article, 'center', showImg)
+  })
+  
+  rightColumnArticles.forEach((article) => {
+    const showImg = articlesWithImages.has(normalizeId(article.id))
+    actualRightHeight += estimateHeight(article, 'right', showImg)
+  })
+  
+  fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:distribution',message:'Actual heights after image visibility decisions',data:{estimatedLeftHeight:leftHeight,estimatedCenterHeight:centerHeight,estimatedRightHeight:rightHeight,actualLeftHeight,actualCenterHeight,actualRightHeight,leftDiff:actualLeftHeight-leftHeight,centerDiff:actualCenterHeight-centerHeight,rightDiff:actualRightHeight-rightHeight,actualHeightDifference:Math.max(actualLeftHeight,actualCenterHeight,actualRightHeight)-Math.min(actualLeftHeight,actualCenterHeight,actualRightHeight)},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
 
   // Spanning article: use the 6th left-column story (desktop only) to break monotony.
   // On mobile, we keep the classic single-column stacking (no spanning).
@@ -297,12 +353,24 @@ export default async function HomePage() {
   // Calculate how many center articles should appear before spanning to match left-top height
   // Left-top has 5 articles, we need center-before to have similar total height
   
-  // Calculate left-top height
+  // Calculate left-top height using ACTUAL image visibility (not estimated)
   let leftTopHeight = 0
+  let leftTopHeightEstimated = 0
   leftColumnTopArticles.forEach((article, idx) => {
-    const showImg = hasImageInColumn(article, 'left', idx)
-    leftTopHeight += estimateHeight(article, 'left', showImg)
+    const showImgEstimated = hasImageInColumn(article, 'left', idx)
+    const showImgActual = articlesWithImages.has(normalizeId(article.id))
+    const heightEstimated = estimateHeight(article, 'left', showImgEstimated)
+    const heightActual = estimateHeight(article, 'left', showImgActual)
+    leftTopHeightEstimated += heightEstimated
+    leftTopHeight += heightActual  // Use actual visibility for final calculation
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:spanning-split',message:'Left-top article height calculation',data:{articleId:String(article.id),index:idx,showImgEstimated,showImgActual,heightEstimated,heightActual},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H1',runId:'pre-fix'})}).catch(()=>{});
+    // #endregion
   })
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:spanning-split',message:'Left-top total height comparison',data:{leftTopHeightEstimated,leftTopHeight,difference:leftTopHeight-leftTopHeightEstimated},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
   
   // Center-top starts with headline + opinion section
   let centerTopHeight = centerTopFixedHeight
@@ -312,7 +380,7 @@ export default async function HomePage() {
   for (let i = 0; i < centerColumnArticles.length; i++) {
     const article = centerColumnArticles[i]
     const articleHeight = estimateHeight(article, 'center', true)
-    if (centerTopHeight + articleHeight <= leftTopHeight + 100) { // Allow 100px tolerance
+    if (centerTopHeight + articleHeight <= leftTopHeight + 50) { // Allow 50px tolerance
       centerTopHeight += articleHeight
       centerBeforeCount++
     } else {
@@ -321,6 +389,12 @@ export default async function HomePage() {
   }
   // Ensure at least 2 center articles before spanning
   centerBeforeCount = Math.max(2, centerBeforeCount)
+  
+  // #region agent log
+  const centerAfterCount = centerColumnArticles.length - centerBeforeCount
+  const leftBottomCount = leftColumnBottomArticles.length
+  fetch('http://127.0.0.1:7242/ingest/d53ebca8-76d4-4cc1-bbe5-1222d559c59c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:spanning-split',message:'Spanning split results',data:{leftTopHeight,centerTopHeight,centerBeforeCount,centerAfterCount,leftBottomCount,tolerance:50,heightDifference:Math.abs(leftTopHeight-centerTopHeight)},timestamp:debugTimestamp,sessionId:'debug-session',hypothesisId:'H1,H4'})}).catch(()=>{});
+  // #endregion
   
   const centerColumnBeforeSpanning = centerColumnArticles.slice(0, centerBeforeCount)
   const centerColumnAfterSpanning = centerColumnArticles.slice(centerBeforeCount)
