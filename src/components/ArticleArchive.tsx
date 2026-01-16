@@ -91,7 +91,26 @@ export const ArticleArchive: React.FC<ArticleArchiveProps> = React.memo(function
   const nextHref = page < totalPages ? buildPaginationHref(page + 1) : null
   const pageLabel = totalPages <= 0 ? 'Page 1' : `Page ${page} of ${totalPages}`
 
-  const resultsLabel = totalDocs !== undefined ? `${totalDocs} result${totalDocs === 1 ? '' : 's'}` : null
+  const resultsLabel =
+    totalDocs !== undefined ? `${totalDocs} result${totalDocs === 1 ? '' : 's'}` : null
+
+  const pageItems = (() => {
+    if (totalPages <= 1) return []
+    const items: Array<number | 'ellipsis'> = []
+    const first = 1
+    const last = totalPages
+    const start = Math.max(2, page - 2)
+    const end = Math.min(last - 1, page + 2)
+
+    items.push(first)
+    if (start > 2) items.push('ellipsis')
+    for (let i = start; i <= end; i += 1) {
+      items.push(i)
+    }
+    if (end < last - 1) items.push('ellipsis')
+    if (last > 1) items.push(last)
+    return items
+  })()
 
   /******************* RENDER ***********************/
 
@@ -103,15 +122,11 @@ export const ArticleArchive: React.FC<ArticleArchiveProps> = React.memo(function
           <div className="flex items-baseline gap-3">
             <h2 className="font-sans text-sm uppercase tracking-wider text-[#121212]">{title}</h2>
             {searchQuery && (
-              <span className="font-sans text-sm text-[#666]">
-                for &ldquo;{searchQuery}&rdquo;
-              </span>
+              <span className="font-sans text-sm text-[#666]">for &ldquo;{searchQuery}&rdquo;</span>
             )}
           </div>
           <div className="flex items-center gap-4">
-            {resultsLabel && (
-              <span className="font-sans text-xs text-[#666]">{resultsLabel}</span>
-            )}
+            {resultsLabel && <span className="font-sans text-xs text-[#666]">{resultsLabel}</span>}
             <span className="font-sans text-xs text-[#666]">{pageLabel}</span>
           </div>
         </div>
@@ -155,7 +170,7 @@ export const ArticleArchive: React.FC<ArticleArchiveProps> = React.memo(function
 
       {/* Pagination */}
       {articles.length > 0 && (
-        <div className="mt-8 flex items-center justify-between gap-4">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
           {prevHref ? (
             <Link
               href={prevHref}
@@ -165,6 +180,33 @@ export const ArticleArchive: React.FC<ArticleArchiveProps> = React.memo(function
             </Link>
           ) : (
             <span className="font-sans text-sm text-[#999]">Previous</span>
+          )}
+
+          {pageItems.length > 0 && (
+            <div className="flex items-center gap-2 font-sans text-sm">
+              {pageItems.map((item, index) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${index}`} className="text-[#999]">
+                    …
+                  </span>
+                ) : item === page ? (
+                  <span
+                    key={item}
+                    className="px-2 py-0.5 border border-[#121212] text-[#121212] font-medium"
+                  >
+                    {item}
+                  </span>
+                ) : (
+                  <Link
+                    key={item}
+                    href={buildPaginationHref(item)}
+                    className="px-2 py-0.5 text-[#121212] underline underline-offset-4"
+                  >
+                    {item}
+                  </Link>
+                ),
+              )}
+            </div>
           )}
 
           {nextHref ? (
@@ -182,4 +224,3 @@ export const ArticleArchive: React.FC<ArticleArchiveProps> = React.memo(function
     </div>
   )
 })
-
