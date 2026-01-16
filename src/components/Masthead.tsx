@@ -306,25 +306,25 @@ export const Masthead: React.FC = observer(function Masthead() {
             </>
           ) : (
             <>
-              {/* Homepage header: Search left, Account right */}
+              {/* Homepage header: Hamburger left, Search right */}
               <div className="flex items-center justify-between py-2">
                 <button
-                  onClick={handleSearchOpen}
-                  className="bg-transparent border-none cursor-pointer p-1 flex items-center"
-                  aria-label="Search"
+                  onClick={handleMobileMenuOpen}
+                  className="bg-transparent border-none cursor-pointer p-1 flex items-center md:hidden"
+                  aria-label="Open menu"
                   type="button"
                 >
-                  <SearchIcon />
+                  <HamburgerIcon />
                 </button>
 
                 <div className="flex items-center gap-4">
                   <button
-                    onClick={handleMobileMenuOpen}
-                    className="bg-transparent border-none cursor-pointer p-1 flex items-center md:hidden"
-                    aria-label="Open menu"
+                    onClick={handleSearchOpen}
+                    className="bg-transparent border-none cursor-pointer p-1 flex items-center"
+                    aria-label="Search"
                     type="button"
                   >
-                    <HamburgerIcon />
+                    <SearchIcon />
                   </button>
                 </div>
               </div>

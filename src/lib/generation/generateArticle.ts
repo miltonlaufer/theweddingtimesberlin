@@ -90,7 +90,7 @@ function safeStringList(items: Array<{ slug: string; name: string; title?: strin
     .join('\n')
 }
 
-function extractHeadlinePatterns(titles: string[]): string[] {
+export function extractHeadlinePatterns(titles: string[]): string[] {
   const patterns = new Set<string>()
   
   for (const title of titles) {
@@ -110,6 +110,46 @@ function extractHeadlinePatterns(titles: string[]): string[] {
     // Check for other common patterns
     if (title.match(/^[A-Z][a-z]+\s+(Introduces|Launches|Announces|Declares|Unveils)/i)) {
       patterns.add(`[Location] [Announcement verb] [noun]`)
+    }
+    
+    // Question patterns
+    if (title.match(/^(Why|How|What|When|Where|Is|Are|Do|Does|Did)\s+/i)) {
+      patterns.add(`[Question word] [rest]`)
+    }
+    
+    // "The [noun] of [location]" pattern
+    if (title.match(/^The\s+\w+\s+of\s+/i)) {
+      patterns.add(`The [noun] of [location]`)
+    }
+    
+    // "[Location] [verb]s [noun]" pattern
+    if (title.match(/^[A-Z][a-z]+\s+\w+s\s+/i)) {
+      patterns.add(`[Location] [verb]s [noun]`)
+    }
+    
+    // "[Number] [things]" pattern
+    if (title.match(/^(The\s+)?\d+\s+/i)) {
+      patterns.add(`[Number] [things]`)
+    }
+    
+    // "[Something] is [something]" pattern
+    if (title.match(/\s+is\s+(the|a|an)\s+/i)) {
+      patterns.add(`[Something] is [something]`)
+    }
+    
+    // "[Something] vs [Something]" pattern
+    if (title.match(/\s+vs\s+/i)) {
+      patterns.add(`[Something] vs [Something]`)
+    }
+    
+    // "How [something] [verb]" pattern
+    if (title.match(/^How\s+\w+\s+\w+/i)) {
+      patterns.add(`How [something] [verb]`)
+    }
+    
+    // "[Location]'s [something]" pattern
+    if (title.match(/^[A-Z][a-z]+'s\s+/i)) {
+      patterns.add(`[Location]'s [something]`)
     }
   }
   
@@ -308,6 +348,83 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     temperature: 0.9,
   })
 
+  // 25% chance to use the new feature/soft news/local/crime/news story prompt type
+  // HARDCODED TO TRUE FOR TESTING - remove this line to restore random selection
+  const useFeatureStoryPrompt = true// Math.random() < 0.25
+
+  // Story types for the new prompt
+  const storyTypes = [
+    'feature story',
+    'feature',
+    'soft news',
+    'local story',
+    'crime story',
+    'crime report',
+    'news story',
+  ]
+  const selectedStoryType = storyTypes[Math.floor(Math.random() * storyTypes.length)]
+
+  // Concrete, specific Berlin scenarios for feature/soft news/local/crime/news stories
+  // These are designed to be absurd, surreal, patafisic, and NOT abstract
+  const concreteBerlinScenarios = [
+    // Feature stories - deep dives into absurd situations
+    'A man in Wedding who has been trying to get an Anmeldung appointment for 3 years, documenting every rejection in a scrapbook',
+    'The underground network of Späti owners who secretly run a barter economy using expired snacks as currency',
+    'A former Berghain bouncer who now works as a life coach, teaching people how to get rejected with dignity',
+    'The last remaining payphone in Berlin and the people who still use it (and why)',
+    'A Kreuzberg apartment building where every tenant is convinced their neighbor is a spy',
+    'The mysterious disappearance of all the good döner places and the conspiracy theories surrounding it',
+    'A Wedding community garden that has become a battleground between anarchists and urban planners',
+    'The secret society of Berliners who still use cash and meet in underground locations',
+    'A Neukölln café that only serves food to people who can prove they lived here before 2015',
+    'The last person in Berlin who still reads physical newspapers and their daily ritual',
+    // Soft news - lighter, human interest, absurd but relatable
+    'A Späti owner who started a loyalty program but only accepts payment in stories',
+    'The Berliner who collects U-Bahn tickets and has amassed over 10,000 of them',
+    'A couple who met at a Bürgeramt waiting room and are now planning their wedding there',
+    'The man who walks his pet rat through Görlitzer Park every morning at 6am',
+    'A Neukölln bar that only plays music from bands that have broken up',
+    'The last remaining phone booth operator in Berlin (if such a thing exists)',
+    'A Wedding resident who has memorized every BVG delay announcement',
+    'The Berliner who refuses to use apps and documents their analog lifestyle on Instagram',
+    'A Späti that doubles as a therapy office (unofficially)',
+    'The person who has been on the same U-Bahn line for 5 hours because they refuse to pay for a new ticket',
+    // Local stories - neighborhood-specific, concrete events
+    'Leopoldplatz fountain has been broken for 6 months and locals have started using it as a wishing well',
+    'A Wedding street where every building has a different interpretation of "quiet hours"',
+    'The great Späti war of Neukölln: two shops across the street in a price war that has lasted 2 years',
+    'A Kreuzberg apartment building where the elevator has been "temporarily" out of service since 2019',
+    'The Wedding community center that accidentally became a nightclub on weekends',
+    'A Neukölln street where every second building is a vape shop and residents are starting to notice',
+    'The Leopoldplatz morning market vendor who only accepts payment in compliments',
+    'A Wedding park where someone has been leaving cryptic notes in multiple languages for 3 months',
+    'The great bike theft of Müllerstraße: 47 bikes disappeared in one night, all replaced with identical scooters',
+    'A Neukölln bar that changes its name every month to avoid bad reviews',
+    // Crime stories - absurd but specific criminal activities
+    'Police investigate a string of döner thefts where only the vegetables are taken, meat left behind',
+    'The great Späti heist: someone stole 200 euros worth of energy drinks but left the cash register untouched',
+    'A Wedding man arrested for "aggressive passive-aggressive note writing" after neighbors complain',
+    'The mysterious case of the disappearing U-Bahn seats: 12 seats vanished overnight, replaced with yoga mats',
+    'Police called to Leopoldplatz after someone reports "suspiciously organized" trash',
+    'The great bike lock conspiracy: someone has been adding extra locks to random bikes across Wedding',
+    'A Neukölln man charged with "excessive politeness" after holding up a U-Bahn for 15 minutes',
+    'The case of the phantom Späti robber: someone keeps "robbing" shops but only takes expired products',
+    'Police investigate a string of "reverse pickpocketing" where wallets are being added to peoples pockets',
+    'The great Anmeldung document heist: someone stole only the appointment confirmation slips',
+    // News stories - current events but absurd and specific
+    'Berlin announces new initiative: "Quiet Hours" will now be enforced by trained pigeons',
+    'BVG introduces new policy: delays over 30 minutes will be rewarded with free döner vouchers',
+    'Wedding district council votes to rename all streets after Späti products',
+    'Berlin housing authority announces new program: apartments will be assigned by lottery, winners get a WG room',
+    'The great Berlin trash strike: garbage collectors demand recognition as performance artists',
+    'BVG announces new U-Bahn line that only runs on Tuesdays and only goes in circles',
+    'Wedding introduces new tax: "Expat presence fee" to be paid in cash at random Spätis',
+    'Berlin announces all new buildings must include a "Berghain waiting area" in the lobby',
+    'The great Berlin WiFi crisis: public networks now require a 3-hour orientation session',
+    'Wedding district votes to make every day "Späti Appreciation Day"',
+  ]
+  const selectedScenario = concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
+
   // Randomly pick a topic focus to force variety (aligned with site categories)
   const topicFocuses = [
     // Bureaucracy
@@ -487,17 +604,69 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const recentTitlesSection =
     input.recentArticleTitles.length > 0
-      ? `\nCRITICAL: DO NOT write about these recent article topics (avoid repetition):\n${input.recentArticleTitles.map((title, idx) => `${idx + 1}. ${title}`).join('\n')}\n\nYou must write about a DIFFERENT topic/subject matter.`
+      ? [
+          `\nCRITICAL: DO NOT repeat these recent article topics (${input.recentArticleTitles.length} recent articles shown to avoid repetition):`,
+          input.recentArticleTitles.map((title, idx) => `${idx + 1}. ${title}`).join('\n'),
+          '',
+          'You must write about a COMPLETELY DIFFERENT topic/subject matter. Do not write about similar themes, similar situations, or similar characters.',
+          'If you see multiple articles about bureaucracy, write about something else entirely. If you see multiple articles about nightlife, choose a different angle.',
+          '',
+        ].join('\n')
       : ''
 
   const headlinePatterns = input.recentHeadlinePatterns ?? extractHeadlinePatterns(input.recentArticleTitles)
   const headlinePatternsSection =
     headlinePatterns.length > 0
-      ? `\nCRITICAL: AVOID these overused headline patterns (be creative with structure!):\n${headlinePatterns.map((p) => `- "${p}"`).join('\n')}\n\nYour headline MUST use a DIFFERENT structure. Examples of varied structures:\n- Question format: "Why [something]?" or "Is [something] the new [something]?"\n- Quotation/character focus: "[Character/Group] [does something absurd]"\n- Descriptive/observational: "The [absurd thing] of [location/group]"\n- Comparison: "[X] vs [Y]: The [absurd comparison]"\n- Direct statement: "[Something] is [absurd claim]"\n- Narrative: "How [something] became [absurd outcome]"\n- Listicle-style: "The [number] ways [something absurd]"\n- Absurd claim: "[Something] declares itself [absurd status]"\n\nVary your headline structure! Do NOT default to "Berlin [verb] [noun]" or "Wedding [verb] [noun]".`
+      ? [
+          `\nCRITICAL: AVOID these overused headline patterns (${headlinePatterns.length} patterns detected in recent articles):`,
+          headlinePatterns.map((p) => `- "${p}"`).join('\n'),
+          '',
+          'Your headline MUST use a COMPLETELY DIFFERENT structure. Do NOT use any of the patterns above.',
+          '',
+          'Examples of varied headline structures you CAN use (if not already overused):',
+          '- Question format: "Why [something]?" or "Is [something] the new [something]?"',
+          '- Quotation/character focus: "[Character/Group] [does something absurd]"',
+          '- Descriptive/observational: "The [absurd thing] of [location/group]"',
+          '- Comparison: "[X] vs [Y]: The [absurd comparison]"',
+          '- Direct statement: "[Something] is [absurd claim]"',
+          '- Narrative: "How [something] became [absurd outcome]"',
+          '- Listicle-style: "The [number] ways [something absurd]"',
+          '- Absurd claim: "[Something] declares itself [absurd status]"',
+          '- Breaking news style: "[Location] [unexpected event] as [absurd detail]"',
+          '- Mystery/investigation: "The mystery of [absurd thing] in [location]"',
+          '- Personal/confessional: "[Someone] reveals [absurd secret]"',
+          '',
+          'CRITICAL: Your headline structure must be UNIQUE compared to the recent articles shown above.',
+          'If you see "Berlin [verb] [noun]" used multiple times, use a question, a statement, a narrative, or any other structure.',
+          'Vary your headline structure! Do NOT default to common patterns.',
+        ].join('\n')
       : ''
 
-  // Determine topic instruction based on whether we're using RSS topics
-  const topicInstruction = hasRssTopics && selectedRssTopic
+  // Determine topic instruction based on article type
+  const topicInstruction = useFeatureStoryPrompt
+    ? [
+        `ARTICLE TYPE: ${selectedStoryType.toUpperCase()}`,
+        `CONCRETE SCENARIO: ${selectedScenario}`,
+        '',
+        'CRITICAL INSTRUCTIONS FOR THIS STORY TYPE:',
+        '- This is a CONCRETE, SPECIFIC story about a REAL (but absurd) situation in Berlin.',
+        '- Write it as a proper news article/feature: who, what, where, when, why.',
+        '- Include specific details: street names, neighborhoods, times, numbers, quotes from "witnesses" or "sources".',
+        '- Make it ABSURD and SURREAL but grounded in reality. Think patafisic: the science of imaginary solutions.',
+        '- The scenario above is your starting point - expand it into a full story with characters, dialogue, and consequences.',
+        '- This should read like a real newspaper article, but about something completely ridiculous.',
+        '- DO NOT be abstract. Be SPECIFIC. Name streets, times, people (fictional but named), specific locations.',
+        '- Include quotes from fictional characters, specific details about the situation, and concrete outcomes.',
+        '- The absurdity comes from the situation being real and detailed, not from abstract concepts.',
+        '',
+        'Examples of the tone:',
+        '- "On Tuesday at 3:47pm, Klaus Müller, 47, discovered that his Späti loyalty card had been replaced with a library card..."',
+        '- "The incident occurred at the corner of Müllerstraße and Seestraße, where witnesses report seeing..."',
+        '- "According to sources at the Wedding district office, the situation began when..."',
+        '',
+        'This is NOT an opinion piece or abstract satire. This is a NEWS STORY about something absurd but specific.',
+      ].join('\n')
+    : hasRssTopics && selectedRssTopic
     ? [
         'PRIMARY TOPIC SOURCE: A real-world news headline will be provided. You MUST write a satirical Berlin angle on that news story.',
         `SECONDARY/BACKUP THEME (use only if the news topic is too narrow): ${randomFocus}`,
@@ -511,8 +680,48 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const systemPrompt = [
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
     'Language: write everything in US English (no German, no other languages).',
-    'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel the spirit of early South Park, Anthony Jeselnik, and classic British satire like Brass Eye. Mock sacred cows, poke fun at every demographic equally, and embrace taboo topics with gleeful abandon. Use dark humor, shock value, and absurdist takes on sensitive subjects. Nothing is off-limits except actual hate speech or calls to violence.',
-    'Style: write like a hungover journalist who has stopped caring about keeping their job—biting sarcasm, cynical observations, and jokes that make readers say "they cant print that".',
+    useFeatureStoryPrompt
+      ? [
+          'Tone: Deadpan, serious journalism about absurd situations. Write with the straight-faced seriousness of a real news reporter covering something completely ridiculous. The humor comes from the contrast between the serious tone and the absurd content.',
+          'Style: Write like a real local newspaper journalist—specific, detailed, factual-sounding but about something surreal. Include concrete details: names, addresses, times, quotes. Make it read like a real news article from a serious paper, but the story is absurd.',
+          'CRITICAL: This must be CONCRETE and SPECIFIC. No abstract concepts. Real names (fictional), real addresses, real times, real quotes. The absurdity is in the situation, not in abstract satire.',
+          '',
+          'SPICE IT UP (subtle sexual innuendo):',
+          '- Occasionally include subtle double entendres or sexual innuendo that can be read innocently or suggestively',
+          '- Use phrases that have a second, sexual meaning when read carefully (e.g., "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance")',
+          '- Keep it subtle and clever—readers should smile at the double meaning, not be shocked',
+          '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
+          '- Aim for 2-3 subtle innuendos per article, naturally woven in',
+          '',
+          'INTELLECTUAL EASTER EGGS (without being elitist):',
+          '- Quietly reference academic subjects, literature, movies, contemporary art, philosophy, or cultural theory',
+          '- These should be hidden gems that educated readers will catch, but the article should still make sense to everyone',
+          '- Examples: subtle references to Foucault, Kafka, Derrida, Baudrillard, or contemporary artists; literary allusions; film references; philosophical concepts',
+          '- Don\'t name-drop—weave the concepts naturally into the narrative',
+          '- Think: "The Situationists would appreciate this" or "This is very Kafkaesque" but said through the story, not explicitly',
+          '- Reference contemporary art movements, architectural theory, urban studies, or cultural criticism in subtle ways',
+          '- Aim for 2-3 intellectual easter eggs per article, naturally integrated',
+        ].join('\n')
+      : [
+          'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel the spirit of early South Park, Anthony Jeselnik, and classic British satire like Brass Eye. Mock sacred cows, poke fun at every demographic equally, and embrace taboo topics with gleeful abandon. Use dark humor, shock value, and absurdist takes on sensitive subjects. Nothing is off-limits except actual hate speech or calls to violence.',
+          'Style: write like a hungover journalist who has stopped caring about keeping their job—biting sarcasm, cynical observations, and jokes that make readers say "they cant print that".',
+          '',
+          'SPICE IT UP (subtle sexual innuendo):',
+          '- Occasionally include subtle double entendres or sexual innuendo that can be read innocently or suggestively',
+          '- Use phrases that have a second, sexual meaning when read carefully (e.g., "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance")',
+          '- Keep it subtle and clever—readers should smile at the double meaning, not be shocked',
+          '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
+          '- Aim for 2-3 subtle innuendos per article, naturally woven in',
+          '',
+          'INTELLECTUAL EASTER EGGS (without being elitist):',
+          '- Quietly reference academic subjects, literature, movies, contemporary art, philosophy, or cultural theory',
+          '- These should be hidden gems that educated readers will catch, but the article should still make sense to everyone',
+          '- Examples: subtle references to Foucault, Kafka, Derrida, Baudrillard, or contemporary artists; literary allusions; film references; philosophical concepts',
+          '- Don\'t name-drop—weave the concepts naturally into the narrative',
+          '- Think: "The Situationists would appreciate this" or "This is very Kafkaesque" but said through the story, not explicitly',
+          '- Reference contemporary art movements, architectural theory, urban studies, or cultural criticism in subtle ways',
+          '- Aim for 2-3 intellectual easter eggs per article, naturally integrated',
+        ].join('\n'),
     topicInstruction,
     recentTitlesSection,
     headlinePatternsSection,
@@ -546,13 +755,42 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- End with a memorable closing line or call to action.',
     '',
     'Remember: punch in all directions, mock everyone, but avoid slurs or explicit calls for harm.',
+    '',
+    'IMAGE GENERATION:',
+    'You MUST provide an imagePrompt for almost every article. Think: what photo would a real newspaper use to illustrate this story?',
+    'The imagePrompt should be a detailed, visual description of a photo-like image (no text overlays).',
+    'Only omit imagePrompt if the story is truly unillustratable (very rare).',
+    '',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
   ].join('\n')
 
   const categoriesList = safeStringList(input.categories)
   const authorsList = safeStringList(input.authors)
 
-  const topicsSection = hasRssTopics && selectedRssTopic
+  const topicsSection = useFeatureStoryPrompt
+    ? [
+        `STORY TYPE: ${selectedStoryType}`,
+        `SCENARIO TO EXPAND: ${selectedScenario}`,
+        '',
+        'YOUR TASK: Write a complete news article/feature about this scenario.',
+        '',
+        'REQUIREMENTS:',
+        '- Write it as a REAL news article with proper journalistic structure',
+        '- Include specific details: names (fictional but realistic), addresses, times, dates',
+        '- Add quotes from fictional characters/sources',
+        '- Describe the situation, its causes, and its consequences',
+        '- Make it absurd and surreal but treat it with journalistic seriousness',
+        '- Include concrete details: "On Tuesday morning at 8:47am, residents of Müllerstraße 23 noticed..."',
+        '- Name specific Berlin locations, streets, neighborhoods',
+        '- Include dialogue, witness accounts, official statements (all fictional but realistic)',
+        '- The article should be 300-600 words of detailed, specific reporting',
+        '- MUST provide an imagePrompt: describe a photo that would illustrate this news story (e.g., "A broken fountain at Leopoldplatz with people throwing coins into it, urban Berlin setting")',
+        '',
+        'TONE: Deadpan, serious journalism about something completely ridiculous. Like The Onion but more detailed and specific.',
+        'STYLE: Read like a real local newspaper article. Who, what, where, when, why, how - all answered with absurd but specific details.',
+        '',
+      ].join('\n')
+    : hasRssTopics && selectedRssTopic
     ? [
         'CURRENT NEWS TOPIC TO SATIRIZE:',
         selectedRssTopic,
@@ -575,6 +813,36 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     topicsSection,
     'Important: ALL text fields must be written in US English.',
     '',
+    useFeatureStoryPrompt
+      ? [
+          'CRITICAL FOR FEATURE/NEWS STORIES:',
+          '- Your article MUST be concrete and specific. Include:',
+          '  * Specific names of people (fictional but realistic: "Klaus Müller", "Sarah Schmidt", etc.)',
+          '  * Specific addresses and locations ("Müllerstraße 23", "corner of Seestraße and Leopoldplatz")',
+          '  * Specific times and dates ("Tuesday morning at 8:47am", "last Thursday")',
+          '  * Quotes from sources ("According to Müller, the situation began when...")',
+          '  * Specific numbers and details ("47 bikes", "3 years", "200 euros")',
+          '  * Specific consequences and outcomes',
+          '- Write it like a REAL news article with proper structure: lead paragraph, body with details, conclusion',
+          '- The absurdity comes from the situation being treated seriously, not from abstract concepts',
+          '- NO abstract philosophical musings. ONLY concrete, specific details about the scenario.',
+          '- Think: "A real journalist would write this story with these details"',
+          '',
+          'SPICE IT UP - Subtle Sexual Innuendo:',
+          '- Include 2-3 subtle double entendres naturally woven into the text',
+          '- Examples: "residents found it hard to swallow the new policy", "the committee struggled to penetrate the bureaucracy", "the proposal met with stiff resistance"',
+          '- Keep it clever and subtle—readers should catch the double meaning on a second read',
+          '- NOT explicit or vulgar—just playful wordplay',
+          '',
+          'INTELLECTUAL EASTER EGGS:',
+          '- Include 2-3 subtle references to literature, philosophy, art, film, or academic concepts',
+          '- Weave them naturally: describe something as "Kafkaesque" without naming Kafka, reference Situationist ideas through the narrative, allude to Foucault\'s panopticon through description',
+          '- Think: educated readers will recognize the reference, but the article still works without it',
+          '- Examples: describe bureaucratic absurdity in ways that echo "The Trial", reference surveillance in ways that echo "1984" or panopticon theory, describe urban space in ways that reference Situationist psychogeography',
+          '- Don\'t name-drop—embed the concepts in the narrative',
+          '',
+        ].join('\n')
+      : '',
     'AUTHOR SELECTION:',
     'You have two options for the author:',
     '1. Pick an existing author from the list below (use their slug as authorSlug)',
@@ -583,15 +851,40 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'If creating a NEW author:',
     '- Set authorSlug to a new unique slug (lowercase, hyphens, e.g. "klaus-bierstein")',
     '- MUST provide newAuthorName (full name, e.g. "Klaus Bierstein")',
-    '- MUST provide newAuthorTitle (their role/beat, e.g. "Nightlife Correspondent", "Bureaucracy Survivor", "Gentrification Watch Reporter")',
+    '- MUST provide newAuthorTitle (their role/beat, e.g. "Nightlife Correspondent", "Bureaucracy Survivor", "Gentrification Watch Reporter", "Crime Reporter", "Local News Correspondent")',
     '- MUST provide newAuthorBio (2-3 sentences about them - make it funny, sarcastic, and fitting for a satirical paper)',
     '',
     'Return an article that could plausibly run on the front page of a satirical local paper.',
     '',
+    !useFeatureStoryPrompt ? [
+      'SPICE IT UP - Subtle Sexual Innuendo:',
+      '- Include 2-3 subtle double entendres naturally woven into the text',
+      '- Examples: "residents found it hard to swallow the new policy", "the committee struggled to penetrate the bureaucracy", "the proposal met with stiff resistance"',
+      '- Keep it clever and subtle—readers should catch the double meaning on a second read',
+      '- NOT explicit or vulgar—just playful wordplay',
+      '',
+      'INTELLECTUAL EASTER EGGS:',
+      '- Include 2-3 subtle references to literature, philosophy, art, film, or academic concepts',
+      '- Weave them naturally: describe something as "Kafkaesque" without naming Kafka, reference Situationist ideas through the narrative, allude to Foucault\'s panopticon through description',
+      '- Think: educated readers will recognize the reference, but the article still works without it',
+      '- Examples: describe bureaucratic absurdity in ways that echo "The Trial", reference surveillance in ways that echo "1984" or panopticon theory, describe urban space in ways that reference Situationist psychogeography',
+      '- Don\'t name-drop—embed the concepts in the narrative',
+      '',
+    ].join('\n') : '',
     'HEADLINE VARIETY IS CRITICAL:',
-    'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
-    'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
-    'Think like a real newspaper: headlines should grab attention with wit, not formula.',
+    useFeatureStoryPrompt
+      ? [
+          'For feature/news stories, use traditional news headline formats:',
+          '- Direct, factual-sounding headlines: "Wedding Man Discovers Späti Loyalty Card Replaced with Library Card"',
+          '- Question format: "Why Did 47 Bikes Disappear from Müllerstraße?"',
+          '- Descriptive: "The Great Späti War of Neukölln Enters Third Year"',
+          '- Avoid overly clever wordplay - keep it news-like but absurd',
+        ].join('\n')
+      : [
+          'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
+          'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
+          'Think like a real newspaper: headlines should grab attention with wit, not formula.',
+        ].join('\n'),
     '',
     'CATEGORY SELECTION:',
     'You have two options for the category:',
@@ -619,8 +912,16 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '  "isFeatured": boolean,',
     '  "isHeadline": boolean,',
     '  "imageCaption": string|null,',
-    '  "imagePrompt": string|null  // prompt for an illustrative photo-like image, no text overlays',
+    '  "imagePrompt": string|null  // REQUIRED: prompt for an illustrative photo-like image, no text overlays. Always provide this unless the story truly cannot be illustrated.',
     '}',
+    '',
+    'IMPORTANT: You MUST provide an imagePrompt for almost every article. The imagePrompt should be:',
+    '- A detailed description of a photo-like image that would illustrate the article',
+    '- Specific, visual, and descriptive (e.g., "A man in a suit holding a stack of papers at a Bürgeramt counter, frustrated expression, bureaucratic setting")',
+    '- No text overlays, just a visual description',
+    '- Related to the main subject of the article',
+    '- Think like a photojournalist: what photo would accompany this news story?',
+    '- Only omit imagePrompt if the story is truly unillustratable (very rare)',
   ].join('\n')
 
   console.log('\n' + '='.repeat(80))

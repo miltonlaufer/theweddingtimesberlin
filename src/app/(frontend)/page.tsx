@@ -3,6 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import type { Metadata } from 'next'
 import { NytContainer } from '@/components/NytContainer'
+import { ArticleHeightMeasurer } from '@/components/ArticleHeightMeasurer'
 import { getBaseUrl } from '@/lib/getBaseUrl'
 import { getPayload } from '@/lib/payload'
 import { mapPayloadArticleToIArticle, type PayloadArticleLike } from '@/lib/articles/mapPayloadArticleToIArticle'
@@ -178,43 +179,58 @@ export default async function HomePage() {
   // Step 1: Calculate how many articles go to each column based on height targets
   // Target: all columns end at approximately the same total height
   
-  // Estimate average heights per column (weighted by image probability)
-  const avgLeftHeight = HEIGHTS.left.withImage * 0.8 + HEIGHTS.left.withoutImage * 0.2 // 80% have images = 325px
-  const avgCenterHeight = HEIGHTS.center.withImage * 0.9 + HEIGHTS.center.withoutImage * 0.1 // 90% have images = 417px
-  // Right column: first 3 have images, then ~30% of rest have images
-  // Using lower estimate to give right column MORE articles (they're very compact)
-  const avgRightHeight = HEIGHTS.right.withImage * 0.20 + HEIGHTS.right.withoutImage * 0.80 // ~127px avg
-
-  // Calculate how many articles each column needs to reach the SAME total height
-  // We want: leftCount * avgLeftHeight ≈ centerCount * avgCenterHeight ≈ rightCount * avgRightHeight
+  // WEIGHTED ROUND-ROBIN DISTRIBUTION
+  // Based on card heights: Left ~320px, Center ~420px, Right ~120px average
+  // To get equal total heights: Left needs ~12, Center needs ~9, Right needs ~23 (of 44 articles)
+  // Ratio: 12:9:23 = 27%:20%:53%
   
-  const totalArticles = otherArticles.length
+  const leftColumnArticles: IArticle[] = []
+  const centerColumnArticles: IArticle[] = []
+  const rightColumnArticles: IArticle[] = []
   
-  // Calculate based on height ratios
-  // If we set leftCount = L, centerCount = C, rightCount = R
-  // And L * 325 = C * 417 = R * 136 (equal heights)
-  // Then: C = L * 325/417 = L * 0.78
-  //       R = L * 325/136 = L * 2.39
-  // Total: L + 0.78L + 2.39L = 4.17L = totalArticles
-  // So: L = totalArticles / 4.17
+  const totalCount = otherArticles.length
   
-  const heightRatioLeft = 1
-  const heightRatioCenter = avgLeftHeight / avgCenterHeight // ~0.78
-  const heightRatioRight = avgLeftHeight / avgRightHeight // ~2.39
-  const ratioSum = heightRatioLeft + heightRatioCenter + heightRatioRight // ~4.17
-
-  const leftTargetCount = Math.round(totalArticles / ratioSum)
-  const centerTargetCount = Math.round(totalArticles * heightRatioCenter / ratioSum)
-  // Right gets the remainder (significantly more articles to match height)
-
-  // Apply constraints (ensure minimum counts)
-  const leftCount = Math.max(LEFT_TOP_COUNT + 2, leftTargetCount)
-  const centerCount = Math.max(4, centerTargetCount)
-
-  // Distribute articles
-  const leftColumnArticles = otherArticles.slice(0, leftCount)
-  const centerColumnArticles = otherArticles.slice(leftCount, leftCount + centerCount)
-  const rightColumnArticles = otherArticles.slice(leftCount + centerCount)
+  // Target counts based on height ratios (to achieve equal visual heights)
+  // Heights: Left ~320px, Center ~420px, Right ~120px
+  // Left column is split: 5 top + 1 spanning + bottom
+  // CRITICAL: Left needs enough articles so bottom section isn't empty
+  // For equal total height: Left needs 14, Center needs 9, Right needs 21
+  // Ratio: 14:9:21 = 32%:20%:48%
+  const leftTarget = Math.round(totalCount * 0.32)  // ~32% (14 articles)
+  const centerTarget = Math.round(totalCount * 0.20) // ~20% (9 articles)
+  // Right gets the rest (~48%)
+  
+  // Ensure minimums
+  const leftCount = Math.max(LEFT_TOP_COUNT + 3, leftTarget) // At least 8
+  const centerCount = Math.max(6, centerTarget) // At least 6
+  
+  // Simple round-robin distribution with weights
+  // Pattern approximates 27:20:52 ratio
+  // Using pattern: L, C, R, R, R, L, C, R, R, R, ... (gives right ~57%)
+  // This ensures new/old articles are mixed across columns
+  let patternIndex = 0
+  const pattern = ['left', 'center', 'right', 'right', 'right'] as const
+  
+  for (const article of otherArticles) {
+    const target = pattern[patternIndex % pattern.length]
+    patternIndex++
+    
+    // Check if column has reached its target count
+    if (target === 'left' && leftColumnArticles.length < leftCount) {
+      leftColumnArticles.push(article)
+    } else if (target === 'center' && centerColumnArticles.length < centerCount) {
+      centerColumnArticles.push(article)
+    } else {
+      // If target column is full, assign to next available
+      if (leftColumnArticles.length < leftCount) {
+        leftColumnArticles.push(article)
+      } else if (centerColumnArticles.length < centerCount) {
+        centerColumnArticles.push(article)
+      } else {
+        rightColumnArticles.push(article)
+      }
+    }
+  }
 
   // Randomly decide which articles show photos (3/5 chance for left/right columns)
   // Center column articles always show images if available
@@ -367,6 +383,7 @@ export default async function HomePage() {
                       leftColumnBottomArticles.length === 0
                     }
                     showImage={articlesWithImages.has(String(article.id))}
+                    index={index}
                   />
                 ))}
               </div>
@@ -387,6 +404,7 @@ export default async function HomePage() {
                         article={article}
                         isLast={index === centerColumnBeforeSpanning.length - 1}
                         showImage={articlesWithImages.has(String(article.id))}
+                        index={index}
                       />
                     ))}
                   </div>
@@ -411,6 +429,7 @@ export default async function HomePage() {
                     article={article}
                     isLast={index === leftColumnBottomArticles.length - 1}
                     showImage={articlesWithImages.has(String(article.id))}
+                    index={leftColumnTopArticles.length + 1 + index}
                   />
                 ))}
               </div>
@@ -425,6 +444,7 @@ export default async function HomePage() {
                         article={article}
                         isLast={index === centerColumnAfterSpanning.length - 1}
                         showImage={articlesWithImages.has(String(article.id))}
+                        index={centerColumnBeforeSpanning.length + index}
                       />
                     ))}
                   </div>
@@ -444,6 +464,7 @@ export default async function HomePage() {
                 article={article}
                 isLast={index === rightColumnArticles.length - 1}
                 showImage={articlesWithImages.has(String(article.id))}
+                index={index}
               />
             ))}
           </div>
@@ -459,15 +480,18 @@ function LeftColumnArticle({
   article,
   isLast,
   showImage,
+  index,
 }: {
   article: IArticle
   isLast: boolean
   showImage: boolean
+  index?: number
 }) {
   const readingTime = calculateReadingTime(article.content)
   return (
     <Link key={article.id} href={`/article/${article.slug}`} className="group block">
       <article className={`pb-5 mb-5 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
+        <ArticleHeightMeasurer article={article} column="left" showImage={showImage} index={index ?? 0} />
         {showImage && article.featuredImageUrl && (
           <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
             <Image
@@ -564,15 +588,18 @@ function CenterColumnArticle({
   article,
   isLast,
   showImage,
+  index,
 }: {
   article: IArticle
   isLast: boolean
   showImage: boolean
+  index?: number
 }) {
   const readingTime = calculateReadingTime(article.content)
   return (
     <Link href={`/article/${article.slug}`} className="group block">
       <article className={`pb-5 mb-5 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
+        <ArticleHeightMeasurer article={article} column="center" showImage={showImage} index={index ?? 0} />
         {showImage && article.featuredImageUrl && (
           <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
             <Image
@@ -647,15 +674,18 @@ function RightColumnArticle({
   article,
   isLast,
   showImage,
+  index,
 }: {
   article: IArticle
   isLast: boolean
   showImage: boolean
+  index?: number
 }) {
   const readingTime = calculateReadingTime(article.content)
   return (
     <Link key={article.id} href={`/article/${article.slug}`} className="group block">
       <article className={`pb-4 mb-4 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
+        <ArticleHeightMeasurer article={article} column="right" showImage={showImage} index={index ?? 0} />
         {showImage && article.featuredImageUrl ? (
           // First article: image on top
           <>

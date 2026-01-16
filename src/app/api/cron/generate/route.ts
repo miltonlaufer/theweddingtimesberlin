@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getPayload } from '@/lib/payload'
 import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
-import { generateArticle } from '@/lib/generation/generateArticle'
+import { generateArticle, extractHeadlinePatterns } from '@/lib/generation/generateArticle'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import {
@@ -136,13 +136,13 @@ export async function GET(req: Request) {
     // Fetch RSS topics once for all articles
     const { topicSummary } = await fetchRssTopics()
 
-    // Fetch last 20 article titles to avoid repetition and extract patterns
+    // Fetch last 50 article titles to avoid repetition and extract patterns
     const recentArticlesRes = await payload.find({
       collection: 'articles',
       where: {
         status: { equals: 'published' },
       },
-      limit: 20,
+      limit: 50,
       sort: '-publishedAt',
     })
     const recentArticleTitles = recentArticlesRes.docs
@@ -152,23 +152,8 @@ export async function GET(req: Request) {
       })
       .filter((title): title is string => typeof title === 'string')
 
-    // Extract headline patterns to avoid repetition
-    const recentHeadlinePatterns: string[] = []
-    for (const title of recentArticleTitles) {
-      const berlinMatch = title.match(/^Berlin\s+(\w+)\s+(.+)$/i)
-      if (berlinMatch) {
-        recentHeadlinePatterns.push('Berlin [verb] [noun]')
-        continue
-      }
-      const weddingMatch = title.match(/^Wedding\s+(\w+)\s+(.+)$/i)
-      if (weddingMatch) {
-        recentHeadlinePatterns.push('Wedding [verb] [noun]')
-        continue
-      }
-      if (title.match(/^[A-Z][a-z]+\s+(Introduces|Launches|Announces|Declares|Unveils)/i)) {
-        recentHeadlinePatterns.push('[Location] [Announcement verb] [noun]')
-      }
-    }
+    // Extract headline patterns to avoid repetition (using the enhanced function from generateArticle)
+    const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
     const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
 
     // Prepare editor config once
@@ -194,7 +179,7 @@ export async function GET(req: Request) {
           authors,
           topicSummary,
           includeTopics,
-          recentArticleTitles: recentArticleTitles.slice(0, 10), // Last 10 for topic avoidance
+          recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
           recentHeadlinePatterns: uniquePatterns, // Patterns to avoid
         })
 
@@ -298,10 +283,10 @@ export async function GET(req: Request) {
 
         const slug = `${slugify(generated.headline)}-${Date.now()}-${i}`
 
-        // Generate image (2/3 chance)
+        // Generate image if imagePrompt is provided
         let featuredImageUrl: string | undefined
         const imagePrompt = typeof generated.imagePrompt === 'string' ? generated.imagePrompt : ''
-        const shouldGenerateImage = pickTwoThirds() && imagePrompt.length > 0
+        const shouldGenerateImage = imagePrompt.length > 0
 
         if (shouldGenerateImage) {
           try {
