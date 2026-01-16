@@ -133,71 +133,88 @@ export default async function HomePage() {
   // Only non-opinion articles go into the regular columns (excluding the headline)
   const otherArticles = nonOpinionArticles.filter((a: IArticle) => a.id !== headlineId)
 
-  // Distribution ratio: Left:Center:Right = 12:14:24
-  // Calculate based on DISTRIBUTABLE articles (non-opinion, non-headline)
-  const distributableCount = otherArticles.length
-  const ratioTotal = 12 + 14 + 24 // 50
-
-  // Calculate initial distribution based on ratio (proportional)
-  const leftCount = Math.round((distributableCount * 12) / ratioTotal)
-  // Center column capacity in "slots" - articles with images count as 2 slots
-  const centerSlotCapacity = Math.round((distributableCount * 14) / ratioTotal)
-
-  // Initial distribution - start with centerSlotCapacity articles
-  const leftColumnArticles = otherArticles.slice(0, leftCount)
-  let centerColumnArticles = otherArticles.slice(leftCount, leftCount + centerSlotCapacity)
-  const rightColumnArticles = otherArticles.slice(leftCount + centerSlotCapacity)
-
-  // Adjust center column: articles with images count as 2 slots
-  // Count how many center articles have images
-  const centerArticlesWithImages = centerColumnArticles.filter((a) => a.featuredImageUrl).length
-  const centerArticlesWithoutImages = centerColumnArticles.length - centerArticlesWithImages
-
-  // Calculate weighted count: images count as 2 slots, non-images count as 1 slot
-  const centerWeightedCount = centerArticlesWithImages * 2 + centerArticlesWithoutImages
-
-  // If weighted count exceeds slot capacity, reduce center articles
-  // Each image article effectively takes 2 slots, so we need to reduce accordingly
-  if (centerWeightedCount > centerSlotCapacity) {
-    // Calculate how many slots we need to free
-    const excessWeight = centerWeightedCount - centerSlotCapacity
-    // Each image article we move out frees up 2 slots, each non-image frees 1
-    // Prefer moving image articles first (they free more slots)
-
-    const articlesToMove: IArticle[] = []
-    let remainingExcess = excessWeight
-
-    // First, try moving image articles (each frees 2 slots)
-    for (const article of centerColumnArticles) {
-      if (remainingExcess <= 0) break
-      if (article.featuredImageUrl) {
-        articlesToMove.push(article)
-        remainingExcess -= 2
-      }
-    }
-
-    // Then move non-image articles if still needed (each frees 1 slot)
-    for (const article of centerColumnArticles) {
-      if (remainingExcess <= 0) break
-      if (!article.featuredImageUrl && !articlesToMove.includes(article)) {
-        articlesToMove.push(article)
-        remainingExcess -= 1
-      }
-    }
-
-    // Remove moved articles from center
-    centerColumnArticles = centerColumnArticles.filter((a) => !articlesToMove.includes(a))
-
-    // Redistribute moved articles: alternate between right and left
-    // Right column gets even indices, left gets odd indices
-    for (let i = 0; i < articlesToMove.length; i++) {
-      if (i % 2 === 0) {
-        rightColumnArticles.push(articlesToMove[i])
-      } else {
-        leftColumnArticles.push(articlesToMove[i])
-      }
-    }
+  /******************* HEIGHT-BASED DISTRIBUTION ***********************/
+  // Estimated heights (in px) for articles in each column, based on actual CSS
+  const HEIGHTS = {
+    // Left column (280px wide): image aspect 16:10 = 175px, headline ~65px, excerpt ~55px, meta ~25px, padding ~40px
+    left: { withImage: 360, withoutImage: 185 },
+    // Center column (wider): image aspect 16:10 = 280px, headline ~55px, excerpt ~45px, meta ~25px, padding ~40px  
+    center: { withImage: 445, withoutImage: 165 },
+    // Right column (320px): image aspect 16:10 = 200px, headline ~45px, padding ~30px (compact cards)
+    right: { withImage: 275, withoutImage: 90 },
+    // Special elements
+    headline: 520, // Large headline article with image
+    opinionSection: 280, // Opinion section header + 2 articles
+    spanningArticle: 220, // Spanning article height
   }
+
+  // Helper: estimate height of an article in a given column
+  const estimateHeight = (article: IArticle, column: 'left' | 'center' | 'right', showImage: boolean): number => {
+    const hasImage = article.featuredImageUrl && showImage
+    return hasImage ? HEIGHTS[column].withImage : HEIGHTS[column].withoutImage
+  }
+
+  // Calculate fixed heights at top of left+center area (before spanning)
+  // Left-top will have 5 articles before the spanning article
+  // Center-top will have: headline + opinion section + some articles
+  const LEFT_TOP_COUNT = 5 // Fixed: articles before spanning
+  const centerTopFixedHeight = HEIGHTS.headline + HEIGHTS.opinionSection
+
+  // First pass: determine how many articles have images (for height calculation)
+  // We'll use a deterministic hash to decide image visibility
+  const hasImageInColumn = (article: IArticle, column: 'left' | 'center' | 'right', index: number): boolean => {
+    if (!article.featuredImageUrl) return false
+    if (column === 'center') return true // Center always shows images
+    // Left/Right: use hash-based probability (80% for left, first 3 + 60% for right)
+    const hash = String(article.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    if (column === 'left') return (hash % 5) < 4 // 80%
+    if (column === 'right') return index < 3 || (hash % 5) < 3 // First 3 always, then 60%
+    return true
+  }
+
+  // Calculate total height we want each column section to fill
+  // We'll distribute articles to balance heights across columns
+  
+  // Step 1: Calculate how many articles go to each column based on height targets
+  // Target: all columns end at approximately the same total height
+  
+  // Estimate average heights per column (weighted by image probability)
+  const avgLeftHeight = HEIGHTS.left.withImage * 0.8 + HEIGHTS.left.withoutImage * 0.2 // 80% have images = 325px
+  const avgCenterHeight = HEIGHTS.center.withImage * 0.9 + HEIGHTS.center.withoutImage * 0.1 // 90% have images = 417px
+  // Right column: first 3 have images, then ~30% of rest have images
+  // Using lower estimate to give right column MORE articles (they're very compact)
+  const avgRightHeight = HEIGHTS.right.withImage * 0.20 + HEIGHTS.right.withoutImage * 0.80 // ~127px avg
+
+  // Calculate how many articles each column needs to reach the SAME total height
+  // We want: leftCount * avgLeftHeight ≈ centerCount * avgCenterHeight ≈ rightCount * avgRightHeight
+  
+  const totalArticles = otherArticles.length
+  
+  // Calculate based on height ratios
+  // If we set leftCount = L, centerCount = C, rightCount = R
+  // And L * 325 = C * 417 = R * 136 (equal heights)
+  // Then: C = L * 325/417 = L * 0.78
+  //       R = L * 325/136 = L * 2.39
+  // Total: L + 0.78L + 2.39L = 4.17L = totalArticles
+  // So: L = totalArticles / 4.17
+  
+  const heightRatioLeft = 1
+  const heightRatioCenter = avgLeftHeight / avgCenterHeight // ~0.78
+  const heightRatioRight = avgLeftHeight / avgRightHeight // ~2.39
+  const ratioSum = heightRatioLeft + heightRatioCenter + heightRatioRight // ~4.17
+
+  const leftTargetCount = Math.round(totalArticles / ratioSum)
+  const centerTargetCount = Math.round(totalArticles * heightRatioCenter / ratioSum)
+  // Right gets the remainder (significantly more articles to match height)
+
+  // Apply constraints (ensure minimum counts)
+  const leftCount = Math.max(LEFT_TOP_COUNT + 2, leftTargetCount)
+  const centerCount = Math.max(4, centerTargetCount)
+
+  // Distribute articles
+  const leftColumnArticles = otherArticles.slice(0, leftCount)
+  const centerColumnArticles = otherArticles.slice(leftCount, leftCount + centerCount)
+  const rightColumnArticles = otherArticles.slice(leftCount + centerCount)
 
   // Randomly decide which articles show photos (3/5 chance for left/right columns)
   // Center column articles always show images if available
@@ -255,17 +272,42 @@ export default async function HomePage() {
 
   // Spanning article: use the 6th left-column story (desktop only) to break monotony.
   // On mobile, we keep the classic single-column stacking (no spanning).
-  const leftColumnSpanningIndex = 5
+  const leftColumnSpanningIndex = LEFT_TOP_COUNT
   const leftColumnTopArticles = leftColumnArticles.slice(0, leftColumnSpanningIndex)
   const leftColumnSpanningArticle = leftColumnArticles[leftColumnSpanningIndex]
   const leftColumnBottomArticles = leftColumnArticles.slice(leftColumnSpanningIndex + 1)
-  // After Opinion, add a small chunk of regular center stories:
-  // - If the first one has an image, show 1 (it already takes more visual space).
-  // - If not, show 2.
-  const centerPreSpanningCount =
-    centerColumnArticles.length === 0 ? 0 : centerColumnArticles[0].featuredImageUrl ? 2 : 4
-  const centerColumnBeforeSpanning = centerColumnArticles.slice(0, centerPreSpanningCount)
-  const centerColumnAfterSpanning = centerColumnArticles.slice(centerPreSpanningCount)
+
+  // HEIGHT-BASED SPANNING SPLIT:
+  // Calculate how many center articles should appear before spanning to match left-top height
+  // Left-top has 5 articles, we need center-before to have similar total height
+  
+  // Calculate left-top height
+  let leftTopHeight = 0
+  leftColumnTopArticles.forEach((article, idx) => {
+    const showImg = hasImageInColumn(article, 'left', idx)
+    leftTopHeight += estimateHeight(article, 'left', showImg)
+  })
+  
+  // Center-top starts with headline + opinion section
+  let centerTopHeight = centerTopFixedHeight
+  
+  // Add center articles until we roughly match left-top height
+  let centerBeforeCount = 0
+  for (let i = 0; i < centerColumnArticles.length; i++) {
+    const article = centerColumnArticles[i]
+    const articleHeight = estimateHeight(article, 'center', true)
+    if (centerTopHeight + articleHeight <= leftTopHeight + 100) { // Allow 100px tolerance
+      centerTopHeight += articleHeight
+      centerBeforeCount++
+    } else {
+      break
+    }
+  }
+  // Ensure at least 2 center articles before spanning
+  centerBeforeCount = Math.max(2, centerBeforeCount)
+  
+  const centerColumnBeforeSpanning = centerColumnArticles.slice(0, centerBeforeCount)
+  const centerColumnAfterSpanning = centerColumnArticles.slice(centerBeforeCount)
 
   return (
     <main className="py-10 w-full">
