@@ -32,6 +32,27 @@ npm run dev
 
 Open `http://localhost:3050` in your browser.
 
+## Scripts
+
+```bash
+npm run dev         # start Next dev server on :3050
+npm run lint        # eslint
+npm run typecheck   # tsc --noEmit
+npm run test        # vitest (unit/integration)
+npm run test:e2e    # playwright (e2e)
+npm run format      # prettier write
+npm run format:check
+npm run ci          # lint + typecheck + test + test:e2e
+```
+
+## Tooling
+
+- **ESLint** for linting
+- **Prettier** for formatting
+- **Husky + lint-staged** for pre-commit checks
+- **Vitest** for unit/integration tests
+- **Playwright** for end-to-end tests
+
 ## Payload CMS / Database
 
 Payload is configured to use:
@@ -153,25 +174,3 @@ The system auto-generates fictional authors when the pool is too small:
 
 - `MIN_AUTHOR_POOL` (default: 8)
 - `MAX_NEW_AUTHORS_PER_RUN` (default: 3)
-
-## Commands
-
-```bash
-npx tsc --noEmit
-npm run lint
-```
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
