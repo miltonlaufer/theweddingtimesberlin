@@ -350,7 +350,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   // 25% chance to use the new feature/soft news/local/crime/news story prompt type
   // HARDCODED TO TRUE FOR TESTING - remove this line to restore random selection
-  const useFeatureStoryPrompt = true// Math.random() < 0.25
+  const useFeatureStoryPrompt = Math.random() < 0.25
 
   // Story types for the new prompt
   const storyTypes = [
