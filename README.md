@@ -1,4 +1,4 @@
-## The Wedding Times Berlin
+## The Wedding Times
 
 [![CI](https://github.com/miltonlaufer/theweddingtimesberlin/actions/workflows/ci.yml/badge.svg)](https://github.com/miltonlaufer/theweddingtimesberlin/actions/workflows/ci.yml)
 [![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?logo=vercel&logoColor=white)](https://theweddingtimesberlin.de/)
