@@ -221,8 +221,19 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             />
           </div>
 
+          <footer className="mt-10 max-w-[680px] mx-auto flex items-center gap-3">
+            <span className="font-sans text-sm text-[#666]">©</span>
+            <Image
+              src="/favicon.png"
+              alt="The Wedding Times"
+              width={32}
+              height={32}
+              className="object-contain"
+            />
+          </footer>
+
           {article.author.bio && (
-            <aside className="mt-12 pt-6 border-t border-[rgba(18,18,18,0.7)] max-w-[680px] mx-auto">
+            <aside className="mt-8 pt-6 border-t border-[rgba(18,18,18,0.7)] max-w-[680px] mx-auto">
               <div className="bg-[#e2e2e2]/30 p-6">
                 <h3 className="font-sans text-xs uppercase tracking-wider text-[#666] mb-2">
                   About the Author
@@ -237,17 +248,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </div>
             </aside>
           )}
-
-          <footer className="mt-12 pt-6 border-t border-[rgba(18,18,18,0.7)] max-w-[680px] mx-auto flex items-center gap-3">
-            <span className="font-sans text-sm text-[#666]">©</span>
-            <Image
-              src="/favicon.png"
-              alt="The Wedding Times"
-              width={32}
-              height={32}
-              className="object-contain"
-            />
-          </footer>
         </article>
       </NytContainer>
     </div>
