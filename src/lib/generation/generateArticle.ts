@@ -94,70 +94,83 @@ function safeStringList(
     .join('\n')
 }
 
-export function extractHeadlinePatterns(titles: string[]): string[] {
-  const patterns = new Set<string>()
+/**
+ * Analyzes recent headlines and returns a detailed breakdown of overused structural patterns.
+ * This is a data-driven approach: count actual opening words/phrases and flag any that appear 2+ times.
+ */
+export function analyzeHeadlineStructures(titles: string[]): {
+  openingWordCounts: Map<string, string[]> // opening word -> list of headlines using it
+  openingPhraseCounts: Map<string, string[]> // first 2-3 words -> list of headlines using it
+  overusedOpenings: string[] // opening words/phrases used 2+ times, with counts
+} {
+  const openingWordCounts = new Map<string, string[]>()
+  const openingPhraseCounts = new Map<string, string[]>()
 
   for (const title of titles) {
-    // Extract patterns like "Berlin [verb] [noun]" or "Wedding [verb] [noun]"
-    const berlinMatch = title.match(/^Berlin\s+(\w+)\s+(.+)$/i)
-    if (berlinMatch) {
-      patterns.add(`Berlin [verb] [noun]`)
-      continue
+    const words = title.split(/\s+/)
+    if (words.length === 0) continue
+
+    // Track first word (normalized to lowercase for comparison, but keep original for display)
+    const firstWord = words[0].toLowerCase().replace(/[^a-z]/g, '')
+    if (firstWord) {
+      const existing = openingWordCounts.get(firstWord) ?? []
+      existing.push(title)
+      openingWordCounts.set(firstWord, existing)
     }
 
-    const weddingMatch = title.match(/^Wedding\s+(\w+)\s+(.+)$/i)
-    if (weddingMatch) {
-      patterns.add(`Wedding [verb] [noun]`)
-      continue
+    // Track first 2-3 words as a phrase (for patterns like "Who keeps", "The great", etc.)
+    if (words.length >= 2) {
+      const twoWordPhrase = words.slice(0, 2).join(' ').toLowerCase()
+      const existing2 = openingPhraseCounts.get(twoWordPhrase) ?? []
+      existing2.push(title)
+      openingPhraseCounts.set(twoWordPhrase, existing2)
     }
 
-    // Check for other common patterns
-    if (title.match(/^[A-Z][a-z]+\s+(Introduces|Launches|Announces|Declares|Unveils)/i)) {
-      patterns.add(`[Location] [Announcement verb] [noun]`)
-    }
-
-    // Question patterns
-    if (title.match(/^(Why|How|What|When|Where|Is|Are|Do|Does|Did)\s+/i)) {
-      patterns.add(`[Question word] [rest]`)
-    }
-
-    // "The [noun] of [location]" pattern
-    if (title.match(/^The\s+\w+\s+of\s+/i)) {
-      patterns.add(`The [noun] of [location]`)
-    }
-
-    // "[Location] [verb]s [noun]" pattern
-    if (title.match(/^[A-Z][a-z]+\s+\w+s\s+/i)) {
-      patterns.add(`[Location] [verb]s [noun]`)
-    }
-
-    // "[Number] [things]" pattern
-    if (title.match(/^(The\s+)?\d+\s+/i)) {
-      patterns.add(`[Number] [things]`)
-    }
-
-    // "[Something] is [something]" pattern
-    if (title.match(/\s+is\s+(the|a|an)\s+/i)) {
-      patterns.add(`[Something] is [something]`)
-    }
-
-    // "[Something] vs [Something]" pattern
-    if (title.match(/\s+vs\s+/i)) {
-      patterns.add(`[Something] vs [Something]`)
-    }
-
-    // "How [something] [verb]" pattern
-    if (title.match(/^How\s+\w+\s+\w+/i)) {
-      patterns.add(`How [something] [verb]`)
-    }
-
-    // "[Location]'s [something]" pattern
-    if (title.match(/^[A-Z][a-z]+'s\s+/i)) {
-      patterns.add(`[Location]'s [something]`)
+    if (words.length >= 3) {
+      const threeWordPhrase = words.slice(0, 3).join(' ').toLowerCase()
+      const existing3 = openingPhraseCounts.get(threeWordPhrase) ?? []
+      existing3.push(title)
+      openingPhraseCounts.set(threeWordPhrase, existing3)
     }
   }
 
-  return Array.from(patterns)
+  // Find overused patterns (2+ occurrences)
+  const overusedOpenings: string[] = []
+
+  // Check opening words
+  for (const [word, headlines] of openingWordCounts) {
+    if (headlines.length >= 2) {
+      overusedOpenings.push(
+        `"${word.charAt(0).toUpperCase() + word.slice(1)}..." (${headlines.length} headlines start with this word)`,
+      )
+    }
+  }
+
+  // Check opening phrases (only add if not already covered by single word)
+  for (const [phrase, headlines] of openingPhraseCounts) {
+    if (headlines.length >= 2) {
+      const firstWord = phrase.split(' ')[0]
+      // Only add phrase if it's more specific than just the first word
+      const firstWordCount = openingWordCounts.get(firstWord)?.length ?? 0
+      if (headlines.length < firstWordCount) {
+        // This phrase is a more specific subset, worth mentioning
+        overusedOpenings.push(
+          `"${phrase
+            .split(' ')
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ')}..." (${headlines.length} headlines)`,
+        )
+      }
+    }
+  }
+
+  return { openingWordCounts, openingPhraseCounts, overusedOpenings }
+}
+
+// Legacy function for backward compatibility
+export function extractHeadlinePatterns(titles: string[]): string[] {
+  const { overusedOpenings } = analyzeHeadlineStructures(titles)
+  return overusedOpenings
 }
 
 /******************* VALIDATION / REPAIR ***********************/
@@ -441,6 +454,139 @@ async function shortenToSchema(args: {
   return validation.data
 }
 
+/******************* HEADLINE REGENERATION ***********************/
+
+/**
+ * Regenerates ONLY the headline when it violates banned opening word rules.
+ * This is more efficient than regenerating the entire article.
+ */
+async function regenerateHeadline(args: {
+  article: GeneratedArticle
+  bannedOpeningWords: string[]
+  recentTitles: string[]
+}): Promise<GeneratedArticle> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('Missing OPENAI_API_KEY')
+  }
+
+  const repairModelName = process.env.OPENAI_REPAIR_MODEL ?? 'gpt-4o-mini'
+
+  const llm = new ChatOpenAI({
+    apiKey,
+    model: repairModelName,
+    temperature: 1.2, // Some creativity but more controlled
+  })
+
+  const bannedWordsLower = args.bannedOpeningWords.map((w) => w.toLowerCase())
+  const currentFirstWord =
+    args.article.headline
+      .split(/\s+/)[0]
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, '') ?? ''
+
+  const systemPrompt = [
+    'You are a headline editor for a satirical newspaper.',
+    'Your ONLY job is to rewrite a headline that violates structural rules.',
+    'You must preserve the meaning and tone but change the STRUCTURE (especially the opening word).',
+    '',
+    'Output ONLY the new headline as plain text. No JSON, no quotes, no explanation.',
+    'The headline must be <= 140 characters.',
+  ].join('\n')
+
+  const userPrompt = [
+    'PROBLEM: The following headline starts with a BANNED word that is overused in recent articles.',
+    '',
+    `Current headline: "${args.article.headline}"`,
+    `Banned opening word: "${currentFirstWord}" (this word starts too many recent headlines)`,
+    '',
+    'ALL BANNED OPENING WORDS (do NOT start with ANY of these):',
+    args.bannedOpeningWords.map((w) => `  ❌ "${w}..."`).join('\n'),
+    '',
+    'Recent headlines for context (yours must be STRUCTURALLY different):',
+    args.recentTitles
+      .slice(0, 10)
+      .map((t, i) => `  ${i + 1}. ${t}`)
+      .join('\n'),
+    '',
+    'Article context (to preserve meaning):',
+    `- Subheadline: ${args.article.subheadline ?? 'N/A'}`,
+    `- Excerpt: ${args.article.excerpt ?? 'N/A'}`,
+    '',
+    'REWRITE the headline with a DIFFERENT opening structure.',
+    'Some alternatives:',
+    '- Start with a proper noun/name: "Klaus Müller Discovers..."',
+    '- Start with a location: "In Wedding...", "At Leopoldplatz..."',
+    '- Start with a number: "47 Bikes...", "Three Days After..."',
+    '- Start with a verb: "Forget Everything...", "Meet the..."',
+    '- Start with an adjective: "Desperate...", "Mysterious..."',
+    '- Use quotation: ""I Regret Nothing," Says..."',
+    '',
+    'Output ONLY the new headline (no quotes, no explanation):',
+  ].join('\n')
+
+  const raw = await llm.invoke([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ])
+
+  const newHeadline = (typeof raw.content === 'string' ? raw.content : String(raw.content))
+    .trim()
+    .replace(/^["']|["']$/g, '') // Remove surrounding quotes if any
+    .slice(0, 140) // Enforce max length
+
+  // Verify the new headline doesn't also start with a banned word
+  const newFirstWord =
+    newHeadline
+      .split(/\s+/)[0]
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, '') ?? ''
+  if (bannedWordsLower.includes(newFirstWord)) {
+    // If still banned, try one more time with even stronger instruction
+    const retryPrompt = [
+      `The headline "${newHeadline}" STILL starts with a banned word "${newFirstWord}".`,
+      '',
+      'ABSOLUTELY FORBIDDEN opening words:',
+      args.bannedOpeningWords.map((w) => `  ❌ "${w}"`).join('\n'),
+      '',
+      'Write a headline that starts with a COMPLETELY DIFFERENT word.',
+      'Try: a name, a number, a location, an adjective, or a quoted statement.',
+      '',
+      'Output ONLY the new headline:',
+    ].join('\n')
+
+    const retryRaw = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: retryPrompt },
+    ])
+
+    const retryHeadline = (
+      typeof retryRaw.content === 'string' ? retryRaw.content : String(retryRaw.content)
+    )
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .slice(0, 140)
+
+    return { ...args.article, headline: retryHeadline }
+  }
+
+  return { ...args.article, headline: newHeadline }
+}
+
+/**
+ * Checks if a headline starts with a banned opening word.
+ */
+function headlineViolatesBannedWords(headline: string, bannedOpeningWords: string[]): boolean {
+  if (bannedOpeningWords.length === 0) return false
+  const firstWord =
+    headline
+      .split(/\s+/)[0]
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, '') ?? ''
+  const bannedLower = bannedOpeningWords.map((w) => w.toLowerCase())
+  return bannedLower.includes(firstWord)
+}
+
 /******************* MAIN ***********************/
 
 export async function generateArticle(input: GenerateArticleInput): Promise<GeneratedArticle> {
@@ -457,9 +603,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     temperature: 1.5,
   })
 
-  // 25% chance to use the new feature/soft news/local/crime/news story prompt type
+  // 33% chance to use the new feature/soft news/local/crime/news story prompt type
   // HARDCODED TO TRUE FOR TESTING - remove this line to restore random selection
-  const useFeatureStoryPrompt = Math.random() < 0.25
+  const useFeatureStoryPrompt = Math.random() < 0.33
 
   // Story types for the new prompt
   const storyTypes = [
@@ -759,32 +905,57 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ].join('\n')
       : ''
 
-  const headlinePatterns =
-    input.recentHeadlinePatterns ?? extractHeadlinePatterns(input.recentArticleTitles)
+  // Analyze headline structures to find overused patterns (data-driven approach)
+  const headlineAnalysis = analyzeHeadlineStructures(input.recentArticleTitles)
+  const overusedOpenings = headlineAnalysis.overusedOpenings
+
+  // Build a list of BANNED opening words (any word used 2+ times)
+  const bannedOpeningWords: string[] = []
+  for (const [word, headlines] of headlineAnalysis.openingWordCounts) {
+    if (headlines.length >= 2) {
+      bannedOpeningWords.push(word.charAt(0).toUpperCase() + word.slice(1))
+    }
+  }
+
   const headlinePatternsSection =
-    headlinePatterns.length > 0
+    overusedOpenings.length > 0
       ? [
-          `\nCRITICAL: AVOID these overused headline patterns (${headlinePatterns.length} patterns detected in recent articles):`,
-          headlinePatterns.map((p) => `- "${p}"`).join('\n'),
           '',
-          'Your headline MUST use a COMPLETELY DIFFERENT structure. Do NOT use any of the patterns above.',
+          '═══════════════════════════════════════════════════════════════════',
+          'CRITICAL: HEADLINE STRUCTURE VARIETY REQUIRED',
+          '═══════════════════════════════════════════════════════════════════',
           '',
-          'Examples of varied headline structures you CAN use (if not already overused):',
-          '- Question format: "Why [something]?" or "Is [something] the new [something]?"',
-          '- Quotation/character focus: "[Character/Group] [does something absurd]"',
-          '- Descriptive/observational: "The [absurd thing] of [location/group]"',
-          '- Comparison: "[X] vs [Y]: The [absurd comparison]"',
-          '- Direct statement: "[Something] is [absurd claim]"',
-          '- Narrative: "How [something] became [absurd outcome]"',
-          '- Listicle-style: "The [number] ways [something absurd]"',
-          '- Absurd claim: "[Something] declares itself [absurd status]"',
-          '- Breaking news style: "[Location] [unexpected event] as [absurd detail]"',
-          '- Mystery/investigation: "The mystery of [absurd thing] in [location]"',
-          '- Personal/confessional: "[Someone] reveals [absurd secret]"',
+          'OVERUSED HEADLINE OPENINGS DETECTED (you MUST NOT use these):',
+          overusedOpenings.map((p) => `  ❌ ${p}`).join('\n'),
           '',
-          'CRITICAL: Your headline structure must be UNIQUE compared to the recent articles shown above.',
-          'If you see "Berlin [verb] [noun]" used multiple times, use a question, a statement, a narrative, or any other structure.',
-          'Vary your headline structure! Do NOT default to common patterns.',
+          bannedOpeningWords.length > 0
+            ? [
+                'BANNED OPENING WORDS (DO NOT start your headline with ANY of these):',
+                bannedOpeningWords.map((w) => `  ❌ "${w}..."`).join('\n'),
+                '',
+                'This is NOT a suggestion. If your headline starts with any of the banned words above, it will be REJECTED.',
+                'You MUST choose a DIFFERENT opening word that is NOT in this list.',
+              ].join('\n')
+            : '',
+          '',
+          'WHY THIS MATTERS:',
+          'Headlines that start the same way create monotony. Readers notice when multiple headlines',
+          'start with "Who...", "The...", "How...", etc. Each headline must feel FRESH and DIFFERENT.',
+          '',
+          'WHAT TO DO INSTEAD:',
+          'Look at the banned words above and deliberately choose a DIFFERENT structure.',
+          'Some alternatives (only use if not already banned above):',
+          '- Start with a proper noun/name: "Klaus Müller Discovers...", "Leopoldplatz Residents..."',
+          '- Start with a number: "47 Bikes Vanish...", "Three Years Later..."',
+          '- Start with a location: "In Wedding...", "At Leopoldplatz..."',
+          '- Start with a verb (imperative): "Forget Everything...", "Meet the Man..."',
+          '- Start with an adjective: "Desperate Späti Owner...", "Mysterious Note..."',
+          '- Start with a time reference: "After 3 Years...", "Since Tuesday..."',
+          '- Use quotation: ""I Regret Nothing," Says...", ""This Is Normal," Claims..."',
+          '',
+          'REMEMBER: Check the banned list above. If "The" is banned, do NOT start with "The".',
+          'If "Who" is banned, do NOT start with "Who". Choose something ELSE.',
+          '═══════════════════════════════════════════════════════════════════',
         ].join('\n')
       : ''
 
@@ -1163,7 +1334,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         validationErrors: validation.error.issues,
       })
     }
-    const validated = validation.data
+    let validated = validation.data
     const langSample =
       `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
         0,
@@ -1172,10 +1343,19 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     const nonEnglish = looksNonEnglish(langSample)
 
     if (nonEnglish) {
-      return await translateToEnglish({
+      validated = await translateToEnglish({
         bad: validated,
         categories: input.categories,
         authors: input.authors,
+      })
+    }
+
+    // Check if headline violates banned opening words and regenerate if needed
+    if (headlineViolatesBannedWords(validated.headline, bannedOpeningWords)) {
+      validated = await regenerateHeadline({
+        article: validated,
+        bannedOpeningWords,
+        recentTitles: input.recentArticleTitles,
       })
     }
 
