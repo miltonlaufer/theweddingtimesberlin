@@ -492,6 +492,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'A Wedding park where someone has been leaving cryptic notes in multiple languages for 3 months',
     'The great bike theft of Müllerstraße: 47 bikes disappeared in one night, all replaced with identical scooters',
     'A Neukölln bar that changes its name every month to avoid bad reviews',
+    // Wedding Turkish community stories
+    'A Turkish-owned döner shop in Wedding that has been run by the same family for 30 years, now facing gentrification',
+    'A Wedding Turkish grocery store owner who knows every customer by name and their shopping habits',
+    'The Turkish barbershop in Wedding where men gather to discuss neighborhood news and politics',
+    'A Turkish family in Wedding who has lived in the same apartment for 3 generations, watching the neighborhood change',
+    'The Turkish community center in Wedding that doubles as a wedding hall (actual weddings, not the neighborhood)',
+    'A Wedding street where Turkish-owned businesses line one side, new hipster cafés line the other',
+    'The Turkish bakery in Wedding that opens at 5am and serves the neighborhood before anyone else is awake',
     // Crime stories - absurd but specific criminal activities
     'Police investigate a string of döner thefts where only the vegetables are taken, meat left behind',
     'The great Späti heist: someone stole 200 euros worth of energy drinks but left the cash register untouched',
@@ -537,6 +545,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Leopoldplatz happenings, the fountain crowd, or Wedding central life',
     'Leopoldplatz characters, street vendors, or the morning drunks',
     'the unofficial Leopoldplatz economy of questionable transactions',
+    // Wedding neighborhood character
+    "Wedding's Turkish community, Turkish-owned businesses, or Turkish families in the neighborhood",
+    'Turkish döner shops in Wedding, Turkish grocery stores, or Turkish community life',
+    "the mix of Turkish and German cultures in Wedding, or Turkish families who've lived in Wedding for generations",
+    'Turkish-owned Spätis, Turkish barbershops, or Turkish community events in Wedding',
     // Nightlife
     'Berlin techno clubs, Berghain door policy, or nightlife culture',
     'after-hours clubs, sunrise sessions, or the walk of shame home',
@@ -803,6 +816,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'When you see "Wedding" in context, it means the Berlin neighborhood (like Kreuzberg, Neukölln, Mitte, etc.), not a marriage ceremony.',
     'Write about life in the Wedding neighborhood, not about weddings as events.',
     '',
+    "IMPORTANT CONTEXT: Wedding is a neighborhood with a significant Turkish community. This is a natural, integral part of the neighborhood's character.",
+    "When writing about Wedding, it's natural and appropriate to mention Turkish businesses, Turkish families, Turkish cultural elements, Turkish-owned shops, etc.",
+    'The Turkish community is fair game for satire and edgy humor—make fun of them like you make fun of everyone else. But avoid racist stereotypes, slurs, or hateful content.',
+    "Turkish döner shops, Turkish families, Turkish community events, Turkish-owned businesses are all part of Wedding's reality and should be mentioned when relevant.",
+    "Satirize Turkish community elements with the same edgy, politically incorrect approach you use for everything—just don't be racist about it.",
+    '',
     useFeatureStoryPrompt
       ? [
           'Tone: Deadpan, serious journalism about absurd situations, but with an edge. Write with the straight-faced seriousness of a real news reporter covering something completely ridiculous, but push boundaries. The humor comes from the contrast between the serious tone and the absurd content, but also from making readers uncomfortable—they should think "I don\'t know if I should laugh at this".',
@@ -937,6 +956,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         'DO NOT write about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
         'Write about life in the Wedding neighborhood, not about weddings as events.',
         '',
+        'IMPORTANT: Wedding has a significant Turkish community. When writing about Wedding, naturally mention Turkish businesses, Turkish families, Turkish cultural elements when relevant.',
+        'The Turkish community is fair game for satire—make fun of them like everyone else. But avoid racist stereotypes, slurs, or hateful content.',
+        '',
         'TONE: Deadpan, serious journalism about something completely ridiculous, but with an edge. Like The Onion but more detailed, specific, AND uncomfortable. Make readers question their own reactions.',
         'STYLE: Read like a real local newspaper article. Who, what, where, when, why, how - all answered with absurd but specific details. But push boundaries. Challenge comfort zones.',
         '',
@@ -1022,6 +1044,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'CRITICAL REMINDER: "Wedding" (capitalized) refers to Wedding, the Berlin neighborhood, NOT a wedding ceremony.',
     'DO NOT write about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
     'The newspaper covers the Wedding neighborhood in Berlin. Write about life in Wedding, not about weddings as events.',
+    '',
+    'IMPORTANT: Wedding has a significant Turkish community. When writing about Wedding, naturally mention Turkish businesses, Turkish families, Turkish cultural elements when relevant.',
+    'The Turkish community is fair game for satire—make fun of them like everyone else. But avoid racist stereotypes, slurs, or hateful content.',
     '',
     !useFeatureStoryPrompt
       ? [
