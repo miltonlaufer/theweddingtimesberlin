@@ -40,27 +40,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 })
     }
 
-    // Check if subscription already exists
-    const existing = await payload.find({
-      collection: 'push-subscriptions',
-      where: {
-        endpoint: { equals: trimmedEndpoint },
-      },
-      limit: 1,
-    })
-
-    if (existing.docs.length > 0) {
-      // Update existing subscription
-      await payload.update({
-        collection: 'push-subscriptions',
-        id: existing.docs[0].id,
-        data: {
-          keys: body.subscription.keys,
-          userAgent: body.userAgent || req.headers.get('user-agent') || undefined,
-        },
-      })
-    } else {
-      // Create new subscription
+    // Try to create first - if it fails due to unique constraint, then update
+    try {
       await payload.create({
         collection: 'push-subscriptions',
         data: {
@@ -69,6 +50,44 @@ export async function POST(req: Request) {
           userAgent: body.userAgent || req.headers.get('user-agent') || undefined,
         },
       })
+    } catch (createError) {
+      // If creation fails, it might be due to unique constraint (endpoint already exists)
+      // Try to find and update instead
+      try {
+        // Use a simpler query approach - get all and filter in memory as fallback
+        // This is less efficient but more reliable for long URLs
+        const allSubscriptions = await payload.find({
+          collection: 'push-subscriptions',
+          limit: 1000, // Should be enough for subscriptions
+        })
+
+        const existing = allSubscriptions.docs.find(
+          (doc) => (doc as { endpoint?: string }).endpoint === trimmedEndpoint,
+        )
+
+        if (existing) {
+          // Update existing subscription
+          await payload.update({
+            collection: 'push-subscriptions',
+            id: existing.id,
+            data: {
+              keys: body.subscription.keys,
+              userAgent: body.userAgent || req.headers.get('user-agent') || undefined,
+            },
+          })
+        } else {
+          // Re-throw original error if it's not a unique constraint issue
+          throw createError
+        }
+      } catch (updateError) {
+        // If update also fails, log and re-throw
+        console.error('Failed to create or update subscription:', {
+          createError: createError instanceof Error ? createError.message : createError,
+          updateError: updateError instanceof Error ? updateError.message : updateError,
+          endpointLength: trimmedEndpoint.length,
+        })
+        throw updateError
+      }
     }
 
     return NextResponse.json({ success: true })
