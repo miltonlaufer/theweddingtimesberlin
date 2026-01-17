@@ -1,5 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
+import { OfflineReloadButton } from '@/components/OfflineReloadButton'
 
 /******************* COMPONENT ***********************/
 
@@ -28,7 +29,8 @@ export default function OfflinePage() {
           You are offline
         </h1>
         <p className="mt-4 font-serif text-lg text-[#333] leading-relaxed">
-          We couldn’t load the article from the network or cache. Here are your official German-internet excuses:
+          We couldn’t load this page from the network or cache. Here are your official
+          German-internet excuses:
         </p>
 
         <ul className="mt-4 font-serif text-lg text-[#333] leading-relaxed list-disc pl-6 space-y-2">
@@ -37,14 +39,16 @@ export default function OfflinePage() {
           ))}
         </ul>
 
-        <div className="mt-8 flex items-center gap-4">
+        <div className="mt-8 flex flex-wrap items-center gap-4">
+          <OfflineReloadButton />
           <Link href="/" className="font-sans text-sm underline text-[#121212]">
             Back to home
           </Link>
-          <span className="font-sans text-sm text-[#666]">Try again when the internet remembers it’s 2026.</span>
+          <span className="font-sans text-sm text-[#666]">
+            Try again when the internet remembers it’s 2026.
+          </span>
         </div>
       </div>
     </main>
   )
 }
-

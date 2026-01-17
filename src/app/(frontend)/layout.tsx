@@ -1,5 +1,6 @@
 import React from 'react'
 import { Masthead, NavigationServer, SatiricalRibbon, FooterServer } from '@/components'
+import { UpdateModalClient } from '@/components/UpdateModalClient'
 import { StoreProvider } from '@/stores'
 import '../../styles/global.css'
 import { GoogleAnalyticsClient } from '@/components/GoogleAnalyticsClient'
@@ -18,6 +19,7 @@ export default function FrontendLayout({ children }: FrontendLayoutProps) {
       <GoogleAnalyticsClient />
       <StoreProvider>
         <div className="min-h-screen flex flex-col">
+          <UpdateModalClient />
           <SatiricalRibbon />
           <Masthead />
           <NavigationServer />

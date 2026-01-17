@@ -122,7 +122,7 @@ curl -X POST "http://localhost:3050/api/debug/generate-article?publish=0"
 
 - `OPENAI_API_KEY` (required)
 - `OPENAI_MODEL` (optional; defaults to `gpt-4o-mini`)
-- `OPENAI_IMAGE_MODEL` (optional; defaults to `dall-e-3`)
+- `OPENAI_IMAGE_MODEL` (optional; defaults to `gpt-image-1`)
 - `OPENAI_REPAIR_MODEL` (optional; fallback model for JSON repair)
 - `OPENAI_AUTHOR_MODEL` (optional; model for generating fictional authors)
 

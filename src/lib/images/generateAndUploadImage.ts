@@ -32,6 +32,19 @@ function nowPathPrefix(): string {
   return `${yyyy}/${mm}/${dd}`
 }
 
+function toPhotoRealisticPrompt(prompt: string): string {
+  const trimmed = prompt.trim()
+  const suffix =
+    'Photo-realistic. Shadows, pores, dirtiness, hallow depth of field when possible. Natural lighting, realistic colors, high detail, no text.'
+
+  if (!trimmed) {
+    return suffix
+  }
+
+  const separator = trimmed.endsWith('.') ? ' ' : '. '
+  return `${trimmed}${separator}${suffix}`
+}
+
 async function imageUrlToArrayBuffer(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to download image: ${res.status} ${res.statusText}`)
@@ -53,7 +66,7 @@ export async function generateAndUploadImage(
   const supabaseUrl = process.env.SUPABASE_URL ?? ''
   const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   const bucket = process.env.SUPABASE_BUCKET ?? ''
-  const imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'dall-e-3'
+  const imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1'
 
   if (!openaiKey || !supabaseUrl || !supabaseServiceRole || !bucket) {
     throw new Error('Missing required env vars for image upload')
@@ -62,13 +75,23 @@ export async function generateAndUploadImage(
   const openai = new OpenAI({ apiKey: openaiKey })
   const safeName = sanitizeFileBaseName(input.fileBaseName)
   const objectPath = `${nowPathPrefix()}/${safeName}-${Date.now()}.png`
+  const imagePrompt = toPhotoRealisticPrompt(input.prompt)
 
   const generateWithModel = async (model: string) => {
-    return await openai.images.generate({
+    const baseRequest = {
       model,
-      prompt: input.prompt,
+      prompt: imagePrompt,
       size: '1024x1024',
-    })
+    } as const
+
+    if (model === 'dall-e-3') {
+      return await openai.images.generate({
+        ...baseRequest,
+        style: 'natural',
+      })
+    }
+
+    return await openai.images.generate(baseRequest)
   }
 
   let imageRes: Awaited<ReturnType<typeof generateWithModel>>

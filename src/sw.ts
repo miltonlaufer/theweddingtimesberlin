@@ -27,7 +27,6 @@ const serwist = new Serwist({
     cleanupOutdatedCaches: true,
     // If navigation fails and there is no cached page, show the offline page.
     navigateFallback: '/offline',
-    navigateFallbackAllowlist: [/^\/article\//],
     // Avoid catching API/admin routes
     navigateFallbackDenylist: [/^\/api\//, /^\/admin/],
   },
@@ -37,7 +36,8 @@ const serwist = new Serwist({
   runtimeCaching: [
     // Cache visited article pages for offline reading.
     {
-      matcher: ({ request, url }) => request.mode === 'navigate' && url.pathname.startsWith('/article/'),
+      matcher: ({ request, url }) =>
+        request.mode === 'navigate' && url.pathname.startsWith('/article/'),
       handler: new NetworkFirst({
         cacheName: ARTICLE_CACHE,
         networkTimeoutSeconds: 4,
@@ -75,4 +75,3 @@ const serwist = new Serwist({
 })
 
 serwist.addEventListeners()
-

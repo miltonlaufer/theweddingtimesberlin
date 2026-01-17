@@ -55,6 +55,31 @@ function extractFirstJsonObject(text: string): string {
   return text.slice(firstBrace, lastBrace + 1)
 }
 
+function formatZodIssues(issues: z.ZodIssue[]): string {
+  return issues
+    .map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join('.') : '(root)'
+      const max = issue.code === 'too_big' && 'maximum' in issue ? ` (max ${issue.maximum})` : ''
+      return `- ${path}: ${issue.message}${max}`
+    })
+    .join('\n')
+}
+
+function hasTooBigIssues(issues: z.ZodIssue[]): boolean {
+  return issues.some((issue) => issue.code === 'too_big')
+}
+
+function describeTooBigIssues(issues: z.ZodIssue[]): string {
+  return issues
+    .filter((issue) => issue.code === 'too_big')
+    .map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join('.') : '(root)'
+      const max = 'maximum' in issue ? issue.maximum : 'unknown'
+      return `- ${path}: must be <= ${max} characters`
+    })
+    .join('\n')
+}
+
 function safeStringList(
   items: Array<{ slug: string; name: string; title?: string; bio?: string }>,
 ): string {
@@ -212,15 +237,24 @@ async function translateToEnglish(args: {
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
-  const validated = GeneratedArticleSchema.parse(parsed)
+  const validation = GeneratedArticleSchema.safeParse(parsed)
+  if (!validation.success) {
+    return await repairToSchema({
+      badOutput: text,
+      categories: args.categories,
+      authors: args.authors,
+      validationErrors: validation.error.issues,
+    })
+  }
 
-  return validated
+  return validation.data
 }
 
 async function repairToSchema(args: {
   badOutput: string
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
+  validationErrors?: z.ZodIssue[]
 }): Promise<GeneratedArticle> {
   // Hypotheses:
   // A: primary model returns non-JSON or partial JSON
@@ -254,7 +288,13 @@ async function repairToSchema(args: {
     '- Ensure categorySlug is one of the allowed categorySlug options.',
     '- Ensure authorSlug is one of the allowed authorSlug options.',
     '- Ensure bodyMarkdown is a single markdown string (no code blocks).',
+    '- Respect ALL max-length limits; rewrite text to fit without truncating mid-word.',
   ].join('\n')
+
+  const validationErrorsSection =
+    args.validationErrors && args.validationErrors.length > 0
+      ? ['Validation errors to fix:', formatZodIssues(args.validationErrors), ''].join('\n')
+      : ''
 
   const userPrompt = [
     'Allowed categorySlug options:',
@@ -265,8 +305,8 @@ async function repairToSchema(args: {
     '',
     'Required JSON schema:',
     '{',
-    '  "headline": string,',
-    '  "subheadline": string|null,',
+    '  "headline": string,  // <= 140 chars',
+    '  "subheadline": string|null,  // <= 220 chars',
     '  "excerpt": string|null,  // <= 300 chars',
     '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
     '  "categorySlug": string,',
@@ -274,10 +314,11 @@ async function repairToSchema(args: {
     '  "layout": "standard"|"wide"|"opinion",',
     '  "isFeatured": boolean,',
     '  "isHeadline": boolean,',
-    '  "imageCaption": string|null,',
-    '  "imagePrompt": string|null',
+    '  "imageCaption": string|null,  // <= 160 chars',
+    '  "imagePrompt": string|null  // <= 600 chars',
     '}',
     '',
+    validationErrorsSection,
     'Bad output to repair:',
     args.badOutput,
   ].join('\n')
@@ -290,9 +331,97 @@ async function repairToSchema(args: {
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
-  const validated = GeneratedArticleSchema.parse(parsed)
+  const validation = GeneratedArticleSchema.safeParse(parsed)
+  if (validation.success) {
+    return validation.data
+  }
 
-  return validated
+  if (hasTooBigIssues(validation.error.issues)) {
+    return await shortenToSchema({
+      bad: parsed,
+      categories: args.categories,
+      authors: args.authors,
+      issues: validation.error.issues,
+    })
+  }
+
+  throw validation.error
+}
+
+async function shortenToSchema(args: {
+  bad: unknown
+  categories: GeneratorCategoryOption[]
+  authors: GeneratorAuthorOption[]
+  issues: z.ZodIssue[]
+}): Promise<GeneratedArticle> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('Missing OPENAI_API_KEY')
+  }
+
+  const repairModelName = process.env.OPENAI_REPAIR_MODEL ?? 'gpt-4o-mini'
+
+  const llm = new ChatOpenAI({
+    apiKey,
+    model: repairModelName,
+    temperature: 0,
+  })
+
+  const categoriesList = safeStringList(args.categories)
+  const authorsList = safeStringList(args.authors)
+
+  const systemPrompt = [
+    'You are a copy editor for JSON outputs.',
+    'Shorten ONLY the fields listed to meet max length limits.',
+    'Do not truncate mid-word; rewrite to fit while preserving meaning and tone.',
+    'Output MUST be strict JSON only, no markdown fences, no extra text.',
+    'Keep categorySlug and authorSlug valid (choose from allowed options).',
+  ].join('\n')
+
+  const userPrompt = [
+    'Allowed categorySlug options:',
+    categoriesList,
+    '',
+    'Allowed authorSlug options:',
+    authorsList,
+    '',
+    'Fields that exceed max length:',
+    describeTooBigIssues(args.issues),
+    '',
+    'JSON schema:',
+    '{',
+    '  "headline": string,  // <= 140 chars',
+    '  "subheadline": string|null,  // <= 220 chars',
+    '  "excerpt": string|null,  // <= 300 chars',
+    '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
+    '  "categorySlug": string,',
+    '  "authorSlug": string,',
+    '  "layout": "standard"|"wide"|"opinion",',
+    '  "isFeatured": boolean,',
+    '  "isHeadline": boolean,',
+    '  "imageCaption": string|null,  // <= 160 chars',
+    '  "imagePrompt": string|null  // <= 600 chars',
+    '}',
+    '',
+    'Fix this JSON by shortening only the fields above:',
+    JSON.stringify(args.bad),
+  ].join('\n')
+
+  const raw = await llm.invoke([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ])
+
+  const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
+  const jsonText = extractFirstJsonObject(text)
+  const parsed = JSON.parse(jsonText) as unknown
+  const validation = GeneratedArticleSchema.safeParse(parsed)
+
+  if (!validation.success) {
+    throw validation.error
+  }
+
+  return validation.data
 }
 
 /******************* MAIN ***********************/
@@ -770,7 +899,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     'IMAGE GENERATION:',
     'You MUST provide an imagePrompt for almost every article. Think: what photo would a real newspaper use to illustrate this story?',
-    'The imagePrompt should be a detailed, visual description of a photo-like image (no text overlays).',
+    'The imagePrompt should be a detailed, visual description of a photorealistic image (no text overlays).',
     'Only omit imagePrompt if the story is truly unillustratable (very rare).',
     '',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
@@ -796,7 +925,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         '- Name specific Berlin locations, streets, neighborhoods',
         '- Include dialogue, witness accounts, official statements (all fictional but realistic)',
         '- The article should be 300-600 words of detailed, specific reporting',
-        '- MUST provide an imagePrompt: describe a photo that would illustrate this news story (e.g., "A broken fountain at Leopoldplatz with people throwing coins into it, urban Berlin setting")',
+        '- MUST provide an imagePrompt: describe a photorealistic photo that would illustrate this news story (e.g., "A broken fountain at Leopoldplatz with people throwing coins into it, urban Berlin setting")',
         '',
         'EDGE AND POLITICAL INCORRECTNESS:',
         '- Push beyond "nice absurdity". Make readers uncomfortable. Challenge assumptions.',
@@ -943,24 +1072,24 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     'JSON schema:',
     '{',
-    '  "headline": string,  // YOUR OWN original headline - DO NOT copy the topic direction',
-    '  "subheadline": string|null,',
+    '  "headline": string,  // YOUR OWN original headline - DO NOT copy the topic direction (<= 140 chars)',
+    '  "subheadline": string|null,  // <= 220 chars',
     '  "excerpt": string|null,  // <= 300 chars',
     '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
     '  "categorySlug": string,  // existing slug OR new slug if creating category',
     '  "authorSlug": string,  // existing slug OR new slug if creating author',
-    '  "newAuthorName": string|null,  // REQUIRED if creating new author',
-    '  "newAuthorTitle": string|null,  // REQUIRED if creating new author (their beat/role)',
-    '  "newAuthorBio": string|null,  // REQUIRED if creating new author (2-3 funny sentences)',
+    '  "newAuthorName": string|null,  // REQUIRED if creating new author (<= 60 chars)',
+    '  "newAuthorTitle": string|null,  // REQUIRED if creating new author (their beat/role, <= 100 chars)',
+    '  "newAuthorBio": string|null,  // REQUIRED if creating new author (2-3 funny sentences, <= 500 chars)',
     '  "layout": "standard"|"wide"|"opinion",',
     '  "isFeatured": boolean,',
     '  "isHeadline": boolean,',
-    '  "imageCaption": string|null,',
-    '  "imagePrompt": string|null  // REQUIRED: prompt for an illustrative photo-like image, no text overlays. Always provide this unless the story truly cannot be illustrated.',
+    '  "imageCaption": string|null,  // <= 160 chars',
+    '  "imagePrompt": string|null  // REQUIRED: prompt for an illustrative photorealistic image, no text overlays. Always provide this unless the story truly cannot be illustrated. <= 600 chars',
     '}',
     '',
     'IMPORTANT: You MUST provide an imagePrompt for almost every article. The imagePrompt should be:',
-    '- A detailed description of a photo-like image that would illustrate the article',
+    '- A detailed description of a photorealistic image that would illustrate the article',
     '- Specific, visual, and descriptive (e.g., "A man in a suit holding a stack of papers at a Bürgeramt counter, frustrated expression, bureaucratic setting")',
     '- No text overlays, just a visual description',
     '- Related to the main subject of the article',
@@ -978,7 +1107,16 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   try {
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
-    const validated = GeneratedArticleSchema.parse(parsed)
+    const validation = GeneratedArticleSchema.safeParse(parsed)
+    if (!validation.success) {
+      return await repairToSchema({
+        badOutput: text,
+        categories: input.categories,
+        authors: input.authors,
+        validationErrors: validation.error.issues,
+      })
+    }
+    const validated = validation.data
     const langSample =
       `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
         0,

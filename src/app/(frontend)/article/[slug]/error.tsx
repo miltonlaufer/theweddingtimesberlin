@@ -76,10 +76,10 @@ export default function ArticleError({ error, reset }: ArticleErrorProps) {
         </div>
 
         <p className="mt-8 font-sans text-xs text-[#666]">
-          If this keeps happening, it’s likely a temporary connection/database issue. (We’ll also add full offline-mode support via PWA next.)
+          If this keeps happening, it’s likely a temporary connection/database issue. Offline pages
+          should show when the network is down.
         </p>
       </div>
     </main>
   )
 }
-
