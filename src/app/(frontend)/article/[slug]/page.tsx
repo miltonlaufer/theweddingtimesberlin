@@ -216,7 +216,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
           <div className="mt-8 max-w-[680px] mx-auto">
             <div
-              className="article font-serif text-xl leading-relaxed text-[#121212] prose prose-lg"
+              className="article font-serif text-xl md:text-2xl leading-relaxed text-[#121212] prose prose-lg"
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
           </div>

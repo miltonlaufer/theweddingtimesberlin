@@ -3,9 +3,9 @@
 @layer theme, base, components, utilities;
 
 /* Import theme and utilities, but SKIP preflight */
-@import "tailwindcss/theme.css" layer(theme);
+@import 'tailwindcss/theme.css' layer(theme);
 /* @import "tailwindcss/preflight.css" layer(base); <- DISABLED to not conflict with Payload */
-@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import 'tailwindcss/utilities.css' layer(utilities) source(none);
 
 /* Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap');
@@ -17,9 +17,10 @@
 /* Chomsky blackletter font for masthead */
 @font-face {
   font-family: 'Chomsky';
-  src: url('/fonts/Chomsky.woff2') format('woff2'),
-       url('/fonts/Chomsky.woff') format('woff'),
-       url('/fonts/Chomsky.otf') format('opentype');
+  src:
+    url('/fonts/Chomsky.woff2') format('woff2'),
+    url('/fonts/Chomsky.woff') format('woff'),
+    url('/fonts/Chomsky.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -40,11 +41,11 @@
     color: #121212;
     background: #fff;
     /* NYT-like body: Times/Imperial-style serif (headlines use a different serif) */
-    font-family: "Times New Roman", Times, Georgia, serif;
+    font-family: 'Times New Roman', Times, Georgia, serif;
     font-size: 19px;
     line-height: 1.5;
     font-kerning: normal;
-    font-feature-settings: "kern", "liga", "clig", "calt";
+    font-feature-settings: 'kern', 'liga', 'clig', 'calt';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -89,20 +90,20 @@
 
 @utility font-headline {
   /* NYT-like headline: distinct serif */
-  font-family: 'Libre Baskerville', Georgia, "Times New Roman", Times, serif;
+  font-family: 'Libre Baskerville', Georgia, 'Times New Roman', Times, serif;
 }
 
 @utility font-serif {
-  font-family: "Times New Roman", Times, Georgia, serif;
+  font-family: 'Times New Roman', Times, Georgia, serif;
 }
 
 @utility font-article {
   /* Closer to NYT body feel than Times New Roman */
-  font-family: Georgia, "Times New Roman", Times, serif;
+  font-family: Georgia, 'Times New Roman', Times, serif;
 }
 
 @utility font-sans {
-  font-family: 'Libre Franklin', "helvetica neue", helvetica, arial, sans-serif;
+  font-family: 'Libre Franklin', 'helvetica neue', helvetica, arial, sans-serif;
 }
 
 @utility double-rule {
@@ -153,26 +154,27 @@
   }
 
   /* Article content headings - target nested structure with high specificity */
-  article  h1,
+  article h1,
   article .prose h1,
   article .prose-lg h1,
-  article  .payload-richtext h1,
+  article .payload-richtext h1,
   .payload-richtext h1 {
     line-height: 1.1 !important;
     font-style: italic !important;
   }
 
-  article  h2,
+  article h2,
   article .prose h2,
   article .prose-lg h2,
-  article  .payload-richtext h2,
+  article .payload-richtext h2,
   .payload-richtext h2 {
     line-height: 1.25 !important;
     margin-top: 1.5rem !important;
     margin-bottom: 1.5rem !important;
   }
 
-  article h3, article h4 {
+  article h3,
+  article h4 {
     margin-top: 1.25rem !important;
     margin-bottom: 1.25rem !important;
   }
@@ -180,5 +182,23 @@
   /* Override for spanning article title */
   article .spanning-article-title {
     margin-top: -5px !important;
+  }
+
+  /* Article body text - larger on desktop to match NYT */
+  article .article {
+    font-size: 1.25rem; /* 20px - mobile */
+  }
+
+  @media (min-width: 768px) {
+    article .article {
+      font-size: 1.5rem; /* 24px - desktop, larger than NYT's ~18px for better readability */
+      line-height: 1.6;
+    }
+
+    article .article p {
+      font-size: 1.5rem;
+      line-height: 1.6;
+      margin-bottom: 1.25rem;
+    }
   }
 }
