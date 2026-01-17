@@ -7,6 +7,8 @@ import { OfflineReloadButton } from '@/components/OfflineReloadButton'
 export default function OfflinePage() {
   /******************* COMPUTED ***********************/
 
+  const currentYear = new Date().getFullYear()
+
   const messages = [
     'Telekom says the internet is working. Your browser says “nice try.”',
     'Deutsche Bahn WiFi is available in the same way unicorns are available.',
@@ -23,8 +25,8 @@ export default function OfflinePage() {
   /******************* RENDER ***********************/
 
   return (
-    <main className="py-10 w-full">
-      <div className="max-w-[680px] mx-auto px-5">
+    <main className="pt-16 pb-10 w-full">
+      <div className="max-w-170 mx-auto px-5 pt-4">
         <h1 className="font-headline text-3xl md:text-4xl font-bold text-[#121212]">
           You are offline
         </h1>
@@ -45,7 +47,7 @@ export default function OfflinePage() {
             Back to home
           </Link>
           <span className="font-sans text-sm text-[#666]">
-            Try again when the internet remembers it’s 2026.
+            Try again when the internet remembers it&rsquo;s {currentYear}.
           </span>
         </div>
       </div>

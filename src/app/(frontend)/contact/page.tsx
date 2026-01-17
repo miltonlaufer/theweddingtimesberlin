@@ -11,10 +11,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: 'Contact Us | The Wedding Times',
-    description: 'Get in touch with The Wedding Times. We welcome your feedback, story tips, and inquiries.',
+    description:
+      'Get in touch with The Wedding Times. We welcome your feedback, story tips, and inquiries.',
     openGraph: {
       title: 'Contact Us | The Wedding Times',
-      description: 'Get in touch with The Wedding Times. We welcome your feedback, story tips, and inquiries.',
+      description:
+        'Get in touch with The Wedding Times. We welcome your feedback, story tips, and inquiries.',
       type: 'website',
       url: `${baseUrl}/contact`,
       images: [
@@ -41,7 +43,8 @@ export default function ContactPage() {
 
         <div className="font-serif text-[17px] leading-[1.6] text-[#333] space-y-6">
           <p>
-            We&apos;d love to hear from you! Whether you have a story tip, feedback, a correction, or just want to say hello, we&apos;re here to listen.
+            We&apos;d love to hear from you! Whether you have a story tip, feedback, a correction,
+            or just want to say hello, we&apos;re here to listen.
           </p>
 
           <section>
@@ -49,7 +52,8 @@ export default function ContactPage() {
               General Inquiries
             </h2>
             <p>
-              For general questions, feedback, or inquiries, please reach out to us through our editorial team. We aim to respond to all messages within 48 hours.
+              For general questions, feedback, or inquiries, please reach out to us through our
+              editorial team. We aim to respond to all messages within 48 hours.
             </p>
           </section>
 
@@ -58,7 +62,8 @@ export default function ContactPage() {
               Story Tips
             </h2>
             <p>
-              Have a story idea or tip? We welcome submissions from Wedding residents and Berliners who have interesting stories to share. Please use our{' '}
+              Have a story idea or tip? We welcome submissions from Wedding residents and Berliners
+              who have interesting stories to share. Please use our{' '}
               <a href="/submit" className="text-[#121212] underline hover:text-[#555]">
                 Submit a Story
               </a>{' '}
@@ -66,35 +71,10 @@ export default function ContactPage() {
             </p>
           </section>
 
-          <section>
-            <h2 className="font-headline text-[28px] font-bold leading-[1.2] text-[#121212] mb-3">
-              Corrections
-            </h2>
-            <p>
-              We strive for accuracy in all our reporting. If you notice an error, please let us know through our{' '}
-              <a href="/corrections" className="text-[#121212] underline hover:text-[#555]">
-                Corrections
-              </a>{' '}
-              page.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="font-headline text-[28px] font-bold leading-[1.2] text-[#121212] mb-3">
-              Advertising
-            </h2>
-            <p>
-              Interested in advertising with us? Visit our{' '}
-              <a href="/advertise" className="text-[#121212] underline hover:text-[#555]">
-                Advertise
-              </a>{' '}
-              page for more information about advertising opportunities.
-            </p>
-          </section>
-
           <section className="pt-4 border-t border-[#e2e2e2]">
             <p className="font-sans text-sm text-[#666]">
-              <strong className="font-semibold text-[#121212]">Note:</strong> The Wedding Times is a satirical publication. All content is intended for entertainment purposes.
+              <strong className="font-semibold text-[#121212]">Note:</strong> The Wedding Times is a
+              satirical publication. All content is intended for entertainment purposes.
             </p>
           </section>
         </div>

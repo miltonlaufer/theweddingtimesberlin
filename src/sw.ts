@@ -26,22 +26,12 @@ const serwist = new Serwist({
   precacheEntries: [...self.__SW_MANIFEST, OFFLINE_URL],
   precacheOptions: {
     cleanupOutdatedCaches: true,
-    // If navigation fails and there is no cached page, show the offline page.
-    navigateFallback: OFFLINE_URL,
     // Avoid catching API/admin routes
     navigateFallbackDenylist: [/^\/api\//, /^\/admin/],
   },
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  fallbacks: {
-    entries: [
-      {
-        url: OFFLINE_URL,
-        matcher: ({ request }) => request.mode === 'navigate',
-      },
-    ],
-  },
   runtimeCaching: [
     // Cache visited article pages for offline reading.
     {
@@ -90,6 +80,22 @@ const serwist = new Serwist({
       }),
     },
   ],
+})
+
+serwist.setCatchHandler(async ({ request }) => {
+  if (request.mode === 'navigate') {
+    const cached = await caches.match(request)
+    if (cached) {
+      return cached
+    }
+
+    const offline = await serwist.matchPrecache(OFFLINE_URL)
+    if (offline) {
+      return offline
+    }
+  }
+
+  return Response.error()
 })
 
 serwist.addEventListeners()
