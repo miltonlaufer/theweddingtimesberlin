@@ -12,12 +12,10 @@ type FallbackImageProps = Omit<ImageProps, 'onError'>
  * when the original image fails to load.
  *
  * Uses a state object that includes the original src to automatically
- * reset when the src prop changes (React will reset state when the key
- * differs from what was used to create the initial state).
+ * reset when the src prop changes.
  */
 export const FallbackImage: React.FC<FallbackImageProps> = ({ src, alt, ...props }) => {
-  // State holds both the current display src and the original src it was based on
-  // When src prop changes, we detect it and show the new src (not fallback)
+  // Track which src we're showing and whether it errored
   const [state, setState] = useState({ originalSrc: src, displaySrc: src, hasError: false })
 
   // If src prop changed, reset to show the new src
@@ -30,5 +28,8 @@ export const FallbackImage: React.FC<FallbackImageProps> = ({ src, alt, ...props
     }
   }, [src, hasError])
 
-  return <Image {...props} src={displaySrc} alt={alt} onError={handleError} />
+  // Use a key that changes when we switch to fallback to force remount
+  const imageKey = hasError ? 'fallback' : String(src)
+
+  return <Image key={imageKey} {...props} src={displaySrc} alt={alt} onError={handleError} />
 }
