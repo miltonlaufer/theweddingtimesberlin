@@ -21,6 +21,8 @@ const NEXT_STATIC_CACHE = 'next-static'
 const STYLE_CACHE = 'styles'
 const SCRIPT_CACHE = 'scripts'
 const FONT_CACHE = 'fonts'
+const GOOGLE_FONT_STYLES_CACHE = 'google-font-styles'
+const GOOGLE_FONT_FILES_CACHE = 'google-font-files'
 const OFFLINE_URL = '/offline'
 
 /******************* SERWIST INSTANCE ***********************/
@@ -77,7 +79,8 @@ const serwist = new Serwist({
     },
     // Cache stylesheets.
     {
-      matcher: ({ request }) => request.destination === 'style',
+      matcher: ({ request, url }) =>
+        request.destination === 'style' || url.pathname.endsWith('.css'),
       handler: new StaleWhileRevalidate({
         cacheName: STYLE_CACHE,
         plugins: [new CacheableResponsePlugin({ statuses: [0, 200] })],
@@ -93,13 +96,36 @@ const serwist = new Serwist({
     },
     // Cache fonts with a long TTL.
     {
-      matcher: ({ request }) => request.destination === 'font',
+      matcher: ({ request, url }) =>
+        request.destination === 'font' || /\.(woff2|woff|ttf|otf)$/.test(url.pathname),
       handler: new CacheFirst({
         cacheName: FONT_CACHE,
         plugins: [
           new CacheableResponsePlugin({ statuses: [0, 200] }),
           new ExpirationPlugin({
             maxEntries: 50,
+            maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
+          }),
+        ],
+      }),
+    },
+    // Cache Google Fonts stylesheets.
+    {
+      matcher: ({ url }) => url.origin === 'https://fonts.googleapis.com',
+      handler: new StaleWhileRevalidate({
+        cacheName: GOOGLE_FONT_STYLES_CACHE,
+        plugins: [new CacheableResponsePlugin({ statuses: [0, 200] })],
+      }),
+    },
+    // Cache Google Fonts files.
+    {
+      matcher: ({ url }) => url.origin === 'https://fonts.gstatic.com',
+      handler: new CacheFirst({
+        cacheName: GOOGLE_FONT_FILES_CACHE,
+        plugins: [
+          new CacheableResponsePlugin({ statuses: [0, 200] }),
+          new ExpirationPlugin({
+            maxEntries: 60,
             maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
           }),
         ],

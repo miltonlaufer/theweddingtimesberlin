@@ -15,10 +15,22 @@ function generateRandomPrice(): { price: string; isUp: boolean } {
 
 export const DrugTicker: React.FC = React.memo(function DrugTicker() {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [currentPrice, setCurrentPrice] = useState(generateRandomPrice)
+  // Initialize with a consistent default to avoid hydration mismatch
+  // The price will be updated after mount via the interval
+  const [currentPrice, setCurrentPrice] = useState<{ price: string; isUp: boolean }>({
+    price: '+0.00%',
+    isUp: true,
+  })
   const [isVisible, setIsVisible] = useState(true)
 
   useEffect(() => {
+    // Start the ticker animation after mount to avoid hydration mismatch
+    // Use setTimeout to defer the initial update, avoiding setState in effect
+    const initialTimeout = setTimeout(() => {
+      setCurrentIndex((prev) => (prev + 1) % drugNames.length)
+      setCurrentPrice(generateRandomPrice())
+    }, 0)
+
     const interval = setInterval(() => {
       setIsVisible(false)
       setTimeout(() => {
@@ -27,7 +39,11 @@ export const DrugTicker: React.FC = React.memo(function DrugTicker() {
         setIsVisible(true)
       }, 500)
     }, 4000)
-    return () => clearInterval(interval)
+
+    return () => {
+      clearTimeout(initialTimeout)
+      clearInterval(interval)
+    }
   }, [])
 
   return (

@@ -9,6 +9,7 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV !== 'production',
   swSrc: 'src/sw.ts',
   swDest: 'public/sw.js',
+  include: [/^\/_next\/static\/css\/.*\.css$/, /^\/_next\/static\/media\/.*$/],
   // Cache pages as users navigate with next/link
   cacheOnNavigation: true,
   // When coming back online, refresh to get fresh content

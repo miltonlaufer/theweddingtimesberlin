@@ -47,3 +47,4 @@ public/sitemap*.xml
 public/robots.txt
 public/sw.js
 public/swe*.js
+test-results/
