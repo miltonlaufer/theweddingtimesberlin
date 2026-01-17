@@ -12,6 +12,7 @@ import { Categories } from './collections/Categories'
 import { Authors } from './collections/Authors'
 import { Media } from './collections/Media'
 import { Users } from './collections/Users'
+import { PushSubscriptions } from './collections/PushSubscriptions'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -23,7 +24,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Articles, Categories, Authors, Media],
+  collections: [Users, Articles, Categories, Authors, Media, PushSubscriptions],
   editor: lexicalEditor(),
   email: resendAdapter({
     apiKey: process.env.RESEND_API_KEY!,
@@ -42,7 +43,8 @@ export default buildConfig({
     // - Production: use Postgres automatically
     // - Dev: use SQLite unless explicitly opted-in via PAYLOAD_USE_POSTGRES=1
     const usePostgres =
-      isPostgresUri && (process.env.NODE_ENV === 'production' || process.env.PAYLOAD_USE_POSTGRES === '1')
+      isPostgresUri &&
+      (process.env.NODE_ENV === 'production' || process.env.PAYLOAD_USE_POSTGRES === '1')
 
     return usePostgres
       ? postgresAdapter({

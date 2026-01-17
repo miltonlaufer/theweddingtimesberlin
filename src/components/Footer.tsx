@@ -4,6 +4,7 @@ import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { NytContainer } from './NytContainer'
+import { PushNotificationButton } from './PushNotificationButton'
 
 /******************* TYPES ***********************/
 
@@ -122,6 +123,10 @@ export const Footer: React.FC<FooterProps> = React.memo(function Footer({ catego
                 </a>
               </li>
             </ul>
+            {/* Push Notifications */}
+            <div className="mt-4">
+              <PushNotificationButton />
+            </div>
           </div>
         </div>
 

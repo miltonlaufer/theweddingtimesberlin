@@ -10,7 +10,7 @@
 [![Playwright](https://img.shields.io/badge/Playwright-E2E-2e2e2e?logo=playwright&logoColor=white)](https://playwright.dev/)
 [![ESLint](https://img.shields.io/badge/ESLint-9-4B32C3?logo=eslint&logoColor=white)](https://eslint.org/)
 
-Satirical news site built with **Next.js (App Router)** + **Payload CMS**.
+Satirical news site built with **Next.js (App Router)** + **Payload CMS**. Features include AI-generated articles, push notifications, offline support, and a PWA experience.
 
 Live site: https://theweddingtimesberlin.de/
 
@@ -146,6 +146,8 @@ The site uses **Next.js ISR** (revalidate every hour) combined with **Vercel Cro
 ### Cron endpoint
 
 - `GET /api/cron/generate` — protected by `CRON_SECRET` in production
+  - Generates new articles based on RSS topics
+  - Automatically sends push notifications to subscribed users after successful article generation
 
 ### Environment variables
 
@@ -168,9 +170,100 @@ The `vercel.json` includes:
 
 **Note:** Vercel Hobby (free) accounts are limited to **daily** cron frequency. For hourly updates, you need a **Pro** account or can use an external service (e.g., cron-job.org) to hit the endpoint.
 
-### Author Pool
+#### Author Pool
 
 The system auto-generates fictional authors when the pool is too small:
 
 - `MIN_AUTHOR_POOL` (default: 8)
 - `MAX_NEW_AUTHORS_PER_RUN` (default: 3)
+
+## Progressive Web App (PWA)
+
+The site is a **Progressive Web App** with offline support and push notifications.
+
+### Features
+
+- **Service Worker** for offline functionality and caching
+- **Push Notifications** to alert users when new articles are published
+- **Installable** - users can add the site to their home screen
+- **Offline page** - shows a custom offline page when the network is unavailable
+
+### Push Notifications
+
+Users can subscribe to receive push notifications when new articles are published. Notifications are automatically sent after each cron job run.
+
+#### Setup
+
+1. Generate VAPID keys:
+
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+
+2. Add to your `.env.local`:
+
+   ```bash
+   VAPID_PUBLIC_KEY="your-public-key-here"
+   VAPID_PRIVATE_KEY="your-private-key-here"
+   VAPID_EMAIL="mailto:admin@example.com"
+   ```
+
+3. Add the `PushNotificationButton` component to your UI (e.g., in the Footer):
+
+   ```tsx
+   import { PushNotificationButton } from '@/components/PushNotificationButton'
+
+   ;<PushNotificationButton />
+   ```
+
+#### How It Works
+
+1. Users click "Enable Push Notifications" → browser requests permission
+2. If granted, subscription is saved to the database (`push-subscriptions` collection)
+3. When the cron job runs and creates articles, notifications are automatically sent to all subscribers
+4. Users receive notifications and can click to open the latest article
+
+#### API Endpoints
+
+- `GET /api/push/vapid-public-key` - Returns the VAPID public key for client-side subscription
+- `POST /api/push/subscribe` - Registers a user's push subscription
+
+#### Service Worker
+
+The service worker (`src/sw.ts`) handles:
+
+- Push event notifications
+- Notification click events (opens the article URL)
+- Offline page caching
+- Article page caching for faster navigation
+
+## Environment Variables Summary
+
+### Required
+
+- `PAYLOAD_SECRET` - Payload CMS secret key
+- `OPENAI_API_KEY` - OpenAI API key for article generation
+- `RESEND_API_KEY` - Resend API key for emails
+- `RESEND_FROM_ADDRESS` - Verified sender email address
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+- `SUPABASE_BUCKET` - Supabase storage bucket name
+- `CRON_SECRET` - Secret for protecting cron endpoints (production)
+
+### Optional
+
+- `DATABASE_URI` - Database connection string (defaults to SQLite locally)
+- `OPENAI_MODEL` - OpenAI model (default: `gpt-4o-mini`)
+- `OPENAI_IMAGE_MODEL` - Image generation model (default: `gpt-image-1.5`)
+- `OPENAI_REPAIR_MODEL` - JSON repair fallback model
+- `OPENAI_AUTHOR_MODEL` - Author generation model
+- `RSS_BERLINER_ZEITUNG_FEED` - Berliner Zeitung RSS feed URL
+- `RSS_NYTIMES_FEED` - NYT RSS feed override
+- `ARTICLES_PER_RUN` - Articles to generate per cron run (default: 8, can be overridden via env var)
+- `MIN_AUTHOR_POOL` - Minimum author count (default: 8)
+- `MAX_NEW_AUTHORS_PER_RUN` - Max new authors per run (default: 3)
+- `VAPID_PUBLIC_KEY` - Push notification public key
+- `VAPID_PRIVATE_KEY` - Push notification private key
+- `VAPID_EMAIL` - VAPID email (default: `mailto:admin@example.com`)
+
+See `ENV.example` for a complete template.

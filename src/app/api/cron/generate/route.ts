@@ -4,6 +4,7 @@ import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import { generateArticle, extractHeadlinePatterns } from '@/lib/generation/generateArticle'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
+import { sendPushNotifications } from '@/lib/push/sendNotifications'
 import {
   convertMarkdownToLexical,
   defaultEditorConfig,
@@ -396,11 +397,42 @@ export async function GET(req: Request) {
       }
     }
 
+    // Send push notifications if articles were created
+    let notificationResult: { sent: number; failed: number; errors: string[] } | null = null
+    if (createdArticles.length > 0) {
+      try {
+        const headlineArticle = createdArticles[0]
+        const articleCount = createdArticles.length
+        const notificationTitle =
+          articleCount === 1 ? 'New Article Published' : `${articleCount} New Articles Published`
+
+        notificationResult = await sendPushNotifications(notificationTitle, {
+          body:
+            articleCount === 1
+              ? 'Check out the latest story!'
+              : `Check out ${articleCount} new stories!`,
+          icon: '/logo-200x200.png',
+          badge: '/logo-200x200.png',
+          url: headlineArticle.slug ? `/article/${headlineArticle.slug}` : '/',
+          tag: 'new-articles',
+        })
+      } catch (error) {
+        // Log but don't fail the cron job if notifications fail
+        console.error('Failed to send push notifications:', error)
+      }
+    }
+
     return NextResponse.json({
       ok: createdArticles.length > 0,
       created: createdArticles,
       errors: errors.length > 0 ? errors : undefined,
       summary: `Created ${createdArticles.length}/${ARTICLES_PER_RUN} articles`,
+      notifications: notificationResult
+        ? {
+            sent: notificationResult.sent,
+            failed: notificationResult.failed,
+          }
+        : undefined,
     })
   } catch (error) {
     console.error('Cron generate error:', error)
