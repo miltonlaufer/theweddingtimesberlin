@@ -2,8 +2,8 @@
 
 import React, { useMemo } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import type { IArticle } from '@/types/article'
+import { FallbackImage } from '@/components/FallbackImage'
 
 /******************* TYPES ***********************/
 
@@ -75,7 +75,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = React.memo(function Artic
               variant === 'headline' ? 'aspect-[16/9]' : 'aspect-[4/3]'
             }`}
           >
-            <Image
+            <FallbackImage
               src={article.featuredImageUrl}
               alt={article.headline}
               fill

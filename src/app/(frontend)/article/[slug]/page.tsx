@@ -10,6 +10,7 @@ import {
   mapPayloadArticleToIArticle,
   type PayloadArticleLike,
 } from '@/lib/articles/mapPayloadArticleToIArticle'
+import { FallbackImage } from '@/components/FallbackImage'
 
 /******************* RENDERING CONFIG ***********************/
 
@@ -196,7 +197,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           {article.featuredImageUrl && (
             <figure className="mt-8 max-w-[680px] mx-auto">
               <div className="relative aspect-[16/10] overflow-hidden bg-[#e2e2e2]">
-                <Image
+                <FallbackImage
                   src={article.featuredImageUrl}
                   alt={article.headline}
                   fill

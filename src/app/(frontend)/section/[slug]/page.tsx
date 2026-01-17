@@ -1,6 +1,5 @@
 import React from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { NytContainer } from '@/components/NytContainer'
 import { getPayload } from '@/lib/payload'
@@ -10,6 +9,7 @@ import {
 } from '@/lib/articles/mapPayloadArticleToIArticle'
 import { calculateReadingTime } from '@/lib/articles/readingTime'
 import type { IArticle } from '@/types/article'
+import { FallbackImage } from '@/components/FallbackImage'
 
 /******************* RENDERING CONFIG ***********************/
 
@@ -112,7 +112,7 @@ function ArticleCard({ article }: { article: IArticle }) {
       <article>
         {article.featuredImageUrl && (
           <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
-            <Image
+            <FallbackImage
               src={article.featuredImageUrl}
               alt={article.headline}
               fill

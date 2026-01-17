@@ -1,8 +1,8 @@
 import React from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import type { IArticle } from '@/types/article'
 import { calculateReadingTime } from '@/lib/articles/readingTime'
+import { FallbackImage } from '@/components/FallbackImage'
 
 interface ArticleBlockProps {
   article: IArticle
@@ -17,7 +17,7 @@ export function LeftColumnArticle({ article, isLast, showImage }: ArticleBlockPr
       <article className={`pb-5 mb-5 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
         {showImage && article.featuredImageUrl && (
           <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
-            <Image
+            <FallbackImage
               src={article.featuredImageUrl}
               alt={article.headline}
               fill
@@ -44,7 +44,7 @@ export function HeadlineArticle({ article }: { article: IArticle }) {
       <article>
         {article.featuredImageUrl && (
           <div className="w-full aspect-[16/10] mb-3 relative overflow-hidden">
-            <Image
+            <FallbackImage
               src={article.featuredImageUrl}
               alt={article.headline}
               fill
@@ -108,7 +108,7 @@ export function CenterColumnArticle({ article, isLast, showImage }: ArticleBlock
       <article className={`pb-5 mb-5 ${!isLast ? 'border-b border-[#e2e2e2]' : ''}`}>
         {showImage && article.featuredImageUrl && (
           <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
-            <Image
+            <FallbackImage
               src={article.featuredImageUrl}
               alt={article.headline}
               fill
@@ -140,7 +140,7 @@ export function SpanningArticle({ article, showImage }: { article: IArticle; sho
       <article className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-start">
         {showImage && article.featuredImageUrl && (
           <div className="relative w-full aspect-[16/10] overflow-hidden self-start">
-            <Image
+            <FallbackImage
               src={article.featuredImageUrl}
               alt={article.headline}
               fill
@@ -180,7 +180,7 @@ export function RightColumnArticle({ article, isLast, showImage }: ArticleBlockP
         {showImage && article.featuredImageUrl ? (
           <>
             <div className="relative w-full aspect-[16/10] mb-3 overflow-hidden">
-              <Image
+              <FallbackImage
                 src={article.featuredImageUrl}
                 alt={article.headline}
                 fill

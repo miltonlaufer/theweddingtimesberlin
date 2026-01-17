@@ -6,4 +6,4 @@ export { ArticleCard } from './ArticleCard'
 export { Footer } from './Footer'
 export { FooterServer } from './FooterServer'
 export { NytContainer } from './NytContainer'
-
+export { FallbackImage } from './FallbackImage'
