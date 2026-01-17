@@ -381,6 +381,16 @@ export async function GET(req: Request) {
           slug,
           featuredImageUrl: featuredImageUrl ?? null,
         })
+
+        // Add the new headline to recentArticleTitles to avoid repetition in subsequent iterations
+        recentArticleTitles.unshift(generated.headline)
+        // Also update the patterns to avoid similar structures
+        const newPatterns = extractHeadlinePatterns([generated.headline])
+        for (const pattern of newPatterns) {
+          if (!uniquePatterns.includes(pattern)) {
+            uniquePatterns.push(pattern)
+          }
+        }
       } catch (error) {
         errors.push(`Article ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
