@@ -1,65 +1,33 @@
 /// <reference lib="webworker" />
 
-import { CacheableResponsePlugin, ExpirationPlugin, NetworkFirst, Serwist } from 'serwist'
 import { defaultCache } from '@serwist/next/worker'
+import type { PrecacheEntry, SerwistGlobalConfig } from 'serwist'
+import { Serwist } from 'serwist'
 
-declare const self: ServiceWorkerGlobalScope & {
-  __SW_MANIFEST: Array<{ url: string; revision?: string | null }>
+declare global {
+  interface WorkerGlobalScope extends SerwistGlobalConfig {
+    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined
+  }
 }
 
-/******************* CONSTANTS ***********************/
-
-const ARTICLE_CACHE = 'pages-articles'
-const OFFLINE_URL = '/offline'
-
-/******************* SERWIST INSTANCE ***********************/
+declare const self: ServiceWorkerGlobalScope
 
 const serwist = new Serwist({
-  precacheEntries: [...self.__SW_MANIFEST, OFFLINE_URL],
-  precacheOptions: {
-    cleanupOutdatedCaches: true,
-    // Avoid catching API/admin routes
-    navigateFallbackDenylist: [/^\/api\//, /^\/admin/],
-  },
+  precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  runtimeCaching: [
-    // Cache visited article pages for offline reading.
-    {
-      matcher: ({ request, url }) =>
-        request.mode === 'navigate' && url.pathname.startsWith('/article/'),
-      handler: new NetworkFirst({
-        cacheName: ARTICLE_CACHE,
-        networkTimeoutSeconds: 4,
-        plugins: [
-          new CacheableResponsePlugin({ statuses: [200] }),
-          new ExpirationPlugin({
-            maxEntries: 80,
-            maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-          }),
-        ],
-      }),
-    },
-    // Use Serwist's recommended Next.js caching rules for static assets.
-    ...defaultCache,
-  ],
-})
-
-serwist.setCatchHandler(async ({ request }) => {
-  if (request.mode === 'navigate') {
-    const cached = await caches.match(request)
-    if (cached) {
-      return cached
-    }
-
-    const offline = await serwist.matchPrecache(OFFLINE_URL)
-    if (offline) {
-      return offline
-    }
-  }
-
-  return Response.error()
+  runtimeCaching: defaultCache,
+  fallbacks: {
+    entries: [
+      {
+        url: '/offline',
+        matcher({ request }) {
+          return request.destination === 'document'
+        },
+      },
+    ],
+  },
 })
 
 serwist.addEventListeners()
