@@ -475,7 +475,7 @@ async function regenerateHeadline(args: {
   const llm = new ChatOpenAI({
     apiKey,
     model: repairModelName,
-    temperature: 1.2, // Some creativity but more controlled
+    temperature: 2, // crazy creative  // Some creativity but more controlled
   })
 
   const bannedWordsLower = args.bannedOpeningWords.map((w) => w.toLowerCase())
@@ -600,7 +600,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const llm = new ChatOpenAI({
     apiKey,
     model: modelName,
-    temperature: 1.5,
+    temperature: 2, // crazy creative
   })
 
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
@@ -720,8 +720,35 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Berlin club kid realizes hes been going to the same party for 8 years with only bathroom breaks',
     'New documentary follows the lives of Berghain cigarettes from pocket to floor to stepped on',
   ]
-  const selectedScenario =
-    concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
+
+  // DRUGS AND TECHNO BIAS: 50% chance to pick from drugs/techno scenarios specifically
+  const drugsAndTechnoScenarios = concreteBerlinScenarios.filter(
+    (scenario) =>
+      scenario.includes('Berghain') ||
+      scenario.includes('ketamine') ||
+      scenario.includes('drug') ||
+      scenario.includes('techno') ||
+      scenario.includes('club') ||
+      scenario.includes('DJ') ||
+      scenario.includes('dealer') ||
+      scenario.includes('Görlitzer') ||
+      scenario.includes('dancing') ||
+      scenario.includes('trip') ||
+      scenario.includes('cocaine') ||
+      scenario.includes('Sisyphos') ||
+      scenario.includes('Kitkat') ||
+      scenario.includes('after-hours') ||
+      scenario.includes('darkroom') ||
+      scenario.includes('sober') ||
+      scenario.includes('high') ||
+      scenario.includes('pupils'),
+  )
+
+  // 50% chance to select from drugs/techno scenarios, 50% from all scenarios
+  const useDrugsOrTechnoScenario = Math.random() < 0.5
+  const selectedScenario = useDrugsOrTechnoScenario
+    ? drugsAndTechnoScenarios[Math.floor(Math.random() * drugsAndTechnoScenarios.length)]
+    : concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
 
   // Randomly pick a topic focus to force variety (aligned with site categories)
   const topicFocuses = [
@@ -957,7 +984,41 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '[OPINION] Berghain rejection made me a better person (it didnt)',
     '[OPINION] In praise of being a terrible neighbor',
   ]
-  const randomFocus = topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
+
+  // DRUGS AND TECHNO BIAS: 50% chance to pick from drugs/techno/nightlife/decadence topics specifically
+  // This ensures Berlin's most iconic cultural elements appear frequently
+  const drugsAndTechnoTopics = topicFocuses.filter(
+    (topic) =>
+      topic.includes('drug') ||
+      topic.includes('ketamine') ||
+      topic.includes('cocaine') ||
+      topic.includes('MDMA') ||
+      topic.includes('speed') ||
+      topic.includes('GHB') ||
+      topic.includes('LSD') ||
+      topic.includes('techno') ||
+      topic.includes('Berghain') ||
+      topic.includes('club') ||
+      topic.includes('DJ') ||
+      topic.includes('rave') ||
+      topic.includes('nightlife') ||
+      topic.includes('after-hour') ||
+      topic.includes('Kitkat') ||
+      topic.includes('Sisyphos') ||
+      topic.includes('decadence') ||
+      topic.includes('bender') ||
+      topic.includes('sex part') ||
+      topic.includes('orgi') ||
+      topic.includes('hedonism') ||
+      topic.includes('Görlitzer Park') ||
+      topic.includes('dealer'),
+  )
+
+  // 50% chance to select from drugs/techno topics, 50% from all topics
+  const useDrugsOrTechnoTopic = Math.random() < 0.5
+  const randomFocus = useDrugsOrTechnoTopic
+    ? drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
+    : topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
 
   // When RSS topics are available, pick one to base the article on
   const rssTopics = input.topicSummary
@@ -1354,19 +1415,40 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
         ].join('\n')
       : '',
+    '═══════════════════════════════════════════════════════════════════',
+    'DRUGS AND TECHNO IN HEADLINES - THIS IS MANDATORY',
+    '═══════════════════════════════════════════════════════════════════',
+    'Berlin is synonymous with drugs and techno. Your headlines MUST reflect this.',
+    'When your topic involves drugs, techno, clubs, nightlife, or decadence, the headline MUST contain at least one of these keywords:',
+    '- Drug-related: ketamine, cocaine, MDMA, speed, drugs, high, dealer, Görlitzer Park, trip, coming down',
+    '- Club-related: Berghain, techno, DJ, club, Kitkat, Sisyphos, Tresor, rave, bouncer, dancefloor, after-hours',
+    '- Decadence-related: bender, party, orgy, sex, hedonism, darkroom',
+    '',
+    'Example headlines that work:',
+    '- "Berghain Bouncer Starts Side Business Rating Pupils"',
+    '- "Görlitzer Park Dealer Launches Subscription Model with Newsletter"',
+    '- "Ketamine Enthusiast Accidentally Fixes His Life While Dissociated"',
+    '- "New Study: 87% of Berlin Techno DJs Just Pressing Play"',
+    '- "Man at Sisyphos Has Been Dancing to Same Loop for 14 Hours"',
+    '- "Local Club Introduces Sober Corner, Nobody Can Find It"',
+    '',
+    'DO NOT write vague headlines like "Berlin Nightlife Sees Changes" - be SPECIFIC about drugs and techno!',
+    '═══════════════════════════════════════════════════════════════════',
+    '',
     'HEADLINE VARIETY IS CRITICAL:',
     useFeatureStoryPrompt
       ? [
           'For feature/news stories, use traditional news headline formats:',
-          '- Direct, factual-sounding headlines: "Wedding Man Discovers Späti Loyalty Card Replaced with Library Card" (Note: "Wedding" here refers to the Berlin neighborhood, not a wedding ceremony)',
-          '- Question format: "Why Did 47 Bikes Disappear from Müllerstraße?"',
-          '- Descriptive: "The Great Späti War of Neukölln Enters Third Year"',
-          '- Avoid overly clever wordplay - keep it news-like but absurd',
+          '- Direct, factual-sounding headlines: "Berghain Bouncer Launches Life Coaching Business" or "Ketamine Shortage Hits Wedding Späti Network"',
+          '- Question format: "Why Did Görlitzer Park Dealers Start Accepting Crypto?"',
+          '- Descriptive: "The Great Techno Exodus: DJs Fleeing to Leipzig"',
+          '- Keep it news-like but absurd, and include drug/techno keywords when relevant',
         ].join('\n')
       : [
           'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
           'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
           'Think like a real newspaper: headlines should grab attention with wit, not formula.',
+          'When the topic involves drugs/techno/nightlife, the headline MUST contain specific keywords (Berghain, ketamine, dealer, DJ, etc.)',
         ].join('\n'),
     '',
     'CATEGORY SELECTION:',
