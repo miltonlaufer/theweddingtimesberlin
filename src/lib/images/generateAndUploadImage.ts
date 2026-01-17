@@ -34,15 +34,16 @@ function nowPathPrefix(): string {
 
 function toPhotoRealisticPrompt(prompt: string): string {
   const trimmed = prompt.trim()
+  const prefix =
+    'Award-winning photojournalism, shot on Canon EOS R5 with 50mm f/1.4 lens. RAW unedited photo. '
   const suffix =
-    'Photo-realistic. Shadows, pores, dirtiness, hallow depth of field when possible. Natural lighting, realistic colors, high detail, no text.'
+    ' CRITICAL: This must look like a real photograph, not digital art. Real human skin with visible pores, blemishes, and texture. Natural available light with authentic shadows. Shallow depth of field with bokeh. Slight film grain. Documentary style like Reuters or AP news photography. ABSOLUTELY NO illustration, NO cartoon, NO CGI, NO 3D render, NO digital painting, NO stylized art, NO anime, NO fantasy. No text overlays, no watermarks.'
 
   if (!trimmed) {
-    return suffix
+    return prefix + suffix
   }
 
-  const separator = trimmed.endsWith('.') ? ' ' : '. '
-  return `${trimmed}${separator}${suffix}`
+  return `${prefix}${trimmed}${suffix}`
 }
 
 async function imageUrlToArrayBuffer(url: string): Promise<ArrayBuffer> {
@@ -66,7 +67,7 @@ export async function generateAndUploadImage(
   const supabaseUrl = process.env.SUPABASE_URL ?? ''
   const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   const bucket = process.env.SUPABASE_BUCKET ?? ''
-  const imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1'
+  const imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1.5'
 
   if (!openaiKey || !supabaseUrl || !supabaseServiceRole || !bucket) {
     throw new Error('Missing required env vars for image upload')
@@ -81,13 +82,22 @@ export async function generateAndUploadImage(
     const baseRequest = {
       model,
       prompt: imagePrompt,
-      size: '1024x1024',
-    } as const
+      size: '1024x1024' as const,
+    }
 
     if (model === 'dall-e-3') {
       return await openai.images.generate({
         ...baseRequest,
         style: 'natural',
+        quality: 'hd',
+      })
+    }
+
+    // gpt-image-1.5 and similar models
+    if (model.startsWith('gpt-image')) {
+      return await openai.images.generate({
+        ...baseRequest,
+        quality: 'high',
       })
     }
 

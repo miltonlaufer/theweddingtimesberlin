@@ -454,7 +454,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const llm = new ChatOpenAI({
     apiKey,
     model: modelName,
-    temperature: 1.2,
+    temperature: 1.5,
   })
 
   // 25% chance to use the new feature/soft news/local/crime/news story prompt type
