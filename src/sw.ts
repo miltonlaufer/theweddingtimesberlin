@@ -14,6 +14,7 @@ declare global {
 declare const self: ServiceWorkerGlobalScope
 
 const OFFLINE_PAGE = '/offline'
+const FALLBACK_IMAGE = '/logo-fallback.png'
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
@@ -38,13 +39,26 @@ const serwist = new Serwist({
           return request.destination === 'document'
         },
       },
+      {
+        url: FALLBACK_IMAGE,
+        matcher({ request }) {
+          return request.destination === 'image'
+        },
+      },
     ],
   },
 })
 
-// Pre-cache the offline page on install
-self.addEventListener('install', () => {
+// Pre-cache the offline page and fallback image on install
+self.addEventListener('install', (event) => {
   preCachePage(OFFLINE_PAGE, self)
+
+  // Pre-cache the fallback image
+  event.waitUntil(
+    caches.open('fallback-images').then((cache) => {
+      return cache.add(FALLBACK_IMAGE)
+    }),
+  )
 })
 
 // Handle push notifications
