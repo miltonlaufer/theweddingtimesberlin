@@ -79,7 +79,11 @@ export async function GET(req: Request) {
     }
 
     // Ensure baseline categories exist
-    const categoriesRes = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
+    const categoriesRes = await payload.find({
+      collection: 'categories',
+      limit: 100,
+      sort: 'order',
+    })
     if ((categoriesRes.totalDocs ?? 0) === 0) {
       for (const cat of BASELINE_CATEGORIES) {
         await payload.create({ collection: 'categories', data: cat })
@@ -87,7 +91,11 @@ export async function GET(req: Request) {
     }
 
     // Refresh categories after potential seeding
-    let categoriesFinal = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
+    let categoriesFinal = await payload.find({
+      collection: 'categories',
+      limit: 100,
+      sort: 'order',
+    })
 
     // Ensure author pool is sufficient
     let authorsRes = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
@@ -113,12 +121,18 @@ export async function GET(req: Request) {
     }
 
     // Build options for article generation
-    const categories = (categoriesFinal.docs as Array<{ id: string; slug: string; name: string }>).map(
-      (c) => ({ slug: c.slug, name: c.name }),
-    )
+    const categories = (
+      categoriesFinal.docs as Array<{ id: string; slug: string; name: string }>
+    ).map((c) => ({ slug: c.slug, name: c.name }))
 
     const authors = (
-      authorsRes.docs as Array<{ id: string; slug: string; name: string; title?: string; bio?: string }>
+      authorsRes.docs as Array<{
+        id: string
+        slug: string
+        name: string
+        title?: string
+        bio?: string
+      }>
     ).map((a) => ({
       slug: a.slug,
       name: a.name,
@@ -157,7 +171,10 @@ export async function GET(req: Request) {
     const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
 
     // Prepare editor config once
-    const sanitizedEditorConfig = await sanitizeServerEditorConfig(defaultEditorConfig, payload.config)
+    const sanitizedEditorConfig = await sanitizeServerEditorConfig(
+      defaultEditorConfig,
+      payload.config,
+    )
 
     // Generate multiple articles
     const createdArticles: Array<{ id: string; slug: string; featuredImageUrl: string | null }> = []
@@ -187,16 +204,18 @@ export async function GET(req: Request) {
         usedCategories.add(generated.categorySlug)
 
         // Map slugs to IDs - create category if it doesn't exist
-        let categoryDoc = (categoriesFinal.docs as Array<{ id: string | number; slug: string }>).find(
-          (c) => c.slug === generated.categorySlug,
-        )
+        let categoryDoc = (
+          categoriesFinal.docs as Array<{ id: string | number; slug: string }>
+        ).find((c) => c.slug === generated.categorySlug)
 
         // If category doesn't exist, create it
         if (!categoryDoc) {
           try {
             const categoryName = slugToCategoryName(generated.categorySlug)
             const maxOrder = Math.max(
-              ...(categoriesFinal.docs as unknown as Array<{ order?: number }>).map((c) => c.order ?? 0),
+              ...(categoriesFinal.docs as unknown as Array<{ order?: number }>).map(
+                (c) => c.order ?? 0,
+              ),
               0,
             )
             const newOrder = maxOrder + 1
@@ -212,7 +231,11 @@ export async function GET(req: Request) {
             categoryDoc = { id: newCategory.id, slug: generated.categorySlug }
 
             // Refresh categories list for next iteration
-            const refreshedCategories = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
+            const refreshedCategories = await payload.find({
+              collection: 'categories',
+              limit: 100,
+              sort: 'order',
+            })
             categoriesFinal = refreshedCategories
           } catch {
             // If creation failed, try to find it again (might have been created concurrently)
@@ -232,9 +255,35 @@ export async function GET(req: Request) {
         }
 
         // Check if author exists, or if we need to create a new one
-        let authorDoc: { id: string | number; slug: string } | undefined = (authorsRes.docs as Array<{ id: string | number; slug: string }>).find(
+        // Try exact match first
+        const authorsArray = authorsRes.docs as Array<{ id: string | number; slug: string }>
+        let authorDoc: { id: string | number; slug: string } | undefined = authorsArray.find(
           (a) => a.slug === generated.authorSlug,
         )
+
+        // If not found, try fuzzy matching (LLM sometimes drops or adds "new-author-" prefix)
+        if (!authorDoc) {
+          // Try with "new-author-" prefix
+          const withPrefix = `new-author-${generated.authorSlug}`
+          authorDoc = authorsArray.find((a) => a.slug === withPrefix)
+
+          // Try without "new-author-" prefix
+          if (!authorDoc && generated.authorSlug.startsWith('new-author-')) {
+            const withoutPrefix = generated.authorSlug.replace(/^new-author-/, '')
+            authorDoc = authorsArray.find((a) => a.slug === withoutPrefix)
+          }
+
+          // Try case-insensitive match as last resort
+          if (!authorDoc) {
+            const lowerSlug = generated.authorSlug.toLowerCase()
+            authorDoc = authorsArray.find(
+              (a) =>
+                a.slug.toLowerCase() === lowerSlug ||
+                a.slug.toLowerCase() === `new-author-${lowerSlug}` ||
+                a.slug.toLowerCase().replace(/^new-author-/, '') === lowerSlug,
+            )
+          }
+        }
 
         // If author doesn't exist and new author fields are provided, create the author
         if (!authorDoc && generated.newAuthorName) {
@@ -251,7 +300,11 @@ export async function GET(req: Request) {
             authorDoc = { id: newAuthor.id, slug: generated.authorSlug }
 
             // Refresh authors list for next iteration
-            const refreshedAuthors = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
+            const refreshedAuthors = await payload.find({
+              collection: 'authors',
+              limit: 100,
+              sort: 'name',
+            })
             authorsRes = refreshedAuthors
           } catch {
             // If creation failed, try to find it again (might have been created concurrently)
@@ -271,7 +324,9 @@ export async function GET(req: Request) {
         }
 
         if (!authorDoc) {
-          errors.push(`Article ${i + 1}: Author slug "${generated.authorSlug}" not found and no newAuthorName provided`)
+          errors.push(
+            `Article ${i + 1}: Author slug "${generated.authorSlug}" not found and no newAuthorName provided`,
+          )
           continue
         }
 

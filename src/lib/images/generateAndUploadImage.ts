@@ -37,7 +37,7 @@ function toPhotoRealisticPrompt(prompt: string): string {
   const prefix =
     'Award-winning photojournalism, shot on Canon EOS R5 with 50mm f/1.4 lens. RAW unedited photo. '
   const suffix =
-    ' CRITICAL: This must look like a real photograph, not digital art. Real human skin with visible pores, blemishes, and texture. Natural available light with authentic shadows. Shallow depth of field with bokeh. Slight film grain. Documentary style like Reuters or AP news photography. ABSOLUTELY NO illustration, NO cartoon, NO CGI, NO 3D render, NO digital painting, NO stylized art, NO anime, NO fantasy. No text overlays, no watermarks.'
+    ' CRITICAL: This must look like a real photograph, not digital art. Real human skin with visible pores, blemishes, and texture. Natural available light with authentic shadows. Shallow depth of field with bokeh. Slight film grain. Documentary style like Reuters or AP news photography. ABSOLUTELY NO illustration, NO cartoon, NO CGI, NO 3D render, NO digital painting, NO stylized art, NO anime, NO fantasy. No text overlays, no watermarks. IMPORTANT FOR PEOPLE: When people appear in the image, obscure their identities through NATURAL photographic techniques only - use shallow depth of field where background people are genuinely optically out of focus, capture natural motion blur from movement, show people from behind or in profile, use dramatic shadows that naturally obscure features, or frame shots so faces are partially cropped or blocked by objects. NEVER use artificial digital blur, pixelation, or smudging on faces - this looks fake. All face obscuring must look like it happened naturally through camera optics, lighting, or composition.'
 
   if (!trimmed) {
     return prefix + suffix

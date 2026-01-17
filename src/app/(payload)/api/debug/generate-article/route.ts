@@ -221,9 +221,35 @@ export async function POST(req: Request) {
   }
 
   // Check if author exists, or if we need to create a new one
-  let authorDoc: { id: string | number; slug: string } | undefined = (
-    authorsResFinal.docs as Array<{ id: string | number; slug: string }>
-  ).find((a) => a.slug === generated.authorSlug)
+  // Try exact match first
+  const authorsArray = authorsResFinal.docs as Array<{ id: string | number; slug: string }>
+  let authorDoc: { id: string | number; slug: string } | undefined = authorsArray.find(
+    (a) => a.slug === generated.authorSlug,
+  )
+
+  // If not found, try fuzzy matching (LLM sometimes drops or adds "new-author-" prefix)
+  if (!authorDoc) {
+    // Try with "new-author-" prefix
+    const withPrefix = `new-author-${generated.authorSlug}`
+    authorDoc = authorsArray.find((a) => a.slug === withPrefix)
+
+    // Try without "new-author-" prefix
+    if (!authorDoc && generated.authorSlug.startsWith('new-author-')) {
+      const withoutPrefix = generated.authorSlug.replace(/^new-author-/, '')
+      authorDoc = authorsArray.find((a) => a.slug === withoutPrefix)
+    }
+
+    // Try case-insensitive match as last resort
+    if (!authorDoc) {
+      const lowerSlug = generated.authorSlug.toLowerCase()
+      authorDoc = authorsArray.find(
+        (a) =>
+          a.slug.toLowerCase() === lowerSlug ||
+          a.slug.toLowerCase() === `new-author-${lowerSlug}` ||
+          a.slug.toLowerCase().replace(/^new-author-/, '') === lowerSlug,
+      )
+    }
+  }
 
   // If author doesn't exist and new author fields are provided, create the author
   if (!authorDoc && generated.newAuthorName) {
