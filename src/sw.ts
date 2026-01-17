@@ -18,6 +18,9 @@ declare const self: ServiceWorkerGlobalScope & {
 const ARTICLE_CACHE = 'pages-articles'
 const IMAGE_CACHE = 'images'
 const NEXT_STATIC_CACHE = 'next-static'
+const STYLE_CACHE = 'styles'
+const SCRIPT_CACHE = 'scripts'
+const FONT_CACHE = 'fonts'
 const OFFLINE_URL = '/offline'
 
 /******************* SERWIST INSTANCE ***********************/
@@ -68,6 +71,36 @@ const serwist = new Serwist({
           new ExpirationPlugin({
             maxEntries: 150,
             maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+          }),
+        ],
+      }),
+    },
+    // Cache stylesheets.
+    {
+      matcher: ({ request }) => request.destination === 'style',
+      handler: new StaleWhileRevalidate({
+        cacheName: STYLE_CACHE,
+        plugins: [new CacheableResponsePlugin({ statuses: [0, 200] })],
+      }),
+    },
+    // Cache scripts.
+    {
+      matcher: ({ request }) => request.destination === 'script',
+      handler: new StaleWhileRevalidate({
+        cacheName: SCRIPT_CACHE,
+        plugins: [new CacheableResponsePlugin({ statuses: [0, 200] })],
+      }),
+    },
+    // Cache fonts with a long TTL.
+    {
+      matcher: ({ request }) => request.destination === 'font',
+      handler: new CacheFirst({
+        cacheName: FONT_CACHE,
+        plugins: [
+          new CacheableResponsePlugin({ statuses: [0, 200] }),
+          new ExpirationPlugin({
+            maxEntries: 50,
+            maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
           }),
         ],
       }),
