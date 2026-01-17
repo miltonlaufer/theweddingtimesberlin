@@ -8,8 +8,31 @@ export async function POST(req: Request) {
       userAgent?: string
     }
 
-    if (!body.subscription || !body.subscription.endpoint) {
-      return NextResponse.json({ error: 'Invalid subscription data' }, { status: 400 })
+    // Validate subscription data
+    if (!body?.subscription) {
+      return NextResponse.json({ error: 'Missing subscription data' }, { status: 400 })
+    }
+
+    // Extract and validate endpoint
+    const endpoint = body.subscription?.endpoint
+    if (!endpoint) {
+      console.error('Missing endpoint in subscription:', JSON.stringify(body.subscription, null, 2))
+      return NextResponse.json({ error: 'Invalid or missing endpoint' }, { status: 400 })
+    }
+
+    if (typeof endpoint !== 'string') {
+      console.error('Endpoint is not a string:', typeof endpoint, endpoint)
+      return NextResponse.json({ error: 'Endpoint must be a string' }, { status: 400 })
+    }
+
+    const trimmedEndpoint = endpoint.trim()
+    if (trimmedEndpoint.length === 0) {
+      return NextResponse.json({ error: 'Endpoint cannot be empty' }, { status: 400 })
+    }
+
+    // Validate keys
+    if (!body.subscription.keys || !body.subscription.keys.p256dh || !body.subscription.keys.auth) {
+      return NextResponse.json({ error: 'Missing subscription keys' }, { status: 400 })
     }
 
     const payload = await getPayload()
@@ -21,7 +44,7 @@ export async function POST(req: Request) {
     const existing = await payload.find({
       collection: 'push-subscriptions',
       where: {
-        endpoint: { equals: body.subscription.endpoint },
+        endpoint: { equals: trimmedEndpoint },
       },
       limit: 1,
     })
@@ -41,7 +64,7 @@ export async function POST(req: Request) {
       await payload.create({
         collection: 'push-subscriptions',
         data: {
-          endpoint: body.subscription.endpoint,
+          endpoint: trimmedEndpoint,
           keys: body.subscription.keys,
           userAgent: body.userAgent || req.headers.get('user-agent') || undefined,
         },

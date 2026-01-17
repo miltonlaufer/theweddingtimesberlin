@@ -79,10 +79,17 @@ export function PushNotificationPrompt() {
       // Get VAPID public key
       const response = await fetch('/api/push/vapid-public-key')
       if (!response.ok) {
-        throw new Error('Failed to get VAPID public key')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(
+          errorData.error || 'VAPID keys not configured. Please contact the site administrator.',
+        )
       }
 
       const { publicKey } = (await response.json()) as { publicKey: string }
+
+      if (!publicKey) {
+        throw new Error('VAPID public key not available')
+      }
 
       // Convert VAPID key to Uint8Array
       const applicationServerKey = urlBase64ToUint8Array(publicKey)
@@ -106,7 +113,10 @@ export function PushNotificationPrompt() {
       })
 
       if (!subscribeResponse.ok) {
-        throw new Error('Failed to register subscription')
+        const errorData = await subscribeResponse.json().catch(() => ({}))
+        throw new Error(
+          errorData.error || 'Failed to register subscription. Please try again later.',
+        )
       }
 
       setIsSubscribed(true)
@@ -141,8 +151,8 @@ export function PushNotificationPrompt() {
       >
         <h2 className="font-headline text-2xl font-bold">Stay Updated</h2>
         <p className="mt-3 font-serif text-base text-[#333]">
-          Get notified when new articles are published. Never miss a satirical headline from The
-          Wedding Times.
+          Get notified when new articles are published. Never miss a headline from The Wedding
+          Times.
         </p>
         {error && (
           <div className="mt-3 rounded bg-red-100 p-2 text-sm text-red-800" role="alert">
