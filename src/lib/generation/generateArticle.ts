@@ -173,6 +173,315 @@ export function extractHeadlinePatterns(titles: string[]): string[] {
   return overusedOpenings
 }
 
+/**
+ * Extracts significant keywords from headlines and identifies overused ones.
+ * Filters out stopwords to focus on meaningful content words (nouns, verbs, adjectives).
+ */
+export function extractOverusedKeywords(titles: string[]): {
+  keywordCounts: Map<string, number>
+  bannedKeywords: string[] // Keywords appearing 2+ times
+} {
+  // Common stopwords to filter out (articles, pronouns, prepositions, conjunctions, etc.)
+  const stopwords = new Set([
+    // Articles
+    'a',
+    'an',
+    'the',
+    // Pronouns
+    'i',
+    'me',
+    'my',
+    'myself',
+    'we',
+    'our',
+    'ours',
+    'ourselves',
+    'you',
+    'your',
+    'yours',
+    'yourself',
+    'yourselves',
+    'he',
+    'him',
+    'his',
+    'himself',
+    'she',
+    'her',
+    'hers',
+    'herself',
+    'it',
+    'its',
+    'itself',
+    'they',
+    'them',
+    'their',
+    'theirs',
+    'themselves',
+    'what',
+    'which',
+    'who',
+    'whom',
+    'this',
+    'that',
+    'these',
+    'those',
+    // Prepositions
+    'in',
+    'on',
+    'at',
+    'to',
+    'for',
+    'of',
+    'with',
+    'by',
+    'from',
+    'up',
+    'about',
+    'into',
+    'over',
+    'after',
+    'beneath',
+    'under',
+    'above',
+    'between',
+    'through',
+    'during',
+    'before',
+    'behind',
+    'below',
+    'against',
+    'among',
+    'throughout',
+    'despite',
+    'towards',
+    'upon',
+    'concerning',
+    'without',
+    'within',
+    'along',
+    'following',
+    'across',
+    'beyond',
+    // Conjunctions
+    'and',
+    'but',
+    'or',
+    'nor',
+    'for',
+    'yet',
+    'so',
+    'because',
+    'although',
+    'while',
+    'if',
+    'when',
+    'where',
+    'unless',
+    'until',
+    'since',
+    'as',
+    'than',
+    'whether',
+    // Common verbs (auxiliary/modal)
+    'is',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'being',
+    'have',
+    'has',
+    'had',
+    'having',
+    'do',
+    'does',
+    'did',
+    'doing',
+    'will',
+    'would',
+    'could',
+    'should',
+    'may',
+    'might',
+    'must',
+    'shall',
+    'can',
+    'need',
+    'dare',
+    'ought',
+    'used',
+    'go',
+    'goes',
+    'gone',
+    'going',
+    'get',
+    'gets',
+    'got',
+    'getting',
+    'make',
+    'makes',
+    'made',
+    'making',
+    'say',
+    'says',
+    'said',
+    'saying',
+    'see',
+    'sees',
+    'saw',
+    'seen',
+    'seeing',
+    // Common adverbs
+    'not',
+    'only',
+    'just',
+    'more',
+    'most',
+    'other',
+    'some',
+    'such',
+    'no',
+    'nor',
+    'too',
+    'very',
+    'also',
+    'back',
+    'even',
+    'still',
+    'well',
+    'here',
+    'there',
+    'now',
+    'then',
+    'once',
+    'never',
+    'always',
+    'often',
+    'ever',
+    'almost',
+    'already',
+    'soon',
+    // Common adjectives
+    'new',
+    'first',
+    'last',
+    'long',
+    'great',
+    'little',
+    'own',
+    'old',
+    'right',
+    'big',
+    'high',
+    'different',
+    'small',
+    'large',
+    'next',
+    'early',
+    'young',
+    'important',
+    'few',
+    'public',
+    'bad',
+    'same',
+    'able',
+    'own',
+    'best',
+    'better',
+    'sure',
+    'free',
+    // Numbers and quantifiers
+    'one',
+    'two',
+    'three',
+    'four',
+    'five',
+    'all',
+    'each',
+    'every',
+    'both',
+    'many',
+    'much',
+    'any',
+    'another',
+    'several',
+    'enough',
+    'most',
+    'least',
+    'less',
+    'more',
+    // Other common words
+    'like',
+    'way',
+    'thing',
+    'things',
+    'time',
+    'times',
+    'year',
+    'years',
+    'day',
+    'days',
+    'man',
+    'men',
+    'woman',
+    'women',
+    'people',
+    'part',
+    'place',
+    'case',
+    'week',
+    'weeks',
+    'point',
+    'fact',
+    'hand',
+    'world',
+    'life',
+    'work',
+    'home',
+    'night',
+    'month',
+    // Article-specific but too common
+    'local',
+    'berlin',
+    'berlins',
+    'wedding',
+    'says',
+    'after',
+    'why',
+    'how',
+    'out',
+  ])
+
+  const keywordCounts = new Map<string, number>()
+
+  for (const title of titles) {
+    // Extract words, normalize to lowercase, remove punctuation
+    const words = title
+      .toLowerCase()
+      .split(/\s+/)
+      .map((word) => word.replace(/[^a-z0-9äöüß-]/g, ''))
+      .filter((word) => word.length >= 3) // Minimum 3 characters to catch GHB, LSD, etc.
+      .filter((word) => !stopwords.has(word))
+
+    // Count each unique word per title (to avoid counting duplicates within same title)
+    const uniqueWords = new Set(words)
+    for (const word of uniqueWords) {
+      keywordCounts.set(word, (keywordCounts.get(word) ?? 0) + 1)
+    }
+  }
+
+  // Find keywords appearing 2+ times
+  const bannedKeywords: string[] = []
+  for (const [keyword, count] of keywordCounts) {
+    if (count >= 2) {
+      bannedKeywords.push(keyword)
+    }
+  }
+
+  return { keywordCounts, bannedKeywords }
+}
+
 /******************* VALIDATION / REPAIR ***********************/
 
 function looksNonEnglish(text: string): boolean {
@@ -701,24 +1010,28 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'New study finds 87% of Berlin techno DJs are just pressing play and checking their phones',
     'Kreuzberg man realizes his entire personality is just the drugs he did in his 20s',
     'Local club introduces "sober corner" but nobody can find it because they are not sober',
-    'Woman discovers her entire friend group only exists inside Berghain, has never seen them in daylight',
+    'Woman discovers her entire friend group only exists inside About Blank, has never seen them in daylight',
     'After-hours club in Neukölln has been going for 6 days straight, original patrons have evolved',
-    'Berlin techno scene mourns death of "the vibe" after someone turned on the lights',
+    'Berlin techno scene mourns as someone turned on the lights too early',
     'Man at Sisyphos has been dancing to the same loop for 14 hours, claims "the drop is coming"',
     'New artisanal cocaine dealer in Prenzlauer Berg offers organic, fair-trade product for 30% markup',
-    'Berghain door policy now includes written exam on the history of Detroit techno',
+    'Kater Blau door policy now includes written exam on the history of ambient techno',
     'Local ketamine enthusiast becomes so disassociated he accidentally fixes his life',
     'Wedding Späti now offers drug testing services alongside energy drinks and tobacco',
-    'Man who peaked in 2012 Berghain era still dresses like it, friends concerned but also jealous',
+    'Man who peaked in 2012 Golden Gate era still dresses like it, friends concerned but also jealous',
     'Berlin health officials report surge in people claiming techno cured their depression (it did not)',
     'New app matches you with compatible drug dealers based on your music taste and credit score',
     'The great Berlin speed shortage of 2026: DJs forced to play at normal BPM',
-    'Techno purist outraged that new club plays songs with "too many melodies"',
+    'Techno purist outraged that About Blank plays songs with "too many melodies"',
     'Man has perfected the art of looking like hes on drugs when hes actually just tired and German',
     'Darkroom etiquette workshop at Kitkat sells out, attendees learn proper queuing technique',
     'Görlitzer Park nominated for UNESCO cultural heritage site for its thriving pharmaceutical ecosystem',
-    'Berlin club kid realizes hes been going to the same party for 8 years with only bathroom breaks',
-    'New documentary follows the lives of Berghain cigarettes from pocket to floor to stepped on',
+    'Berlin club kid realizes hes been going to Wilde Renate for 8 years with only bathroom breaks',
+    'New documentary follows the lives of cigarettes at Sisyphos from pocket to floor to stepped on',
+    'About Blank garden party enters day 4, original attendees have formed their own micro-society',
+    'Tresor basement so hot that sweat has formed its own weather system',
+    'Golden Gate sunrise session accidentally continues until the next sunrise',
+    'Kater Blau floating platform detaches, attendees unbothered, continue dancing toward Poland',
   ]
 
   // DRUGS AND TECHNO BIAS: 50% chance to pick from drugs/techno scenarios specifically
@@ -744,8 +1057,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       scenario.includes('pupils'),
   )
 
-  // 50% chance to select from drugs/techno scenarios, 50% from all scenarios
-  const useDrugsOrTechnoScenario = Math.random() < 0.5
+  // 30% chance to select from drugs/techno scenarios, 70% from all scenarios
+  const useDrugsOrTechnoScenario = Math.random() < 0.3
   const selectedScenario = useDrugsOrTechnoScenario
     ? drugsAndTechnoScenarios[Math.floor(Math.random() * drugsAndTechnoScenarios.length)]
     : concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
@@ -796,12 +1109,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Berghain rejection stories, club outfit disasters, or bouncer psychology',
     'washed-up DJs clinging to relevance, or techno bro philosophy',
     'the Berghain door as Berlins most important cultural institution',
-    'techno tourists ruining the vibe by trying too hard',
-    'people who peaked in 2010s Berghain and refuse to move on',
-    'the sociology of the Berghain queue: who deserves entry and why not you',
+    'techno tourists ruining the atmosphere by trying too hard',
+    'people who peaked in 2010s Berlin clubbing and refuse to move on',
+    'the sociology of club queues: who deserves entry and why not you',
     'DJs who think pressing play makes them artists',
     'the death of Berlin club culture, killed by Instagram and tourists',
-    'techno as a religion and Sven Marquardt as its pope',
+    'techno as a religion with its own temples and rituals',
     'why every DJ in Berlin has a SoundCloud but no healthcare',
     'the techno-to-tech pipeline: former DJs now work in startups',
     'after-hours clubs where time, hygiene, and social norms dont exist',
@@ -809,10 +1122,16 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'warehouse raves that definitely violate fire codes',
     'the unwritten rules of Berlin dancefloors: no phones, no talking, no joy',
     'techno purists who think anything with melody is selling out',
-    'the Sisyphos experience: entering Saturday, leaving Tuesday',
+    'the Sisyphos experience: entering Saturday, leaving Tuesday, forgetting your name',
     'Berlin DJs explaining why their 4-hour set of the same beat is art',
     'Kitkat dress code: the only place where nudity is the conservative option',
     'the parallel economy of Berlin club wristbands and stamps',
+    'About Blank garden parties that turn into 3-day odysseys',
+    'Kater Blau: where the river meets the rave and nobody knows what day it is',
+    'Golden Gate at 6am: where the weekend truly begins or ends, unclear which',
+    'the Wilde Renate labyrinth: people have been lost in there since 2012',
+    'Tresor basement: dancing in what used to be a bank vault, now a sweat vault',
+    'RSO and the industrial techno scene that makes Berghain look mainstream',
     // Doener & Drinks
     'döner kebab culture, späti life, or Berlin food scene',
     'best döner debates, kebab rankings, or late-night munchies',
@@ -1014,11 +1333,34 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       topic.includes('dealer'),
   )
 
-  // 50% chance to select from drugs/techno topics, 50% from all topics
-  const useDrugsOrTechnoTopic = Math.random() < 0.5
-  const randomFocus = useDrugsOrTechnoTopic
-    ? drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
-    : topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
+  // 30% chance to select from drugs/techno topics, 70% from all topics
+  const useDrugsOrTechnoTopic = Math.random() < 0.3
+  let randomFocus: string
+
+  if (useDrugsOrTechnoTopic) {
+    randomFocus = drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
+  } else {
+    // If NOT about drugs/techno, 20% chance to pick startup topics
+    const startupTopics = topicFocuses.filter(
+      (topic) =>
+        topic.includes('startup') ||
+        topic.includes('tech bro') ||
+        topic.includes('co-working') ||
+        topic.includes('WeWork') ||
+        topic.includes('venture capital') ||
+        topic.includes('crypto startup') ||
+        topic.includes('entrepreneur') ||
+        topic.includes('disruptive') ||
+        topic.includes('pitch night') ||
+        topic.includes('side hustle'),
+    )
+
+    const useStartupTopic = Math.random() < 0.2
+    randomFocus =
+      useStartupTopic && startupTopics.length > 0
+        ? startupTopics[Math.floor(Math.random() * startupTopics.length)]
+        : topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
+  }
 
   // When RSS topics are available, pick one to base the article on
   const rssTopics = input.topicSummary
@@ -1053,6 +1395,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       bannedOpeningWords.push(word.charAt(0).toUpperCase() + word.slice(1))
     }
   }
+
+  // Extract overused keywords (nouns, verbs, adjectives) from recent titles
+  const keywordAnalysis = extractOverusedKeywords(input.recentArticleTitles)
+  const bannedKeywords = keywordAnalysis.bannedKeywords
 
   const headlinePatternsSection =
     overusedOpenings.length > 0
@@ -1092,6 +1438,28 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           'REMEMBER: Check the banned list above. If "The" is banned, do NOT start with "The".',
           'If "Who" is banned, do NOT start with "Who". Choose something ELSE.',
+          '═══════════════════════════════════════════════════════════════════',
+        ].join('\n')
+      : ''
+
+  // Create banned keywords section (prevents repeating specific words like "MDMA", "ketamine", etc.)
+  const bannedKeywordsSection =
+    bannedKeywords.length > 0
+      ? [
+          '',
+          '═══════════════════════════════════════════════════════════════════',
+          'CRITICAL: BANNED KEYWORDS - DO NOT USE THESE WORDS',
+          '═══════════════════════════════════════════════════════════════════',
+          '',
+          'The following keywords appear too frequently in recent articles.',
+          'You MUST NOT use any of these words in your headline OR as a main topic:',
+          '',
+          bannedKeywords.map((k) => `  ❌ "${k}"`).join('\n'),
+          '',
+          'This is NOT a suggestion. Articles using these keywords will feel repetitive.',
+          'Choose COMPLETELY DIFFERENT subjects, locations, or themes.',
+          '',
+          'BE CREATIVE. There are infinite Berlin stories to tell beyond these recently overused words.',
           '═══════════════════════════════════════════════════════════════════',
         ].join('\n')
       : ''
@@ -1150,8 +1518,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'CRITICAL BERLIN CULTURE ELEMENTS - DRUGS AND TECHNO:',
     "Berlin's identity is INSEPARABLE from its techno and drug culture. This is not optional flavor—it's the city's DNA.",
     'When writing about Berlin, naturally weave in references to:',
-    '- Techno clubs (Berghain, Kitkat, Sisyphos, Tresor, About Blank, etc.) and club culture',
-    '- The Berghain door policy and bouncer Sven Marquardt as cultural gatekeepers',
+    '- Techno clubs: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, ://about blank, Wilde Renate, Salon zur Wilden Renate',
+    '- IMPORTANT: Do NOT only mention Berghain! Berlin has many iconic clubs. Vary your club references—Sisyphos, About Blank, Kater Blau, Golden Gate are just as culturally significant.',
+    '- The door policies and bouncers as cultural gatekeepers (not just Berghain—other clubs have their own characters)',
     '- Drug use as a normal part of Berlin nightlife (ketamine, MDMA, cocaine, speed, GHB)',
     "- Görlitzer Park as Berlin's open-air pharmacy",
     '- After-parties that last for days, the blurry line between Saturday and Tuesday',
@@ -1162,6 +1531,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     "Even when an article is NOT primarily about drugs or techno, these elements should appear naturally because they're part of daily Berlin life.",
     'A story about bureaucracy might mention someone filling forms while coming down. A gentrification piece might reference club closures. A crime story might involve Görlitzer Park.',
     'Make drugs and techno feel as natural and present as the Turkish community or the bureaucracy—because in Berlin, they are.',
+    '',
+    'WRITING STYLE NOTE:',
+    '- Reduce usage of the word "vibes" or "vibe"—it is overused. Prefer more specific, evocative language.',
+    '- Instead of "the vibe was off", try "the atmosphere felt wrong", "something was different", "the energy had shifted", etc.',
     '',
     useFeatureStoryPrompt
       ? [
@@ -1183,13 +1556,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Keep it clever—readers should catch the double meaning',
           '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
           '',
-          'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
-          '- Include 3-5 witty, creative cultural references per article—make them visible but clever',
+          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
+          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
+          '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
           '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
           '- These should be recognizable to educated readers, but woven in with WIT and CREATIVITY',
           '- DO NOT copy examples—come up with your OWN creative, witty references',
           '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory, architectural ideas',
-          '- Possible sources (be creative, vary them): Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, Situationists, etc.',
+          '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
           '- Make references witty and contextually appropriate—they should feel natural, not forced',
           '- The goal is clever cultural commentary, not academic name-dropping',
           "- Vary your references—don't repeat the same ones in every article",
@@ -1212,13 +1586,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Keep it clever—readers should catch the double meaning',
           '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
           '',
-          'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
-          '- Include 3-5 witty, creative cultural references per article—make them visible but clever',
+          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
+          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
+          '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
           '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
           '- These should be recognizable to educated readers, but woven in with WIT and CREATIVITY',
           '- DO NOT copy examples—come up with your OWN creative, witty references',
           '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory, architectural ideas',
-          '- Possible sources (be creative, vary them): Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, Situationists, etc.',
+          '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
           '- Make references witty and contextually appropriate—they should feel natural, not forced',
           '- The goal is clever cultural commentary, not academic name-dropping',
           "- Vary your references—don't repeat the same ones in every article",
@@ -1226,6 +1601,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     topicInstruction,
     recentTitlesSection,
     headlinePatternsSection,
+    bannedKeywordsSection,
     'CRITICAL: Pick a categorySlug that BEST matches your assigned topic direction above.',
     'Category mapping guide:',
     '- Drugs/ketamine/club bathroom → drugs',
@@ -1308,7 +1684,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
         '- DO NOT copy examples—come up with your OWN creative, witty references',
         '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory',
-        '- Possible sources (be creative, vary them): Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, Situationists, etc.',
+        '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
         '- Make references witty and contextually appropriate—they should feel natural, not forced',
         '- The goal is clever cultural commentary, not academic name-dropping',
         "- Vary your references—don't repeat the same ones in every article",
@@ -1359,10 +1735,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Keep it clever and subtle—readers should catch the double meaning on a second read',
           '- NOT explicit or vulgar—just playful wordplay',
           '',
-          'INTELLECTUAL EASTER EGGS:',
-          '- Include 2-3 witty, creative cultural references to literature, philosophy, art, film, or academic concepts',
+          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
+          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
+          '- Include 1-3 witty, creative cultural references to literature, philosophy, art, film, or academic concepts',
           '- DO NOT copy examples—come up with your OWN creative references',
           '- Weave them naturally with wit: literary allusions, philosophical concepts, film references, art movements, cultural theory',
+          '- Possible sources (vary widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Philip K. Dick. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Wittgenstein, Heidegger, Kierkegaard. Cinema: Truffaut, Coppola. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven.',
           '- Think: educated readers will recognize the reference, but the article still works without it',
           "- Be creative and varied—don't repeat the same references",
           '- The goal is clever cultural commentary, not academic name-dropping',
@@ -1403,12 +1781,13 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Keep it clever—readers should catch the double meaning',
           '- NOT explicit or vulgar—just playful wordplay',
           '',
-          'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
-          '- Include 3-5 witty, creative cultural references per article—make them visible but clever',
+          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
+          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
+          '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
           '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
           '- DO NOT copy examples—come up with your OWN creative, witty references',
           '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory',
-          '- Possible sources (be creative, vary them): Kafka, Derrida, Baudrillard, Debord, Benjamin, Adorno, contemporary artists, Situationists, etc.',
+          '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
           '- Make references witty and contextually appropriate—they should feel natural, not forced',
           '- The goal is clever cultural commentary, not academic name-dropping',
           "- Vary your references—don't repeat the same ones in every article",
@@ -1421,7 +1800,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Berlin is synonymous with drugs and techno. Your headlines MUST reflect this.',
     'When your topic involves drugs, techno, clubs, nightlife, or decadence, the headline MUST contain at least one of these keywords:',
     '- Drug-related: ketamine, cocaine, MDMA, speed, drugs, high, dealer, Görlitzer Park, trip, coming down',
-    '- Club-related: Berghain, techno, DJ, club, Kitkat, Sisyphos, Tresor, rave, bouncer, dancefloor, after-hours',
+    '- Club-related: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, techno, DJ, club, rave, bouncer, dancefloor, after-hours',
     '- Decadence-related: bender, party, orgy, sex, hedonism, darkroom',
     '',
     'Example headlines that work:',
@@ -1450,6 +1829,17 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'Think like a real newspaper: headlines should grab attention with wit, not formula.',
           'When the topic involves drugs/techno/nightlife, the headline MUST contain specific keywords (Berghain, ketamine, dealer, DJ, etc.)',
         ].join('\n'),
+    '',
+    'INTELLECTUAL REFERENCES IN HEADLINES (OPTIONAL BUT ENCOURAGED):',
+    'Consider weaving intellectual or cultural references into your headlines when it fits naturally.',
+    'This adds wit and rewards educated readers. Examples of headline styles with references:',
+    '- "Local Man\'s Sisyphean Quest for Anmeldung Enters Year Four"',
+    '- "Proustian Flashback Ruins Techno Set at Berghain"',
+    '- "Waiting for Döner: Neukölln Man\'s Beckettian Vigil at 3am"',
+    '- "Kafkaesque Bureaucracy Claims Another Victim at Bürgeramt"',
+    '- "The Unbearable Lightness of Being Rejected at Berghain"',
+    '- "Görlitzer Park: A Dialectical Analysis of Supply and Demand"',
+    'This is a SUGGESTION, not a requirement—use when it enhances the headline without forcing it.',
     '',
     'CATEGORY SELECTION:',
     'You have two options for the category:',
