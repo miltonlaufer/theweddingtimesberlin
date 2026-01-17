@@ -150,7 +150,7 @@ export async function POST(req: Request) {
   const includeTopics = pickTwoThirds()
   const { topicSummary } = await fetchRssTopics()
 
-  // Fetch last 50 article titles to avoid repetition and extract patterns
+  // Fetch last 50 articles to avoid repetition and extract patterns
   const recentArticlesRes = await payload.find({
     collection: 'articles',
     where: {
@@ -166,6 +166,13 @@ export async function POST(req: Request) {
     })
     .filter((title): title is string => typeof title === 'string')
 
+  const recentArticleExcerpts = recentArticlesRes.docs
+    .map((a) => {
+      const doc = a as unknown as { excerpt?: string }
+      return doc.excerpt
+    })
+    .filter((excerpt): excerpt is string => typeof excerpt === 'string' && excerpt.length > 0)
+
   // Extract headline patterns to avoid repetition (using the enhanced function from generateArticle)
   const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
   const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
@@ -176,6 +183,7 @@ export async function POST(req: Request) {
     topicSummary,
     includeTopics,
     recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
+    recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
     recentHeadlinePatterns: uniquePatterns,
   })
 

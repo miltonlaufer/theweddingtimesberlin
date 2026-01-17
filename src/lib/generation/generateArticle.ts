@@ -21,6 +21,7 @@ export interface GenerateArticleInput {
   topicSummary: string
   includeTopics: boolean
   recentArticleTitles: string[] // Titles of recent articles to avoid repeating
+  recentArticleExcerpts?: string[] // Optional excerpts (parallel array to titles, truncated to ~150 chars)
   recentHeadlinePatterns?: string[] // Patterns like "Berlin [verb] [noun]" to avoid
 }
 
@@ -1372,14 +1373,28 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     ? rssTopics[Math.floor(Math.random() * rssTopics.length)]
     : null
 
+  // Limit to 12 most recent articles to keep token usage reasonable
+  const maxRecentArticles = 12
+  const recentTitles = input.recentArticleTitles.slice(0, maxRecentArticles)
+  const recentExcerpts = input.recentArticleExcerpts?.slice(0, maxRecentArticles) ?? []
+
   const recentTitlesSection =
-    input.recentArticleTitles.length > 0
+    recentTitles.length > 0
       ? [
-          `\nCRITICAL: DO NOT repeat these recent article topics (${input.recentArticleTitles.length} recent articles shown to avoid repetition):`,
-          input.recentArticleTitles.map((title, idx) => `${idx + 1}. ${title}`).join('\n'),
+          `\nCRITICAL: DO NOT repeat these recent article topics (${recentTitles.length} recent articles shown to avoid repetition):`,
+          recentTitles
+            .map((title, idx) => {
+              const excerpt = recentExcerpts[idx]
+              const excerptText = excerpt
+                ? ` - ${excerpt.length > 150 ? excerpt.slice(0, 147) + '...' : excerpt}`
+                : ''
+              return `${idx + 1}. "${title}"${excerptText}`
+            })
+            .join('\n'),
           '',
           'You must write about a COMPLETELY DIFFERENT topic/subject matter. Do not write about similar themes, similar situations, or similar characters.',
           'If you see multiple articles about bureaucracy, write about something else entirely. If you see multiple articles about nightlife, choose a different angle.',
+          'The excerpts above show the actual content/story angle—avoid repeating these specific story ideas, not just the topics.',
           '',
         ].join('\n')
       : ''
