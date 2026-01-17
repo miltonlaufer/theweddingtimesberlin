@@ -18,21 +18,30 @@ declare const self: ServiceWorkerGlobalScope & {
 const ARTICLE_CACHE = 'pages-articles'
 const IMAGE_CACHE = 'images'
 const NEXT_STATIC_CACHE = 'next-static'
+const OFFLINE_URL = '/offline'
 
 /******************* SERWIST INSTANCE ***********************/
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  precacheEntries: [...self.__SW_MANIFEST, OFFLINE_URL],
   precacheOptions: {
     cleanupOutdatedCaches: true,
     // If navigation fails and there is no cached page, show the offline page.
-    navigateFallback: '/offline',
+    navigateFallback: OFFLINE_URL,
     // Avoid catching API/admin routes
     navigateFallbackDenylist: [/^\/api\//, /^\/admin/],
   },
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
+  fallbacks: {
+    entries: [
+      {
+        url: OFFLINE_URL,
+        matcher: ({ request }) => request.mode === 'navigate',
+      },
+    ],
+  },
   runtimeCaching: [
     // Cache visited article pages for offline reading.
     {
@@ -48,6 +57,15 @@ const serwist = new Serwist({
             maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
           }),
         ],
+      }),
+    },
+    // Cache other navigations to support offline fallbacks.
+    {
+      matcher: ({ request }) => request.mode === 'navigate',
+      handler: new NetworkFirst({
+        cacheName: 'pages-navigate',
+        networkTimeoutSeconds: 4,
+        plugins: [new CacheableResponsePlugin({ statuses: [200] })],
       }),
     },
     // Cache images aggressively.
