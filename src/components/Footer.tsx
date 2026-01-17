@@ -124,9 +124,9 @@ export const Footer: React.FC<FooterProps> = React.memo(function Footer({ catego
               </li>
             </ul>
             {/* Push Notifications */}
-            <div className="mt-4">
+            <ul className="list-none m-0 p-0">
               <PushNotificationButton />
-            </div>
+            </ul>
           </div>
         </div>
 

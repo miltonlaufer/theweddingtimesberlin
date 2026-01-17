@@ -132,9 +132,9 @@ export function PushNotificationButton() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <li className="mb-2">
       {error && (
-        <div className="rounded bg-red-100 p-2 text-sm text-red-800" role="alert">
+        <div className="mb-1 rounded bg-red-100 p-1 text-xs text-red-800" role="alert">
           {error}
         </div>
       )}
@@ -142,7 +142,7 @@ export function PushNotificationButton() {
         <button
           onClick={unsubscribe}
           disabled={isLoading}
-          className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300 disabled:opacity-50"
+          className="font-sans text-[11px] text-[#121212] disabled:opacity-50"
         >
           {isLoading ? 'Unsubscribing...' : 'Disable Push Notifications'}
         </button>
@@ -150,12 +150,12 @@ export function PushNotificationButton() {
         <button
           onClick={subscribe}
           disabled={isLoading}
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="font-sans text-[11px] text-[#121212] disabled:opacity-50"
         >
           {isLoading ? 'Subscribing...' : 'Enable Push Notifications'}
         </button>
       )}
-    </div>
+    </li>
   )
 }
 
