@@ -1,6 +1,7 @@
 import type { IArticle } from '@/types/article'
 import type { SerializedEditorState } from 'lexical'
 import { convertLexicalToHTML, defaultHTMLConverters } from '@payloadcms/richtext-lexical/html'
+import { toWebpUrl } from '@/lib/storage'
 
 /******************* TYPES ***********************/
 
@@ -85,14 +86,16 @@ export function mapPayloadArticleToIArticle(doc: PayloadArticleLike): IArticle {
   const authorSlug = getString(authorObj, 'slug') ?? 'unknown'
   const authorName = getString(authorObj, 'name') ?? 'Unknown'
 
-  const featuredImageUrl = doc.featuredImageUrl ?? getString(imageObj, 'url')
+  // Convert PNG URLs to WebP for better performance (both formats are uploaded)
+  const rawImageUrl = doc.featuredImageUrl ?? getString(imageObj, 'url')
+  const featuredImageUrl = toWebpUrl(rawImageUrl)
 
   return {
     id: doc.id,
     headline: doc.headline,
     subheadline: doc.subheadline ?? undefined,
     slug: doc.slug,
-    featuredImageUrl: featuredImageUrl ?? undefined,
+    featuredImageUrl,
     imageCaption: doc.imageCaption ?? undefined,
     content: toHtmlString(doc.content),
     excerpt: doc.excerpt ?? undefined,
@@ -117,4 +120,3 @@ export function mapPayloadArticleToIArticle(doc: PayloadArticleLike): IArticle {
     layout: doc.layout ?? 'standard',
   }
 }
-

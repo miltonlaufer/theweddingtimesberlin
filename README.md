@@ -131,13 +131,59 @@ curl -X POST "http://localhost:3050/api/debug/generate-article?publish=0"
 - `RSS_BERLINER_ZEITUNG_FEED` (explicit RSS URL)
 - `RSS_NYTIMES_FEED` (optional override; default: NYT HomePage RSS)
 
-## Images (Supabase Storage)
+## Image Storage
 
-Generated images are uploaded to **Supabase Storage**, and only the resulting URL is stored in Payload.
+Generated images are uploaded to cloud storage, converted to WebP format for optimal file size, and the resulting URL is stored in Payload.
 
-- `SUPABASE_URL` (required)
-- `SUPABASE_SERVICE_ROLE_KEY` (required)
-- `SUPABASE_BUCKET` (required)
+### Features
+
+- **Dual format upload**: Both PNG (original) and WebP (optimized) are uploaded
+- **WebP by default**: Articles store the WebP URL for ~30% smaller file sizes
+- **Aggressive caching**: Images are served with `Cache-Control: public, max-age=31536000, immutable` (1 year)
+- **Provider flexibility**: Supports Supabase Storage or Cloudflare R2
+
+### Storage Providers
+
+#### Supabase Storage (default)
+
+```bash
+STORAGE_PROVIDER="supabase"  # or omit (supabase is default)
+SUPABASE_URL="https://xxx.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+SUPABASE_BUCKET="images"
+```
+
+#### Cloudflare R2 (recommended for high traffic)
+
+Cloudflare R2 has **zero egress fees**, making it ideal for image-heavy sites.
+
+```bash
+STORAGE_PROVIDER="cloudflare"
+R2_ACCOUNT_ID="your-account-id"
+R2_ACCESS_KEY_ID="your-access-key-id"
+R2_SECRET_ACCESS_KEY="your-secret-access-key"
+R2_BUCKET_NAME="images"
+R2_PUBLIC_URL="https://images.yourdomain.com"  # or https://pub-xxx.r2.dev
+```
+
+### Optional: Image Proxy
+
+To hide bucket URLs from end users, enable the image proxy:
+
+```bash
+IMAGE_PROXY_ENABLED="true"
+```
+
+Images can then be served through `/api/images/...` instead of direct bucket URLs. This routes traffic through Vercel, so it's best used with Cloudflare R2 (free egress) to avoid double-billing.
+
+### Migration from Supabase to R2
+
+1. Create an R2 bucket in Cloudflare dashboard
+2. Configure CORS to allow your domain
+3. Create an R2 API token with read/write permissions
+4. Set the R2 environment variables
+5. Change `STORAGE_PROVIDER=cloudflare`
+6. New articles will use R2; existing articles continue working from Supabase
 
 ## Hourly Updates (Vercel Cron)
 
@@ -212,7 +258,6 @@ Users can subscribe to receive push notifications when new articles are publishe
 
    ```tsx
    import { PushNotificationButton } from '@/components/PushNotificationButton'
-
    ;<PushNotificationButton />
    ```
 
@@ -245,14 +290,29 @@ The service worker (`src/sw.ts`) handles:
 - `OPENAI_API_KEY` - OpenAI API key for article generation
 - `RESEND_API_KEY` - Resend API key for emails
 - `RESEND_FROM_ADDRESS` - Verified sender email address
+- `CRON_SECRET` - Secret for protecting cron endpoints (production)
+
+### Storage (one provider required)
+
+**Supabase Storage** (default):
+
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
 - `SUPABASE_BUCKET` - Supabase storage bucket name
-- `CRON_SECRET` - Secret for protecting cron endpoints (production)
+
+**Cloudflare R2** (if `STORAGE_PROVIDER=cloudflare`):
+
+- `R2_ACCOUNT_ID` - Cloudflare account ID
+- `R2_ACCESS_KEY_ID` - R2 API token access key
+- `R2_SECRET_ACCESS_KEY` - R2 API token secret
+- `R2_BUCKET_NAME` - R2 bucket name
+- `R2_PUBLIC_URL` - Public URL for R2 bucket
 
 ### Optional
 
 - `DATABASE_URI` - Database connection string (defaults to SQLite locally)
+- `STORAGE_PROVIDER` - Storage provider: `supabase` (default) or `cloudflare`
+- `IMAGE_PROXY_ENABLED` - Enable image proxy to hide bucket URLs (default: `false`)
 - `OPENAI_MODEL` - OpenAI model (default: `gpt-4o-mini`)
 - `OPENAI_IMAGE_MODEL` - Image generation model (default: `gpt-image-1.5`)
 - `OPENAI_REPAIR_MODEL` - JSON repair fallback model

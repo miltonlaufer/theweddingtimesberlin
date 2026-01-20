@@ -80,7 +80,11 @@ export const ArticleCard: React.FC<ArticleCardProps> = React.memo(function Artic
               alt={article.headline}
               fill
               className="object-cover transition-transform duration-300 hover:scale-105"
-              sizes={variant === 'headline' ? '100vw' : '(max-width: 768px) 100vw, 50vw'}
+              sizes={
+                variant === 'headline'
+                  ? '(max-width: 1200px) 100vw, 1200px'
+                  : '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 600px'
+              }
             />
           </div>
           {article.imageCaption && (

@@ -1,17 +1,29 @@
 import OpenAI from 'openai'
-import { createClient } from '@supabase/supabase-js'
+import sharp from 'sharp'
+import { getStorageAdapter, CACHE_CONTROL_IMMUTABLE } from '@/lib/storage'
 
 /******************* TYPES ***********************/
 
 export interface UploadedImageResult {
+  /** Path to the WebP image (primary format used) */
   objectPath: string
+  /** Public URL to the WebP image */
   publicUrl: string
+  /** Path to the PNG image (backup format) */
+  pngObjectPath: string
+  /** Public URL to the PNG image */
+  pngPublicUrl: string
 }
 
 export interface GenerateAndUploadImageInput {
   prompt: string
   fileBaseName: string
 }
+
+/******************* CONSTANTS ***********************/
+
+/** WebP quality setting (0-100). 85 provides good balance of quality and file size. */
+const WEBP_QUALITY = 85
 
 /******************* HELPERS ***********************/
 
@@ -46,10 +58,15 @@ function toPhotoRealisticPrompt(prompt: string): string {
   return `${prefix}${trimmed}${suffix}`
 }
 
-async function imageUrlToArrayBuffer(url: string): Promise<ArrayBuffer> {
+async function imageUrlToBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to download image: ${res.status} ${res.statusText}`)
-  return await res.arrayBuffer()
+  const arrayBuffer = await res.arrayBuffer()
+  return Buffer.from(arrayBuffer)
+}
+
+async function convertToWebP(pngBuffer: Buffer): Promise<Buffer> {
+  return await sharp(pngBuffer).webp({ quality: WEBP_QUALITY }).toBuffer()
 }
 
 /******************* MAIN ***********************/
@@ -57,25 +74,25 @@ async function imageUrlToArrayBuffer(url: string): Promise<ArrayBuffer> {
 export async function generateAndUploadImage(
   input: GenerateAndUploadImageInput,
 ): Promise<UploadedImageResult> {
-  // Hypotheses:
-  // A: env vars missing at runtime
-  // B: OpenAI image generation fails (quota/model)
-  // C: Supabase upload fails (bucket/permissions)
-  // D: Public URL generation fails (bucket privacy/policy)
-
   const openaiKey = process.env.OPENAI_API_KEY ?? ''
-  const supabaseUrl = process.env.SUPABASE_URL ?? ''
-  const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-  const bucket = process.env.SUPABASE_BUCKET ?? ''
   const imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1.5'
 
-  if (!openaiKey || !supabaseUrl || !supabaseServiceRole || !bucket) {
-    throw new Error('Missing required env vars for image upload')
+  if (!openaiKey) {
+    throw new Error('Missing OPENAI_API_KEY for image generation')
+  }
+
+  // Get storage adapter (Supabase or Cloudflare R2 based on env)
+  const adapter = getStorageAdapter()
+
+  if (!adapter.isConfigured()) {
+    throw new Error('Storage adapter is not properly configured. Check environment variables.')
   }
 
   const openai = new OpenAI({ apiKey: openaiKey })
   const safeName = sanitizeFileBaseName(input.fileBaseName)
-  const objectPath = `${nowPathPrefix()}/${safeName}-${Date.now()}.png`
+  const basePath = `${nowPathPrefix()}/${safeName}-${Date.now()}`
+  const pngObjectPath = `${basePath}.png`
+  const webpObjectPath = `${basePath}.webp`
   const imagePrompt = toPhotoRealisticPrompt(input.prompt)
 
   const generateWithModel = async (model: string) => {
@@ -119,34 +136,43 @@ export async function generateAndUploadImage(
   const first = imageRes.data?.[0]
   const imageUrl = first?.url ?? null
   const hasB64 = typeof (first as { b64_json?: unknown } | undefined)?.b64_json === 'string'
-  let bytes: ArrayBuffer
+
+  let pngBuffer: Buffer
   if (imageUrl) {
-    bytes = await imageUrlToArrayBuffer(imageUrl)
+    pngBuffer = await imageUrlToBuffer(imageUrl)
   } else if (hasB64) {
     const b64 = (first as { b64_json: string }).b64_json
-    bytes = Buffer.from(b64, 'base64').buffer
+    pngBuffer = Buffer.from(b64, 'base64')
   } else {
     throw new Error('OpenAI image generation returned neither url nor b64_json')
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceRole, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
+  // Convert PNG to WebP for smaller file size
+  const webpBuffer = await convertToWebP(pngBuffer)
 
-  const uploadRes = await supabase.storage.from(bucket).upload(objectPath, bytes, {
-    contentType: 'image/png',
-    upsert: true,
-  })
+  // Upload both formats with immutable cache headers (1 year)
+  // Upload in parallel for better performance
+  await Promise.all([
+    adapter.upload(pngBuffer, pngObjectPath, {
+      contentType: 'image/png',
+      cacheControl: CACHE_CONTROL_IMMUTABLE,
+      upsert: true,
+    }),
+    adapter.upload(webpBuffer, webpObjectPath, {
+      contentType: 'image/webp',
+      cacheControl: CACHE_CONTROL_IMMUTABLE,
+      upsert: true,
+    }),
+  ])
 
-  if (uploadRes.error) {
-    throw new Error(`Supabase upload failed: ${uploadRes.error.message}`)
-  }
-
-  const publicRes = supabase.storage.from(bucket).getPublicUrl(objectPath)
-  const publicUrl = publicRes.data.publicUrl
+  // Return WebP as the primary URL (smaller file size)
+  const publicUrl = adapter.getPublicUrl(webpObjectPath)
+  const pngPublicUrl = adapter.getPublicUrl(pngObjectPath)
 
   return {
-    objectPath,
+    objectPath: webpObjectPath,
     publicUrl,
+    pngObjectPath,
+    pngPublicUrl,
   }
 }
