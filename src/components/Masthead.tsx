@@ -61,8 +61,8 @@ export const Masthead: React.FC = observer(function Masthead() {
       >
         <NytContainer>
           {isArticlePage ? (
-            <div className="relative flex items-center justify-between py-2">
-              <div className="flex items-center gap-3">
+            <div className="py-2">
+              <div className="relative flex items-center justify-between mb-2">
                 <button
                   onClick={handleMobileMenuOpen}
                   className="bg-transparent border-none cursor-pointer p-1 flex items-center"
@@ -71,30 +71,30 @@ export const Masthead: React.FC = observer(function Masthead() {
                 >
                   <HamburgerIcon />
                 </button>
+
                 <button
                   onClick={handleSearchOpen}
-                  className="bg-transparent border-none cursor-pointer p-1 flex items-center"
+                  className="bg-transparent border-none cursor-pointer p-1 flex items-center absolute left-1/2 -translate-x-1/2 z-10"
                   aria-label="Search"
                   type="button"
                 >
                   <SearchIcon />
                 </button>
+
+                <div className="w-10" />
               </div>
 
-              <Link
-                href="/"
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-              >
-                <span className="font-masthead font-normal tracking-tight text-[#121212] leading-none whitespace-nowrap text-[2.25rem]">
-                  The Wedding Times
-                </span>
-              </Link>
-
-              <div className="w-10" />
+              <div className="flex items-center justify-center">
+                <Link href="/">
+                  <span className="font-masthead font-normal tracking-tight text-[#121212] leading-none whitespace-nowrap text-[2.25rem]">
+                    The Wedding Times
+                  </span>
+                </Link>
+              </div>
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between py-2">
+              <div className="relative flex items-center justify-between py-2">
                 <button
                   onClick={handleMobileMenuOpen}
                   className="bg-transparent border-none cursor-pointer p-1 flex items-center md:hidden"
@@ -104,16 +104,16 @@ export const Masthead: React.FC = observer(function Masthead() {
                   <HamburgerIcon />
                 </button>
 
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={handleSearchOpen}
-                    className="bg-transparent border-none cursor-pointer p-1 flex items-center"
-                    aria-label="Search"
-                    type="button"
-                  >
-                    <SearchIcon />
-                  </button>
-                </div>
+                <button
+                  onClick={handleSearchOpen}
+                  className="bg-transparent border-none cursor-pointer p-1 flex items-center absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0"
+                  aria-label="Search"
+                  type="button"
+                >
+                  <SearchIcon />
+                </button>
+
+                <div className="w-6 md:hidden" />
               </div>
 
               <div className="flex items-center justify-center md:justify-between py-3 pb-5">
