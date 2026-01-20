@@ -58,6 +58,37 @@ function slugToCategoryName(slug: string): string {
     .join(' & ')
 }
 
+/**
+ * Extract plain text from Lexical rich text content.
+ * Walks the node tree and extracts text from text nodes.
+ */
+function extractTextFromLexical(content: unknown): string {
+  if (!content || typeof content !== 'object') return ''
+
+  const root = content as { root?: { children?: unknown[] } }
+  if (!root.root?.children) return ''
+
+  const extractFromNodes = (nodes: unknown[]): string => {
+    const texts: string[] = []
+    for (const node of nodes) {
+      if (!node || typeof node !== 'object') continue
+      const n = node as { type?: string; text?: string; children?: unknown[] }
+
+      // Text node
+      if (n.type === 'text' && typeof n.text === 'string') {
+        texts.push(n.text)
+      }
+      // Recursively process children
+      if (Array.isArray(n.children)) {
+        texts.push(extractFromNodes(n.children))
+      }
+    }
+    return texts.join(' ')
+  }
+
+  return extractFromNodes(root.root.children).replace(/\s+/g, ' ').trim()
+}
+
 /******************* ROUTE HANDLER ***********************/
 
 export async function GET(req: Request) {
@@ -174,6 +205,20 @@ export async function GET(req: Request) {
       })
       .filter((excerpt): excerpt is string => typeof excerpt === 'string' && excerpt.length > 0)
 
+    // Extract half of the latest article's content to ensure new articles are different
+    let latestArticleContentSample: string | undefined
+    if (recentArticlesRes.docs.length > 0) {
+      const latestDoc = recentArticlesRes.docs[0] as unknown as { content?: unknown }
+      if (latestDoc.content) {
+        const fullText = extractTextFromLexical(latestDoc.content)
+        // Take the first half of the text, up to 1500 characters
+        const halfLength = Math.min(Math.floor(fullText.length / 2), 1500)
+        if (halfLength > 100) {
+          latestArticleContentSample = fullText.slice(0, halfLength) + '...'
+        }
+      }
+    }
+
     // Extract headline patterns to avoid repetition (using the enhanced function from generateArticle)
     const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
     const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
@@ -207,6 +252,7 @@ export async function GET(req: Request) {
           recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
           recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
           recentHeadlinePatterns: uniquePatterns, // Patterns to avoid
+          latestArticleContentSample, // Half of latest article to ensure new one is different
         })
 
         // Track used category
@@ -382,6 +428,7 @@ export async function GET(req: Request) {
             isFeatured: generated.isFeatured,
             isHeadline: i === 0 ? generated.isHeadline : false, // Only first can be headline
             layout: generated.layout,
+            sourceRssTopic: generated.sourceRssTopic ?? undefined, // Track if article was inspired by RSS news
           },
         })
 

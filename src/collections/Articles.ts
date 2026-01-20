@@ -125,5 +125,13 @@ export const Articles: CollectionConfig = {
         position: 'sidebar',
       },
     },
+    {
+      name: 'sourceRssTopic',
+      type: 'text',
+      admin: {
+        position: 'sidebar',
+        description: 'The RSS news topic that inspired this article (if any)',
+      },
+    },
   ],
 }

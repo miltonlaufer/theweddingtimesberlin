@@ -23,6 +23,7 @@ export interface GenerateArticleInput {
   recentArticleTitles: string[] // Titles of recent articles to avoid repeating
   recentArticleExcerpts?: string[] // Optional excerpts (parallel array to titles, truncated to ~150 chars)
   recentHeadlinePatterns?: string[] // Patterns like "Berlin [verb] [noun]" to avoid
+  latestArticleContentSample?: string // Half of the latest article's body text to ensure new article is different
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -41,9 +42,221 @@ export const GeneratedArticleSchema = z.object({
   isHeadline: z.boolean(),
   imageCaption: z.string().max(160).optional().nullable(),
   imagePrompt: z.string().max(600).optional().nullable(),
+  // RSS source tracking - if article was inspired by an RSS news topic
+  sourceRssTopic: z.string().max(300).optional().nullable(),
 })
 
 export type GeneratedArticle = z.infer<typeof GeneratedArticleSchema>
+
+/******************* PROMPT CONSTANTS ***********************/
+
+// Reusable prompt text blocks to avoid repetition
+
+const INTELLECTUAL_SOURCES = `Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin.`
+
+const INTELLECTUAL_EASTER_EGGS = [
+  'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
+  '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
+  '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
+  '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
+  '- These should be recognizable to educated readers, but woven in with WIT and CREATIVITY',
+  '- DO NOT copy examples—come up with your OWN creative, witty references',
+  '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory, architectural ideas',
+  `- Possible sources (be creative, vary them widely): ${INTELLECTUAL_SOURCES} Vary your references and add more!`,
+  '- Make references witty and contextually appropriate—they should feel natural, not forced',
+  '- The goal is clever cultural commentary, not academic name-dropping',
+  "- Vary your references—don't repeat the same ones in every article",
+].join('\n')
+
+const EDGE_AND_POLITICAL_INCORRECTNESS = [
+  'EDGE AND POLITICAL INCORRECTNESS:',
+  '- Go beyond "nice absurdity". Make readers uncomfortable. Challenge their assumptions.',
+  '- Tackle taboo subjects with dark humor. Make fun of everyone equally—no sacred cows.',
+  '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
+  '- Push boundaries. Be provocative. Make people think "can they say that?"',
+  '- Use dark humor, shock value, and uncomfortable truths wrapped in absurdity',
+  "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
+].join('\n')
+
+const EDGE_SHORT = [
+  'EDGE AND POLITICAL INCORRECTNESS:',
+  '- Push beyond "nice absurdity". Make readers uncomfortable. Challenge assumptions.',
+  '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
+  '- Tackle taboo subjects with dark humor. Make fun of everyone equally.',
+  '- Use uncomfortable truths wrapped in absurdity. Make readers squirm.',
+].join('\n')
+
+const SPICE_IT_UP = [
+  'SPICE IT UP (subtle sexual innuendo):',
+  '- Include 2-3 subtle double entendres or sexual innuendo that can be read innocently or suggestively',
+  '- Use phrases that have a second, sexual meaning when read carefully (e.g., "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance")',
+  '- Keep it clever—readers should catch the double meaning',
+  '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
+].join('\n')
+
+const WEDDING_NEIGHBORHOOD_CONTEXT = [
+  'CRITICAL: "Wedding" (capitalized) refers to Wedding, a neighborhood in Berlin, NOT a wedding ceremony.',
+  'DO NOT write articles about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
+  'The newspaper is named "The Wedding Times" because it covers the Wedding neighborhood in Berlin.',
+  'When you see "Wedding" in context, it means the Berlin neighborhood (like Kreuzberg, Neukölln, Mitte, etc.), not a marriage ceremony.',
+  'Write about life in the Wedding neighborhood, not about weddings as events.',
+].join('\n')
+
+const WEDDING_REMINDER_SHORT = [
+  'CRITICAL REMINDER: "Wedding" (capitalized) refers to Wedding, the Berlin neighborhood, NOT a wedding ceremony.',
+  'DO NOT write about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
+  'Write about life in the Wedding neighborhood, not about weddings as events.',
+].join('\n')
+
+const TURKISH_COMMUNITY_CONTEXT = [
+  "IMPORTANT CONTEXT: Wedding is a neighborhood with a significant Turkish community. This is a natural, integral part of the neighborhood's character.",
+  "When writing about Wedding, it's natural and appropriate to mention Turkish businesses, Turkish families, Turkish cultural elements, Turkish-owned shops, etc.",
+  'The Turkish community is fair game for satire and edgy humor—make fun of them like you make fun of everyone else. But avoid racist stereotypes, slurs, or hateful content.',
+  "Turkish döner shops, Turkish families, Turkish community events, Turkish-owned businesses are all part of Wedding's reality and should be mentioned when relevant.",
+  "Satirize Turkish community elements with the same edgy, politically incorrect approach you use for everything—just don't be racist about it.",
+].join('\n')
+
+const TURKISH_REMINDER_SHORT = [
+  'IMPORTANT: Wedding has a significant Turkish community. When writing about Wedding, naturally mention Turkish businesses, Turkish families, Turkish cultural elements when relevant.',
+  'The Turkish community is fair game for satire—make fun of them like everyone else. But avoid racist stereotypes, slurs, or hateful content.',
+].join('\n')
+
+const BERLIN_DRUGS_TECHNO_CULTURE = [
+  'CRITICAL BERLIN CULTURE ELEMENTS - DRUGS AND TECHNO:',
+  "Berlin's identity is INSEPARABLE from its techno and drug culture. This is not optional flavor—it's the city's DNA.",
+  'When writing about Berlin, naturally weave in references to:',
+  '- Techno clubs: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, ://about blank, Wilde Renate, Salon zur Wilden Renate',
+  '- IMPORTANT: Do NOT only mention Berghain! Berlin has many iconic clubs. Vary your club references—Sisyphos, About Blank, Kater Blau, Golden Gate are just as culturally significant.',
+  '- The door policies and bouncers as cultural gatekeepers (not just Berghain—other clubs have their own characters)',
+  '- Drug use as a normal part of Berlin nightlife (ketamine, MDMA, cocaine, speed, GHB)',
+  "- Görlitzer Park as Berlin's open-air pharmacy",
+  '- After-parties that last for days, the blurry line between Saturday and Tuesday',
+  '- The walk of shame / stride of pride home at 2pm on a Monday',
+  '- Club bathrooms as social spaces (and transaction venues)',
+  "- The 'Berlin look': all black, tired, possibly still high from the weekend",
+  '- Späti culture as the support system for Berlin nightlife',
+  "Even when an article is NOT primarily about drugs or techno, these elements should appear naturally because they're part of daily Berlin life.",
+  'A story about bureaucracy might mention someone filling forms while coming down. A gentrification piece might reference club closures. A crime story might involve Görlitzer Park.',
+  'Make drugs and techno feel as natural and present as the Turkish community or the bureaucracy—because in Berlin, they are.',
+].join('\n')
+
+const CATEGORY_MAPPING_GUIDE = [
+  'Category mapping guide:',
+  '- Drugs/ketamine/club bathroom → drugs',
+  '- Techno/Berghain/DJ/warehouse rave → techno',
+  '- Decadence/after-parties/hedonism → decadence',
+  '- Filth/trash/cleaning/rats → filth',
+  '- Bureaucracy/forms/appointments → bureaucracy',
+  '- Leopoldplatz/fountain → leopoldplatz',
+  '- Nightlife/clubs/parties → nightlife',
+  '- Food/kebab/späti → food-drink',
+  '- Crime/theft/police/Clans/organized crime → crime',
+  '- Local news/kiez/BVG → kiez',
+  '- Rent/gentrification/expats/startup culture/co-working/tech bros → gentrification',
+  '- Yoga/mindfulness/veganism/wellness/meditation → gentrification (wellness gentrification)',
+  '- Opinion/editorial → opinion',
+  'DO NOT default to bureaucracy, nightlife, or opinion unless your topic truly matches.',
+  'IMPORTANT: Startup culture, yoga studios, mindfulness retreats, and vegan restaurants are forms of gentrification—map them to "gentrification" category.',
+].join('\n')
+
+const OPINION_PIECE_FORMAT = [
+  'OPINION PIECE FORMAT (when categorySlug is "opinion" and layout is "opinion"):',
+  '- Write as a PERSONAL ESSAY, not a news article.',
+  '- Use FIRST PERSON throughout ("I", "my", "we").',
+  '- Open with a provocative thesis or hot take that the author is defending.',
+  '- Structure like an essay: intro with thesis → arguments/anecdotes → conclusion that drives the point home.',
+  '- Include personal observations, rants, and the authors lived experience in Berlin.',
+  '- Be MORE opinionated, MORE aggressive, MORE unhinged than regular articles.',
+  '- Think: drunk columnist ranting at a dinner party, David Sedaris meets Hunter S. Thompson.',
+  '- The author should have strong, possibly unreasonable opinions they defend passionately.',
+  '- End with a memorable closing line or call to action.',
+].join('\n')
+
+const JSON_SCHEMA = [
+  'JSON schema:',
+  '{',
+  '  "headline": string,  // YOUR OWN original headline - DO NOT copy the topic direction (<= 140 chars)',
+  '  "subheadline": string|null,  // <= 220 chars',
+  '  "excerpt": string|null,  // <= 300 chars',
+  '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
+  '  "categorySlug": string,  // existing slug OR new slug if creating category',
+  '  "authorSlug": string,  // existing slug OR new slug if creating author',
+  '  "newAuthorName": string|null,  // REQUIRED if creating new author (<= 60 chars)',
+  '  "newAuthorTitle": string|null,  // REQUIRED if creating new author (their beat/role, <= 100 chars)',
+  '  "newAuthorBio": string|null,  // REQUIRED if creating new author (2-3 funny sentences, <= 500 chars)',
+  '  "layout": "standard"|"wide"|"opinion",',
+  '  "isFeatured": boolean,',
+  '  "isHeadline": boolean,',
+  '  "imageCaption": string|null,  // <= 160 chars',
+  '  "imagePrompt": string|null,  // REQUIRED: prompt for an illustrative photorealistic image, no text overlays. (<= 600 chars)',
+  '  "sourceRssTopic": string|null  // If your article was inspired by a real news topic provided, copy the original news headline here verbatim. Otherwise null.',
+  '}',
+].join('\n')
+
+const AUTHOR_SELECTION = [
+  'AUTHOR SELECTION:',
+  'You have two options for the author:',
+  '1. Pick an existing author from the list below (use their slug as authorSlug)',
+  '2. CREATE A NEW AUTHOR (strongly encouraged ~50% of the time!) - invent a fictional journalist with a unique personality',
+  '',
+  'If creating a NEW author:',
+  '- Set authorSlug to a new unique slug (lowercase, hyphens, e.g. "klaus-bierstein")',
+  '- MUST provide newAuthorName (full name, e.g. "Klaus Bierstein")',
+  '- MUST provide newAuthorTitle (their role/beat, e.g. "Nightlife Correspondent", "Bureaucracy Survivor", "Gentrification Watch Reporter", "Crime Reporter", "Local News Correspondent")',
+  '- MUST provide newAuthorBio (2-3 sentences about them - make it funny, sarcastic, and fitting for a satirical paper)',
+].join('\n')
+
+const DRUGS_TECHNO_HEADLINES = [
+  '═══════════════════════════════════════════════════════════════════',
+  'DRUGS AND TECHNO IN HEADLINES - THIS IS MANDATORY',
+  '═══════════════════════════════════════════════════════════════════',
+  'Berlin is synonymous with drugs and techno. Your headlines MUST reflect this.',
+  'When your topic involves drugs, techno, clubs, nightlife, or decadence, the headline MUST contain at least one of these keywords:',
+  '- Drug-related: ketamine, cocaine, MDMA, speed, drugs, high, dealer, Görlitzer Park, trip, coming down',
+  '- Club-related: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, techno, DJ, club, rave, bouncer, dancefloor, after-hours',
+  '- Decadence-related: bender, party, orgy, sex, hedonism, darkroom',
+  '',
+  'Example headlines that work:',
+  '- "Berghain Bouncer Starts Side Business Rating Pupils"',
+  '- "Görlitzer Park Dealer Launches Subscription Model with Newsletter"',
+  '- "Ketamine Enthusiast Accidentally Fixes His Life While Dissociated"',
+  '- "New Study: 87% of Berlin Techno DJs Just Pressing Play"',
+  '- "Man at Sisyphos Has Been Dancing to Same Loop for 14 Hours"',
+  '- "Local Club Introduces Sober Corner, Nobody Can Find It"',
+  '',
+  'DO NOT write vague headlines like "Berlin Nightlife Sees Changes" - be SPECIFIC about drugs and techno!',
+  '═══════════════════════════════════════════════════════════════════',
+].join('\n')
+
+const INTELLECTUAL_HEADLINE_REFERENCES = [
+  'INTELLECTUAL REFERENCES IN HEADLINES (OPTIONAL BUT ENCOURAGED):',
+  'Consider weaving intellectual or cultural references into your headlines when it fits naturally.',
+  'This adds wit and rewards educated readers. Examples of headline styles with references:',
+  '- "Local Man\'s Sisyphean Quest for Anmeldung Enters Year Four"',
+  '- "Proustian Flashback Ruins Techno Set at Berghain"',
+  '- "Waiting for Döner: Neukölln Man\'s Beckettian Vigil at 3am"',
+  '- "Kafkaesque Bureaucracy Claims Another Victim at Bürgeramt"',
+  '- "The Unbearable Lightness of Being Rejected at Berghain"',
+  '- "Görlitzer Park: A Dialectical Analysis of Supply and Demand"',
+  'This is a SUGGESTION, not a requirement—use when it enhances the headline without forcing it.',
+].join('\n')
+
+const IMAGE_GENERATION = [
+  'IMAGE GENERATION:',
+  'You MUST provide an imagePrompt for almost every article. Think: what photo would a real newspaper use to illustrate this story?',
+  'The imagePrompt should be a detailed, visual description of a photorealistic image (no text overlays).',
+  'Only omit imagePrompt if the story is truly unillustratable (very rare).',
+].join('\n')
+
+const IMAGE_PROMPT_INSTRUCTIONS = [
+  'IMPORTANT: You MUST provide an imagePrompt for almost every article. The imagePrompt should be:',
+  '- A detailed description of a photorealistic image that would illustrate the article',
+  '- Specific, visual, and descriptive (e.g., "A man in a suit holding a stack of papers at a Bürgeramt counter, frustrated expression, bureaucratic setting")',
+  '- No text overlays, just a visual description',
+  '- Related to the main subject of the article',
+  '- Think like a photojournalist: what photo would accompany this news story?',
+  '- Only omit imagePrompt if the story is truly unillustratable (very rare)',
+].join('\n')
 
 /******************* HELPERS ***********************/
 
@@ -1058,8 +1271,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       scenario.includes('pupils'),
   )
 
-  // 30% chance to select from drugs/techno scenarios, 70% from all scenarios
-  const useDrugsOrTechnoScenario = Math.random() < 0.3
+  // 20% chance to select from drugs/techno scenarios, 80% from all scenarios (reduced to avoid overuse)
+  const useDrugsOrTechnoScenario = Math.random() < 0.2
   const selectedScenario = useDrugsOrTechnoScenario
     ? drugsAndTechnoScenarios[Math.floor(Math.random() * drugsAndTechnoScenarios.length)]
     : concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
@@ -1334,8 +1547,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       topic.includes('dealer'),
   )
 
-  // 30% chance to select from drugs/techno topics, 70% from all topics
-  const useDrugsOrTechnoTopic = Math.random() < 0.3
+  // 20% chance to select from drugs/techno topics, 80% from all topics (reduced to avoid overuse)
+  const useDrugsOrTechnoTopic = Math.random() < 0.2
   let randomFocus: string
 
   if (useDrugsOrTechnoTopic) {
@@ -1398,6 +1611,30 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
         ].join('\n')
       : ''
+
+  // Section showing the latest article's content to ensure the new one is different
+  const latestArticleSection = input.latestArticleContentSample
+    ? [
+        '',
+        '═══════════════════════════════════════════════════════════════════',
+        'CRITICAL: YOUR ARTICLE MUST BE DIFFERENT FROM THE LATEST ONE',
+        '═══════════════════════════════════════════════════════════════════',
+        '',
+        'Below is a sample from the MOST RECENT article published. Your new article MUST be distinctly different:',
+        '- Different topic/subject matter',
+        '- Different tone and approach',
+        '- Different story structure',
+        '- Different characters/situations',
+        '',
+        'LATEST ARTICLE CONTENT SAMPLE (DO NOT write something similar):',
+        '---',
+        input.latestArticleContentSample,
+        '---',
+        '',
+        'Write something FRESH and ORIGINAL that contrasts with the above.',
+        '═══════════════════════════════════════════════════════════════════',
+      ].join('\n')
+    : ''
 
   // Analyze headline structures to find overused patterns (data-driven approach)
   const headlineAnalysis = analyzeHeadlineStructures(input.recentArticleTitles)
@@ -1518,34 +1755,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
     'Language: write everything in US English (no German, no other languages).',
     '',
-    'CRITICAL: "Wedding" (capitalized) refers to Wedding, a neighborhood in Berlin, NOT a wedding ceremony.',
-    'DO NOT write articles about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
-    'The newspaper is named "The Wedding Times" because it covers the Wedding neighborhood in Berlin.',
-    'When you see "Wedding" in context, it means the Berlin neighborhood (like Kreuzberg, Neukölln, Mitte, etc.), not a marriage ceremony.',
-    'Write about life in the Wedding neighborhood, not about weddings as events.',
+    WEDDING_NEIGHBORHOOD_CONTEXT,
     '',
-    "IMPORTANT CONTEXT: Wedding is a neighborhood with a significant Turkish community. This is a natural, integral part of the neighborhood's character.",
-    "When writing about Wedding, it's natural and appropriate to mention Turkish businesses, Turkish families, Turkish cultural elements, Turkish-owned shops, etc.",
-    'The Turkish community is fair game for satire and edgy humor—make fun of them like you make fun of everyone else. But avoid racist stereotypes, slurs, or hateful content.',
-    "Turkish döner shops, Turkish families, Turkish community events, Turkish-owned businesses are all part of Wedding's reality and should be mentioned when relevant.",
-    "Satirize Turkish community elements with the same edgy, politically incorrect approach you use for everything—just don't be racist about it.",
+    TURKISH_COMMUNITY_CONTEXT,
     '',
-    'CRITICAL BERLIN CULTURE ELEMENTS - DRUGS AND TECHNO:',
-    "Berlin's identity is INSEPARABLE from its techno and drug culture. This is not optional flavor—it's the city's DNA.",
-    'When writing about Berlin, naturally weave in references to:',
-    '- Techno clubs: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, ://about blank, Wilde Renate, Salon zur Wilden Renate',
-    '- IMPORTANT: Do NOT only mention Berghain! Berlin has many iconic clubs. Vary your club references—Sisyphos, About Blank, Kater Blau, Golden Gate are just as culturally significant.',
-    '- The door policies and bouncers as cultural gatekeepers (not just Berghain—other clubs have their own characters)',
-    '- Drug use as a normal part of Berlin nightlife (ketamine, MDMA, cocaine, speed, GHB)',
-    "- Görlitzer Park as Berlin's open-air pharmacy",
-    '- After-parties that last for days, the blurry line between Saturday and Tuesday',
-    '- The walk of shame / stride of pride home at 2pm on a Monday',
-    '- Club bathrooms as social spaces (and transaction venues)',
-    "- The 'Berlin look': all black, tired, possibly still high from the weekend",
-    '- Späti culture as the support system for Berlin nightlife',
-    "Even when an article is NOT primarily about drugs or techno, these elements should appear naturally because they're part of daily Berlin life.",
-    'A story about bureaucracy might mention someone filling forms while coming down. A gentrification piece might reference club closures. A crime story might involve Görlitzer Park.',
-    'Make drugs and techno feel as natural and present as the Turkish community or the bureaucracy—because in Berlin, they are.',
+    BERLIN_DRUGS_TECHNO_CULTURE,
     '',
     'WRITING STYLE NOTE:',
     '- Reduce usage of the word "vibes" or "vibe"—it is overused. Prefer more specific, evocative language.',
@@ -1557,101 +1771,35 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'Style: Write like a real local newspaper journalist—specific, detailed, factual-sounding but about something surreal. Include concrete details: names, addresses, times, quotes. Make it read like a real news article from a serious paper, but the story is absurd AND edgy. Challenge comfort zones. Make readers question their own reactions.',
           'CRITICAL: This must be CONCRETE and SPECIFIC. No abstract concepts. Real names (fictional), real addresses, real times, real quotes. The absurdity is in the situation, not in abstract satire. But push it further—make it uncomfortable, politically incorrect, challenging.',
           '',
-          'EDGE AND POLITICAL INCORRECTNESS:',
-          '- Go beyond "nice absurdity". Make readers uncomfortable. Challenge their assumptions.',
-          '- Tackle taboo subjects with dark humor. Make fun of everyone equally—no sacred cows.',
-          '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
-          '- Push boundaries. Be provocative. Make people think "can they say that?"',
-          '- Use dark humor, shock value, and uncomfortable truths wrapped in absurdity',
-          "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
+          EDGE_AND_POLITICAL_INCORRECTNESS,
           '',
-          'SPICE IT UP (subtle sexual innuendo):',
-          '- Include 2-3 subtle double entendres or sexual innuendo that can be read innocently or suggestively',
-          '- Use phrases that have a second, sexual meaning when read carefully (e.g., "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance")',
-          '- Keep it clever—readers should catch the double meaning',
-          '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
+          SPICE_IT_UP,
           '',
-          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
-          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
-          '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
-          '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
-          '- These should be recognizable to educated readers, but woven in with WIT and CREATIVITY',
-          '- DO NOT copy examples—come up with your OWN creative, witty references',
-          '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory, architectural ideas',
-          '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
-          '- Make references witty and contextually appropriate—they should feel natural, not forced',
-          '- The goal is clever cultural commentary, not academic name-dropping',
-          "- Vary your references—don't repeat the same ones in every article",
+          INTELLECTUAL_EASTER_EGGS,
         ].join('\n')
       : [
           'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel the spirit of early South Park, Anthony Jeselnik, and classic British satire like Brass Eye. Mock sacred cows, poke fun at every demographic equally, and embrace taboo topics with gleeful abandon. Use dark humor, shock value, and absurdist takes on sensitive subjects. Nothing is off-limits except actual hate speech or calls to violence.',
           'Style: write like a hungover journalist who has stopped caring about keeping their job—biting sarcasm, cynical observations, and jokes that make readers say "they cant print that".',
           '',
-          'EDGE AND POLITICAL INCORRECTNESS:',
-          '- Go beyond "nice absurdity". Make readers uncomfortable. Challenge their assumptions.',
-          '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
-          '- Push boundaries. Be provocative. Make people think "can they say that?"',
-          '- Use dark humor, shock value, and uncomfortable truths wrapped in absurdity',
-          "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
-          '- Tackle taboo subjects. Make fun of everyone equally—no sacred cows.',
+          EDGE_AND_POLITICAL_INCORRECTNESS,
           '',
-          'SPICE IT UP (subtle sexual innuendo):',
-          '- Include 2-3 subtle double entendres or sexual innuendo that can be read innocently or suggestively',
-          '- Use phrases that have a second, sexual meaning when read carefully (e.g., "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance")',
-          '- Keep it clever—readers should catch the double meaning',
-          '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
+          SPICE_IT_UP,
           '',
-          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
-          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
-          '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
-          '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
-          '- These should be recognizable to educated readers, but woven in with WIT and CREATIVITY',
-          '- DO NOT copy examples—come up with your OWN creative, witty references',
-          '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory, architectural ideas',
-          '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
-          '- Make references witty and contextually appropriate—they should feel natural, not forced',
-          '- The goal is clever cultural commentary, not academic name-dropping',
-          "- Vary your references—don't repeat the same ones in every article",
+          INTELLECTUAL_EASTER_EGGS,
         ].join('\n'),
     topicInstruction,
     recentTitlesSection,
+    latestArticleSection,
     headlinePatternsSection,
     bannedKeywordsSection,
     'CRITICAL: Pick a categorySlug that BEST matches your assigned topic direction above.',
-    'Category mapping guide:',
-    '- Drugs/ketamine/club bathroom → drugs',
-    '- Techno/Berghain/DJ/warehouse rave → techno',
-    '- Decadence/after-parties/hedonism → decadence',
-    '- Filth/trash/cleaning/rats → filth',
-    '- Bureaucracy/forms/appointments → bureaucracy',
-    '- Leopoldplatz/fountain → leopoldplatz',
-    '- Nightlife/clubs/parties → nightlife',
-    '- Food/kebab/späti → food-drink',
-    '- Crime/theft/police/Clans/organized crime → crime',
-    '- Local news/kiez/BVG → kiez',
-    '- Rent/gentrification/expats/startup culture/co-working/tech bros → gentrification',
-    '- Yoga/mindfulness/veganism/wellness/meditation → gentrification (wellness gentrification)',
-    '- Opinion/editorial → opinion',
-    'DO NOT default to bureaucracy, nightlife, or opinion unless your topic truly matches.',
-    'IMPORTANT: Startup culture, yoga studios, mindfulness retreats, and vegan restaurants are forms of gentrification—map them to "gentrification" category.',
+    CATEGORY_MAPPING_GUIDE,
     '',
-    'OPINION PIECE FORMAT (when categorySlug is "opinion" and layout is "opinion"):',
-    '- Write as a PERSONAL ESSAY, not a news article.',
-    '- Use FIRST PERSON throughout ("I", "my", "we").',
-    '- Open with a provocative thesis or hot take that the author is defending.',
-    '- Structure like an essay: intro with thesis → arguments/anecdotes → conclusion that drives the point home.',
-    '- Include personal observations, rants, and the authors lived experience in Berlin.',
-    '- Be MORE opinionated, MORE aggressive, MORE unhinged than regular articles.',
-    '- Think: drunk columnist ranting at a dinner party, David Sedaris meets Hunter S. Thompson.',
-    '- The author should have strong, possibly unreasonable opinions they defend passionately.',
-    '- End with a memorable closing line or call to action.',
+    OPINION_PIECE_FORMAT,
     '',
     'Remember: punch in all directions, mock everyone, but avoid slurs or explicit calls for harm.',
     '',
-    'IMAGE GENERATION:',
-    'You MUST provide an imagePrompt for almost every article. Think: what photo would a real newspaper use to illustrate this story?',
-    'The imagePrompt should be a detailed, visual description of a photorealistic image (no text overlays).',
-    'Only omit imagePrompt if the story is truly unillustratable (very rare).',
+    IMAGE_GENERATION,
     '',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
   ].join('\n')
@@ -1676,33 +1824,18 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         '- Name specific Berlin locations, streets, neighborhoods',
         '- Include dialogue, witness accounts, official statements (all fictional but realistic)',
         '- The article should be 300-600 words of detailed, specific reporting',
-        '- MUST provide an imagePrompt: describe a photorealistic photo that would illustrate this news story (e.g., "A broken fountain at Leopoldplatz with people throwing coins into it, urban Berlin setting")',
+        '- MUST provide an imagePrompt: describe a photorealistic photo that would illustrate this news story',
         '',
-        'EDGE AND POLITICAL INCORRECTNESS:',
-        '- Push beyond "nice absurdity". Make readers uncomfortable. Challenge assumptions.',
-        '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
-        '- Tackle taboo subjects with dark humor. Make fun of everyone equally.',
-        '- Use uncomfortable truths wrapped in absurdity. Make readers squirm.',
+        EDGE_SHORT,
         '',
-        'CRITICAL REMINDER: "Wedding" (capitalized) refers to Wedding, the Berlin neighborhood, NOT a wedding ceremony.',
-        'DO NOT write about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
-        'Write about life in the Wedding neighborhood, not about weddings as events.',
+        WEDDING_REMINDER_SHORT,
         '',
-        'IMPORTANT: Wedding has a significant Turkish community. When writing about Wedding, naturally mention Turkish businesses, Turkish families, Turkish cultural elements when relevant.',
-        'The Turkish community is fair game for satire—make fun of them like everyone else. But avoid racist stereotypes, slurs, or hateful content.',
+        TURKISH_REMINDER_SHORT,
         '',
-        'TONE: Deadpan, serious journalism about something completely ridiculous, but with an edge. Like The Onion but more detailed, specific, AND uncomfortable. Make readers question their own reactions.',
-        'STYLE: Read like a real local newspaper article. Who, what, where, when, why, how - all answered with absurd but specific details. But push boundaries. Challenge comfort zones.',
+        'TONE: Deadpan, serious journalism about something completely ridiculous, but with an edge. Like The Onion but more detailed, specific, AND uncomfortable.',
+        'STYLE: Read like a real local newspaper article. Who, what, where, when, why, how - all answered with absurd but specific details.',
         '',
-        'INTELLECTUAL EASTER EGGS (MORE PROMINENT):',
-        '- Include 3-5 witty, creative cultural references per article—make them visible but clever',
-        '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
-        '- DO NOT copy examples—come up with your OWN creative, witty references',
-        '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory',
-        '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
-        '- Make references witty and contextually appropriate—they should feel natural, not forced',
-        '- The goal is clever cultural commentary, not academic name-dropping',
-        "- Vary your references—don't repeat the same ones in every article",
+        INTELLECTUAL_EASTER_EGGS,
         '',
       ].join('\n')
     : hasRssTopics && selectedRssTopic
@@ -1721,6 +1854,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           'The connection to the real news should be CLEAR in the article, not just vaguely inspired.',
           'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.',
+          '',
+          'IMPORTANT: Since you are using this news topic, you MUST set "sourceRssTopic" in your JSON output to the EXACT news headline above.',
+          `Copy this verbatim: "${selectedRssTopic}"`,
           '',
         ].join('\n')
       : 'No external topics provided. Invent plausible Berlin-related satire based on the topic focus above.\n'
@@ -1744,90 +1880,24 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- NO abstract philosophical musings. ONLY concrete, specific details about the scenario.',
           '- Think: "A real journalist would write this story with these details"',
           '',
-          'SPICE IT UP - Subtle Sexual Innuendo:',
-          '- Include 2-3 subtle double entendres naturally woven into the text',
-          '- Examples: "residents found it hard to swallow the new policy", "the committee struggled to penetrate the bureaucracy", "the proposal met with stiff resistance"',
-          '- Keep it clever and subtle—readers should catch the double meaning on a second read',
-          '- NOT explicit or vulgar—just playful wordplay',
+          SPICE_IT_UP,
           '',
-          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
-          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
-          '- Include 1-3 witty, creative cultural references to literature, philosophy, art, film, or academic concepts',
-          '- DO NOT copy examples—come up with your OWN creative references',
-          '- Weave them naturally with wit: literary allusions, philosophical concepts, film references, art movements, cultural theory',
-          '- Possible sources (vary widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Philip K. Dick. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Wittgenstein, Heidegger, Kierkegaard. Cinema: Truffaut, Coppola. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven.',
-          '- Think: educated readers will recognize the reference, but the article still works without it',
-          "- Be creative and varied—don't repeat the same references",
-          '- The goal is clever cultural commentary, not academic name-dropping',
+          INTELLECTUAL_EASTER_EGGS,
           '',
         ].join('\n')
       : '',
-    'AUTHOR SELECTION:',
-    'You have two options for the author:',
-    '1. Pick an existing author from the list below (use their slug as authorSlug)',
-    '2. CREATE A NEW AUTHOR (strongly encouraged ~50% of the time!) - invent a fictional journalist with a unique personality',
-    '',
-    'If creating a NEW author:',
-    '- Set authorSlug to a new unique slug (lowercase, hyphens, e.g. "klaus-bierstein")',
-    '- MUST provide newAuthorName (full name, e.g. "Klaus Bierstein")',
-    '- MUST provide newAuthorTitle (their role/beat, e.g. "Nightlife Correspondent", "Bureaucracy Survivor", "Gentrification Watch Reporter", "Crime Reporter", "Local News Correspondent")',
-    '- MUST provide newAuthorBio (2-3 sentences about them - make it funny, sarcastic, and fitting for a satirical paper)',
+    AUTHOR_SELECTION,
     '',
     'Return an article that could plausibly run on the front page of a satirical local paper.',
     '',
-    'CRITICAL REMINDER: "Wedding" (capitalized) refers to Wedding, the Berlin neighborhood, NOT a wedding ceremony.',
-    'DO NOT write about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
-    'The newspaper covers the Wedding neighborhood in Berlin. Write about life in Wedding, not about weddings as events.',
+    WEDDING_REMINDER_SHORT,
     '',
-    'IMPORTANT: Wedding has a significant Turkish community. When writing about Wedding, naturally mention Turkish businesses, Turkish families, Turkish cultural elements when relevant.',
-    'The Turkish community is fair game for satire—make fun of them like everyone else. But avoid racist stereotypes, slurs, or hateful content.',
+    TURKISH_REMINDER_SHORT,
     '',
     !useFeatureStoryPrompt
-      ? [
-          'EDGE AND POLITICAL INCORRECTNESS:',
-          '- Push beyond "nice absurdity". Make readers uncomfortable. Challenge assumptions.',
-          '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
-          '- Tackle taboo subjects with dark humor. Make fun of everyone equally.',
-          '- Use uncomfortable truths wrapped in absurdity. Make readers squirm.',
-          '',
-          'SPICE IT UP - Subtle Sexual Innuendo:',
-          '- Include 2-3 subtle double entendres naturally woven into the text',
-          '- Examples: "residents found it hard to swallow the new policy", "the committee struggled to penetrate the bureaucracy", "the proposal met with stiff resistance"',
-          '- Keep it clever—readers should catch the double meaning',
-          '- NOT explicit or vulgar—just playful wordplay',
-          '',
-          'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
-          '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
-          '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
-          '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
-          '- DO NOT copy examples—come up with your OWN creative, witty references',
-          '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory',
-          '- Possible sources (be creative, vary them widely): Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin. Vary your references!',
-          '- Make references witty and contextually appropriate—they should feel natural, not forced',
-          '- The goal is clever cultural commentary, not academic name-dropping',
-          "- Vary your references—don't repeat the same ones in every article",
-          '',
-        ].join('\n')
+      ? [EDGE_SHORT, '', SPICE_IT_UP, '', INTELLECTUAL_EASTER_EGGS, ''].join('\n')
       : '',
-    '═══════════════════════════════════════════════════════════════════',
-    'DRUGS AND TECHNO IN HEADLINES - THIS IS MANDATORY',
-    '═══════════════════════════════════════════════════════════════════',
-    'Berlin is synonymous with drugs and techno. Your headlines MUST reflect this.',
-    'When your topic involves drugs, techno, clubs, nightlife, or decadence, the headline MUST contain at least one of these keywords:',
-    '- Drug-related: ketamine, cocaine, MDMA, speed, drugs, high, dealer, Görlitzer Park, trip, coming down',
-    '- Club-related: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, techno, DJ, club, rave, bouncer, dancefloor, after-hours',
-    '- Decadence-related: bender, party, orgy, sex, hedonism, darkroom',
-    '',
-    'Example headlines that work:',
-    '- "Berghain Bouncer Starts Side Business Rating Pupils"',
-    '- "Görlitzer Park Dealer Launches Subscription Model with Newsletter"',
-    '- "Ketamine Enthusiast Accidentally Fixes His Life While Dissociated"',
-    '- "New Study: 87% of Berlin Techno DJs Just Pressing Play"',
-    '- "Man at Sisyphos Has Been Dancing to Same Loop for 14 Hours"',
-    '- "Local Club Introduces Sober Corner, Nobody Can Find It"',
-    '',
-    'DO NOT write vague headlines like "Berlin Nightlife Sees Changes" - be SPECIFIC about drugs and techno!',
-    '═══════════════════════════════════════════════════════════════════',
+    DRUGS_TECHNO_HEADLINES,
     '',
     'HEADLINE VARIETY IS CRITICAL:',
     useFeatureStoryPrompt
@@ -1845,16 +1915,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'When the topic involves drugs/techno/nightlife, the headline MUST contain specific keywords (Berghain, ketamine, dealer, DJ, etc.)',
         ].join('\n'),
     '',
-    'INTELLECTUAL REFERENCES IN HEADLINES (OPTIONAL BUT ENCOURAGED):',
-    'Consider weaving intellectual or cultural references into your headlines when it fits naturally.',
-    'This adds wit and rewards educated readers. Examples of headline styles with references:',
-    '- "Local Man\'s Sisyphean Quest for Anmeldung Enters Year Four"',
-    '- "Proustian Flashback Ruins Techno Set at Berghain"',
-    '- "Waiting for Döner: Neukölln Man\'s Beckettian Vigil at 3am"',
-    '- "Kafkaesque Bureaucracy Claims Another Victim at Bürgeramt"',
-    '- "The Unbearable Lightness of Being Rejected at Berghain"',
-    '- "Görlitzer Park: A Dialectical Analysis of Supply and Demand"',
-    'This is a SUGGESTION, not a requirement—use when it enhances the headline without forcing it.',
+    INTELLECTUAL_HEADLINE_REFERENCES,
     '',
     'CATEGORY SELECTION:',
     'You have two options for the category:',
@@ -1867,31 +1928,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Existing authorSlug options (or create new):',
     authorsList,
     '',
-    'JSON schema:',
-    '{',
-    '  "headline": string,  // YOUR OWN original headline - DO NOT copy the topic direction (<= 140 chars)',
-    '  "subheadline": string|null,  // <= 220 chars',
-    '  "excerpt": string|null,  // <= 300 chars',
-    '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
-    '  "categorySlug": string,  // existing slug OR new slug if creating category',
-    '  "authorSlug": string,  // existing slug OR new slug if creating author',
-    '  "newAuthorName": string|null,  // REQUIRED if creating new author (<= 60 chars)',
-    '  "newAuthorTitle": string|null,  // REQUIRED if creating new author (their beat/role, <= 100 chars)',
-    '  "newAuthorBio": string|null,  // REQUIRED if creating new author (2-3 funny sentences, <= 500 chars)',
-    '  "layout": "standard"|"wide"|"opinion",',
-    '  "isFeatured": boolean,',
-    '  "isHeadline": boolean,',
-    '  "imageCaption": string|null,  // <= 160 chars',
-    '  "imagePrompt": string|null  // REQUIRED: prompt for an illustrative photorealistic image, no text overlays. Always provide this unless the story truly cannot be illustrated. <= 600 chars',
-    '}',
+    JSON_SCHEMA,
     '',
-    'IMPORTANT: You MUST provide an imagePrompt for almost every article. The imagePrompt should be:',
-    '- A detailed description of a photorealistic image that would illustrate the article',
-    '- Specific, visual, and descriptive (e.g., "A man in a suit holding a stack of papers at a Bürgeramt counter, frustrated expression, bureaucratic setting")',
-    '- No text overlays, just a visual description',
-    '- Related to the main subject of the article',
-    '- Think like a photojournalist: what photo would accompany this news story?',
-    '- Only omit imagePrompt if the story is truly unillustratable (very rare)',
+    IMAGE_PROMPT_INSTRUCTIONS,
   ].join('\n')
 
   const raw = await llm.invoke([
