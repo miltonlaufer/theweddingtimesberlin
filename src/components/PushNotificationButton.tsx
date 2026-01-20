@@ -1,27 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 export function PushNotificationButton() {
+  /******************* STATE ***********************/
   const [isSupported, setIsSupported] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Check if push notifications are supported
-    if (
-      typeof window !== 'undefined' &&
-      'serviceWorker' in navigator &&
-      'PushManager' in window &&
-      'Notification' in window
-    ) {
-      setIsSupported(true)
-      checkSubscriptionStatus()
-    }
-  }, [])
-
-  const checkSubscriptionStatus = async () => {
+  /******************* FUNCTIONS ***********************/
+  const checkSubscriptionStatus = useCallback(async () => {
     try {
       const registration = await navigator.serviceWorker.ready
       const subscription = await registration.pushManager.getSubscription()
@@ -29,9 +18,9 @@ export function PushNotificationButton() {
     } catch (err) {
       console.error('Error checking subscription status:', err)
     }
-  }
+  }, [])
 
-  const requestPermission = async (): Promise<NotificationPermission> => {
+  const requestPermission = useCallback(async (): Promise<NotificationPermission> => {
     if (!('Notification' in window)) {
       throw new Error('This browser does not support notifications')
     }
@@ -47,9 +36,9 @@ export function PushNotificationButton() {
     }
 
     return permission
-  }
+  }, [])
 
-  const subscribe = async () => {
+  const handleSubscribe = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
@@ -102,9 +91,9 @@ export function PushNotificationButton() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [requestPermission])
 
-  const unsubscribe = async () => {
+  const handleUnsubscribe = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
@@ -125,8 +114,23 @@ export function PushNotificationButton() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
+  /******************* EFFECTS ***********************/
+  useEffect(() => {
+    // Check if push notifications are supported
+    if (
+      typeof window !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window &&
+      'Notification' in window
+    ) {
+      setIsSupported(true)
+      checkSubscriptionStatus()
+    }
+  }, [checkSubscriptionStatus])
+
+  /******************* RENDER ***********************/
   if (!isSupported) {
     return null
   }
@@ -140,7 +144,7 @@ export function PushNotificationButton() {
       )}
       {isSubscribed ? (
         <button
-          onClick={unsubscribe}
+          onClick={handleUnsubscribe}
           disabled={isLoading}
           className="font-sans text-[11px] text-[#121212] disabled:opacity-50"
         >
@@ -148,7 +152,7 @@ export function PushNotificationButton() {
         </button>
       ) : (
         <button
-          onClick={subscribe}
+          onClick={handleSubscribe}
           disabled={isLoading}
           className="font-sans text-[11px] text-[#121212] disabled:opacity-50"
         >

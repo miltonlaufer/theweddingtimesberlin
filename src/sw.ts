@@ -62,8 +62,9 @@ self.addEventListener('install', (event) => {
 })
 
 // Handle push notifications
-self.addEventListener('push', (event: Event) => {
-  const pushEvent = event as ExtendableEvent & { data?: PushMessageData | null }
+self.addEventListener('push', (event: PushEvent) => {
+  console.log('[SW] Push notification received')
+
   let notificationData: {
     title: string
     body?: string
@@ -80,9 +81,17 @@ self.addEventListener('push', (event: Event) => {
     tag: 'new-articles',
   }
 
-  if (pushEvent.data) {
+  if (event.data) {
     try {
-      const data = pushEvent.data.json()
+      const data = event.data.json() as {
+        title?: string
+        body?: string
+        icon?: string
+        badge?: string
+        url?: string
+        tag?: string
+      }
+      console.log('[SW] Push data:', data)
       notificationData = {
         title: data.title || notificationData.title,
         body: data.body || notificationData.body,
@@ -91,7 +100,8 @@ self.addEventListener('push', (event: Event) => {
         url: data.url || notificationData.url,
         tag: data.tag || notificationData.tag,
       }
-    } catch {
+    } catch (err) {
+      console.error('[SW] Failed to parse push data:', err)
       // If JSON parsing fails, use default notification
     }
   }
@@ -107,17 +117,18 @@ self.addEventListener('push', (event: Event) => {
     },
   }
 
-  pushEvent.waitUntil(self.registration.showNotification(notificationTitle, notificationOptions))
+  event.waitUntil(self.registration.showNotification(notificationTitle, notificationOptions))
 })
 
 // Handle notification clicks
-self.addEventListener('notificationclick', (event: Event) => {
-  const notificationEvent = event as ExtendableEvent & { notification: Notification }
-  notificationEvent.notification.close()
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  console.log('[SW] Notification clicked')
+  event.notification.close()
 
-  const urlToOpen = notificationEvent.notification.data?.url || '/'
+  const urlToOpen = (event.notification.data?.url as string) || '/'
+  console.log('[SW] Opening URL:', urlToOpen)
 
-  notificationEvent.waitUntil(
+  event.waitUntil(
     self.clients
       .matchAll({
         type: 'window',

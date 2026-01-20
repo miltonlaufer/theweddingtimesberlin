@@ -177,7 +177,7 @@ export async function POST(req: Request) {
   const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
   const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
 
-  const generated = await generateArticle({
+  const { article: generated, usedRssTopic } = await generateArticle({
     categories,
     authors,
     topicSummary,
@@ -366,6 +366,7 @@ export async function POST(req: Request) {
       isFeatured: generated.isFeatured,
       isHeadline: generated.isHeadline,
       layout: generated.layout,
+      sourceRssTopic: usedRssTopic ?? undefined, // Track if article was inspired by RSS news
     },
   })
 

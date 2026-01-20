@@ -48,6 +48,12 @@ export const GeneratedArticleSchema = z.object({
 
 export type GeneratedArticle = z.infer<typeof GeneratedArticleSchema>
 
+export interface GenerateArticleResult {
+  article: GeneratedArticle
+  /** The RSS topic that was provided to the LLM (if any). Track this server-side for reliability. */
+  usedRssTopic: string | null
+}
+
 /******************* PROMPT CONSTANTS ***********************/
 
 // Reusable prompt text blocks to avoid repetition
@@ -1112,7 +1118,7 @@ function headlineViolatesBannedWords(headline: string, bannedOpeningWords: strin
 
 /******************* MAIN ***********************/
 
-export async function generateArticle(input: GenerateArticleInput): Promise<GeneratedArticle> {
+export async function generateArticle(input: GenerateArticleInput): Promise<GenerateArticleResult> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     throw new Error('Missing OPENAI_API_KEY')
@@ -1586,6 +1592,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     ? rssTopics[Math.floor(Math.random() * rssTopics.length)]
     : null
 
+  // Track whether RSS topic was ACTUALLY used in the prompt (not just selected)
+  // RSS topics are only used when NOT a feature story AND RSS topics are available
+  const actuallyUsedRssTopic =
+    !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
+
   // Limit to 12 most recent articles to keep token usage reasonable
   const maxRecentArticles = 12
   const recentTitles = input.recentArticleTitles.slice(0, maxRecentArticles)
@@ -1945,12 +1956,16 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     const parsed = JSON.parse(jsonText) as unknown
     const validation = GeneratedArticleSchema.safeParse(parsed)
     if (!validation.success) {
-      return await repairToSchema({
+      const repaired = await repairToSchema({
         badOutput: text,
         categories: input.categories,
         authors: input.authors,
         validationErrors: validation.error.issues,
       })
+      return {
+        article: repaired,
+        usedRssTopic: actuallyUsedRssTopic,
+      }
     }
     let validated = validation.data
     const langSample =
@@ -1977,13 +1992,20 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       })
     }
 
-    return validated
+    return {
+      article: validated,
+      usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
+    }
   } catch {
     // Fallback: deterministic repair using cheaper model
-    return await repairToSchema({
+    const repaired = await repairToSchema({
       badOutput: text,
       categories: input.categories,
       authors: input.authors,
     })
+    return {
+      article: repaired,
+      usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
+    }
   }
 }

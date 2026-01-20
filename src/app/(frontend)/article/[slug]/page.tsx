@@ -15,7 +15,8 @@ import { FallbackImage } from '@/components/FallbackImage'
 /******************* RENDERING CONFIG ***********************/
 
 export const dynamicParams = true
-export const revalidate = 1200
+// Articles are static once published - no time-based revalidation needed
+export const revalidate = false
 
 export async function generateStaticParams() {
   return []

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getPayload } from '@/lib/payload'
 import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import { generateArticle, extractHeadlinePatterns } from '@/lib/generation/generateArticle'
@@ -244,7 +245,7 @@ export async function GET(req: Request) {
         const categoriesToUse = unusedCategories.length > 0 ? unusedCategories : categories
 
         // Generate article with category distribution
-        const generated = await generateArticle({
+        const { article: generated, usedRssTopic } = await generateArticle({
           categories: categoriesToUse,
           authors,
           topicSummary,
@@ -428,7 +429,7 @@ export async function GET(req: Request) {
             isFeatured: generated.isFeatured,
             isHeadline: i === 0 ? generated.isHeadline : false, // Only first can be headline
             layout: generated.layout,
-            sourceRssTopic: generated.sourceRssTopic ?? undefined, // Track if article was inspired by RSS news
+            sourceRssTopic: usedRssTopic ?? undefined, // Track if article was inspired by RSS news (server-side tracking)
           },
         })
 
@@ -477,6 +478,32 @@ export async function GET(req: Request) {
       }
     }
 
+    // Revalidate cache for home and archive pages after new articles are created
+    const revalidatedPaths: string[] = []
+    if (createdArticles.length > 0) {
+      try {
+        // Revalidate home page
+        revalidatePath('/')
+        revalidatedPaths.push('/')
+
+        // Revalidate archive page
+        revalidatePath('/archive')
+        revalidatedPaths.push('/archive')
+
+        // Revalidate section pages for categories that have new articles
+        const affectedCategories = new Set(usedCategories)
+        for (const categorySlug of affectedCategories) {
+          revalidatePath(`/section/${categorySlug}`)
+          revalidatedPaths.push(`/section/${categorySlug}`)
+        }
+
+        console.log('Revalidated cache for paths:', revalidatedPaths)
+      } catch (error) {
+        // Log but don't fail the cron job if cache revalidation fails
+        console.error('Failed to revalidate cache:', error)
+      }
+    }
+
     return NextResponse.json({
       ok: createdArticles.length > 0,
       created: createdArticles,
@@ -488,6 +515,7 @@ export async function GET(req: Request) {
             failed: notificationResult.failed,
           }
         : undefined,
+      revalidated: revalidatedPaths.length > 0 ? revalidatedPaths : undefined,
     })
   } catch (error) {
     console.error('Cron generate error:', error)

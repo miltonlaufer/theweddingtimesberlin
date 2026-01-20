@@ -1,13 +1,5 @@
 import { getPayload } from '@/lib/payload'
-import webpush from 'web-push'
-
-interface PushSubscription {
-  endpoint: string
-  keys: {
-    p256dh: string
-    auth: string
-  }
-}
+import webpush, { type PushSubscription } from 'web-push'
 
 /**
  * Send push notifications to all subscribed users
@@ -69,6 +61,16 @@ export async function sendPushNotifications(
   const results = await Promise.allSettled(
     subscriptions.map(async (sub) => {
       try {
+        // Validate subscription data before sending
+        if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+          console.warn(`Invalid subscription ${sub.id}: missing required fields`)
+          return {
+            success: false,
+            id: sub.id,
+            error: 'Invalid subscription: missing required fields',
+          }
+        }
+
         const pushSubscription: PushSubscription = {
           endpoint: sub.endpoint,
           keys: {
@@ -80,8 +82,16 @@ export async function sendPushNotifications(
         await webpush.sendNotification(pushSubscription, notificationPayload)
         return { success: true, id: sub.id }
       } catch (error) {
-        // If subscription is invalid (410 Gone), delete it
-        if (error instanceof Error && 'statusCode' in error && error.statusCode === 410) {
+        // If subscription is invalid (410 Gone or 404 Not Found), delete it
+        if (
+          error instanceof Error &&
+          'statusCode' in error &&
+          ((error as { statusCode: number }).statusCode === 410 ||
+            (error as { statusCode: number }).statusCode === 404)
+        ) {
+          console.log(
+            `Removing invalid subscription ${sub.id} (status: ${(error as { statusCode: number }).statusCode})`,
+          )
           try {
             await payload.delete({
               collection: 'push-subscriptions',
@@ -90,6 +100,8 @@ export async function sendPushNotifications(
           } catch {
             // Ignore deletion errors
           }
+        } else {
+          console.error(`Failed to send notification to ${sub.id}:`, error)
         }
         return {
           success: false,

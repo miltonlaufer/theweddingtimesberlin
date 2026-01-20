@@ -1,33 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 const DISMISSED_KEY = 'push-notification-prompt-dismissed'
 const DISMISSED_DURATION = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 export function PushNotificationPrompt() {
+  /******************* STATE ***********************/
   const [isVisible, setIsVisible] = useState(false)
   const [isSupported, setIsSupported] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Check if push notifications are supported
-    if (
-      typeof window === 'undefined' ||
-      !('serviceWorker' in navigator) ||
-      !('PushManager' in window) ||
-      !('Notification' in window)
-    ) {
-      return
-    }
-
-    setIsSupported(true)
-    checkAndShowPrompt()
-  }, [])
-
-  const checkAndShowPrompt = async () => {
+  /******************* FUNCTIONS ***********************/
+  const checkAndShowPrompt = useCallback(async () => {
     try {
       // Check if user is already subscribed
       const registration = await navigator.serviceWorker.ready
@@ -59,9 +46,9 @@ export function PushNotificationPrompt() {
     } catch (err) {
       console.error('Error checking push notification status:', err)
     }
-  }
+  }, [])
 
-  const handleEnable = async () => {
+  const handleEnable = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
@@ -79,7 +66,7 @@ export function PushNotificationPrompt() {
       // Get VAPID public key
       const response = await fetch('/api/push/vapid-public-key')
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string }
         throw new Error(
           errorData.error || 'VAPID keys not configured. Please contact the site administrator.',
         )
@@ -113,7 +100,7 @@ export function PushNotificationPrompt() {
       })
 
       if (!subscribeResponse.ok) {
-        const errorData = await subscribeResponse.json().catch(() => ({}))
+        const errorData = (await subscribeResponse.json().catch(() => ({}))) as { error?: string }
         throw new Error(
           errorData.error || 'Failed to register subscription. Please try again later.',
         )
@@ -129,14 +116,31 @@ export function PushNotificationPrompt() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
     setIsVisible(false)
     // Remember dismissal for 7 days
     localStorage.setItem(DISMISSED_KEY, Date.now().toString())
-  }
+  }, [])
 
+  /******************* EFFECTS ***********************/
+  useEffect(() => {
+    // Check if push notifications are supported
+    if (
+      typeof window === 'undefined' ||
+      !('serviceWorker' in navigator) ||
+      !('PushManager' in window) ||
+      !('Notification' in window)
+    ) {
+      return
+    }
+
+    setIsSupported(true)
+    checkAndShowPrompt()
+  }, [checkAndShowPrompt])
+
+  /******************* RENDER ***********************/
   if (!isSupported || isSubscribed || !isVisible) {
     return null
   }

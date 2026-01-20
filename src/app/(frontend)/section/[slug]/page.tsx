@@ -15,7 +15,9 @@ import { FallbackImage } from '@/components/FallbackImage'
 
 // Don't pre-render at build time, but allow static generation at runtime (ISR)
 export const dynamicParams = true
-export const revalidate = 3600 // Revalidate every hour
+// Section pages are static - revalidate every 24 hours
+// Cache is explicitly invalidated via /api/cache/revalidate when new articles are generated
+export const revalidate = 86400
 
 // Return empty array = no build-time generation, pages generated on first request
 export async function generateStaticParams() {

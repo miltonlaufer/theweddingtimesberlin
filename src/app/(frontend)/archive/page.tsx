@@ -5,8 +5,9 @@ import { fetchPublishedArticles } from '@/lib/articles/fetchPublishedArticles'
 
 /******************* RENDERING CONFIG ***********************/
 
-// ISR: pre-render at build time, revalidate every 20 minutes
-export const revalidate = 1200
+// ISR: pre-render at build time, revalidate every 24 hours
+// Cache is explicitly invalidated via /api/cache/revalidate when new articles are generated
+export const revalidate = 86400
 
 /******************* PAGE ***********************/
 
@@ -37,4 +38,3 @@ export default async function ArchivePage({
     </NytContainer>
   )
 }
-
