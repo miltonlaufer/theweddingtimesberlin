@@ -1,5 +1,4 @@
 import React from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -204,7 +203,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   fill
                   className="object-cover"
                   priority
-                  sizes="(max-width: 768px) 100vw, 680px"
                 />
               </div>
               {article.imageCaption && (
@@ -224,7 +222,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
           <footer className="mt-10 max-w-[680px] mx-auto flex items-center gap-3">
             <span className="font-sans text-sm text-[#666]">©</span>
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src="/favicon.png"
               alt="The Wedding Times"
               width={32}

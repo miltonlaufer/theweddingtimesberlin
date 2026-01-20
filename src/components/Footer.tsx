@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { NytContainer } from './NytContainer'
 import { PushNotificationButton } from './PushNotificationButton'
@@ -118,7 +117,8 @@ export const Footer: React.FC<FooterProps> = React.memo(function Footer({ catego
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <Image src="/github.svg" alt="GitHub" width={12} height={12} className="mr-2" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/github.svg" alt="GitHub" width={12} height={12} className="mr-2" />
                   Source Code
                 </a>
               </li>

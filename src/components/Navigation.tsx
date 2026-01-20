@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NytContainer } from './NytContainer'
@@ -56,7 +55,8 @@ export const NavigationClient: React.FC<NavigationClientProps> = React.memo(
               rel="noreferrer"
               aria-label="Source code on GitHub"
             >
-              <Image src="/github.svg" alt="GitHub" width={14} height={14} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/github.svg" alt="GitHub" width={14} height={14} />
             </a>
           </div>
 

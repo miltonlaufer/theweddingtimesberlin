@@ -22,7 +22,6 @@ export function LeftColumnArticle({ article, isLast, showImage }: ArticleBlockPr
               alt={article.headline}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="(max-width: 768px) 100vw, 280px"
             />
           </div>
         )}
@@ -50,7 +49,6 @@ export function HeadlineArticle({ article }: { article: IArticle }) {
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
               priority
-              sizes="(max-width: 768px) 100vw, 600px"
             />
           </div>
         )}
@@ -113,7 +111,6 @@ export function CenterColumnArticle({ article, isLast, showImage }: ArticleBlock
               alt={article.headline}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="(max-width: 768px) 100vw, 600px"
             />
           </div>
         )}
@@ -145,7 +142,6 @@ export function SpanningArticle({ article, showImage }: { article: IArticle; sho
               alt={article.headline}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="(max-width: 768px) 100vw, 280px"
             />
           </div>
         )}
@@ -185,7 +181,6 @@ export function RightColumnArticle({ article, isLast, showImage }: ArticleBlockP
                 alt={article.headline}
                 fill
                 className="object-cover transition-transform duration-300 group-hover:scale-105"
-                sizes="320px"
               />
             </div>
             <h3 className="font-headline text-[18px] font-semibold leading-[1.2] tracking-[-0.01em] text-[#121212] group-hover:text-[#555] transition-colors">
