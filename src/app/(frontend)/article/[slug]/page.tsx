@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
         slug: { equals: slug },
         status: { equals: 'published' },
       },
-      depth: 2,
+      depth: 1, // Only need first-level relations (category, author)
       limit: 1,
     })
 
@@ -127,7 +127,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         slug: { equals: slug },
         status: { equals: 'published' },
       },
-      depth: 2,
+      depth: 1, // Only need first-level relations (category, author)
       limit: 1,
     })
   } catch {

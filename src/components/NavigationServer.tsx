@@ -2,6 +2,18 @@ import React from 'react'
 import { getPayload } from '@/lib/payload'
 import { NavigationClient } from './Navigation'
 
+/******************* TYPES ***********************/
+
+interface CategoryDoc {
+  id: string | number
+  name: string
+  slug: string
+}
+
+interface ArticleWithCategory {
+  category?: string | number | { id: string | number } | null
+}
+
 /******************* SERVER COMPONENT ***********************/
 
 export async function NavigationServer() {
@@ -12,34 +24,42 @@ export async function NavigationServer() {
     return <NavigationClient categories={[]} />
   }
 
-  // Fetch all categories
-  const categoriesResult = await payload.find({
-    collection: 'categories',
-    limit: 50,
-    sort: 'order',
-  })
-
-  // For each category, count published articles
-  const categoriesWithCounts: Array<{ name: string; slug: string; count: number }> = []
-
-  for (const category of categoriesResult.docs) {
-    const articlesResult = await payload.find({
+  // Fetch categories and published articles in parallel (2 queries instead of N+1)
+  const [categoriesResult, articlesResult] = await Promise.all([
+    payload.find({
+      collection: 'categories',
+      limit: 100,
+    }),
+    // Fetch only the category field from published articles (minimal data)
+    payload.find({
       collection: 'articles',
-      where: {
-        category: { equals: category.id },
-        status: { equals: 'published' },
-      },
-      limit: 0, // We only need the count, not the docs
-    })
+      where: { status: { equals: 'published' } },
+      limit: 10000, // Get all published articles
+      depth: 0, // Don't populate relations - we just need the category ID
+      select: { category: true }, // Only fetch the category field
+    }),
+  ])
 
-    if (articlesResult.totalDocs > 0) {
-      categoriesWithCounts.push({
-        name: category.name,
-        slug: category.slug,
-        count: articlesResult.totalDocs,
-      })
+  // Build a map of category ID -> count
+  const countByCategory = new Map<string | number, number>()
+  for (const article of articlesResult.docs as ArticleWithCategory[]) {
+    const catId =
+      typeof article.category === 'object' && article.category !== null
+        ? article.category.id
+        : article.category
+    if (catId != null) {
+      countByCategory.set(catId, (countByCategory.get(catId) ?? 0) + 1)
     }
   }
+
+  // Build categories with counts
+  const categoriesWithCounts = (categoriesResult.docs as CategoryDoc[])
+    .filter((cat) => countByCategory.has(cat.id))
+    .map((cat) => ({
+      name: cat.name,
+      slug: cat.slug,
+      count: countByCategory.get(cat.id) ?? 0,
+    }))
 
   // Sort by article count (descending) and take top 6
   const topCategories = categoriesWithCounts

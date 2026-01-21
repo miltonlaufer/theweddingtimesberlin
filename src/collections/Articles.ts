@@ -14,6 +14,7 @@ export const Articles: CollectionConfig = {
       name: 'headline',
       type: 'text',
       required: true,
+      index: true, // For search queries
     },
     {
       name: 'subheadline',
@@ -24,6 +25,7 @@ export const Articles: CollectionConfig = {
       type: 'text',
       required: true,
       unique: true,
+      index: true, // Already indexed by unique, but explicit for clarity
       admin: {
         position: 'sidebar',
       },
@@ -59,6 +61,7 @@ export const Articles: CollectionConfig = {
       type: 'relationship',
       relationTo: 'categories',
       required: true,
+      index: true, // For filtering by category
       admin: {
         position: 'sidebar',
       },
@@ -75,6 +78,7 @@ export const Articles: CollectionConfig = {
     {
       name: 'publishedAt',
       type: 'date',
+      index: true, // For sorting by date
       admin: {
         position: 'sidebar',
         date: {
@@ -86,6 +90,7 @@ export const Articles: CollectionConfig = {
       name: 'status',
       type: 'select',
       defaultValue: 'draft',
+      index: true, // For filtering published articles
       options: [
         { label: 'Draft', value: 'draft' },
         { label: 'Published', value: 'published' },

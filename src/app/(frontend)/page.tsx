@@ -87,7 +87,7 @@ export default async function HomePage() {
   // Fetch 48 non-opinion articles
   const nonOpinionRes = await payload.find({
     collection: 'articles',
-    depth: 2,
+    depth: 1, // Only need first-level relations (category, author)
     limit: 48,
     sort: '-publishedAt',
     where: {
@@ -111,7 +111,7 @@ export default async function HomePage() {
   // Fetch 2 opinion articles
   const opinionRes = await payload.find({
     collection: 'articles',
-    depth: 2,
+    depth: 1, // Only need first-level relations (category, author)
     limit: 2,
     sort: '-publishedAt',
     where: {

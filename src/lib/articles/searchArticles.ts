@@ -1,5 +1,8 @@
 import { getPayload } from '@/lib/payload'
-import { mapPayloadArticleToIArticle, type PayloadArticleLike } from '@/lib/articles/mapPayloadArticleToIArticle'
+import {
+  mapPayloadArticleToIArticle,
+  type PayloadArticleLike,
+} from '@/lib/articles/mapPayloadArticleToIArticle'
 import type { IArticle } from '@/types/article'
 
 /******************* TYPES ***********************/
@@ -26,7 +29,11 @@ export interface SearchArticlesResult {
 
 /******************* EMPTY RESULT ***********************/
 
-const createEmptyResult = (query: string, page: number, sortOrder: SortOrder): SearchArticlesResult => ({
+const createEmptyResult = (
+  query: string,
+  page: number,
+  sortOrder: SortOrder,
+): SearchArticlesResult => ({
   articles: [],
   totalDocs: 0,
   totalPages: 1,
@@ -56,7 +63,7 @@ export async function searchArticles(args: SearchArticlesArgs): Promise<SearchAr
   // Search in headline, subheadline, and excerpt fields
   const res = await payload.find({
     collection: 'articles',
-    depth: 2,
+    depth: 1, // Only need first-level relations (category, author)
     limit: args.limit,
     page,
     sort,

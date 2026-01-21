@@ -46,7 +46,7 @@ export async function fetchPublishedArticles(
 
   const res = await payload.find({
     collection: 'articles',
-    depth: 2,
+    depth: 1, // Only need first-level relations (category, author)
     limit: args.limit,
     page,
     sort: '-publishedAt',

@@ -67,7 +67,7 @@ export default async function SectionPage({ params }: SectionPageProps) {
       category: { equals: category.id },
       status: { equals: 'published' },
     },
-    depth: 2,
+    depth: 1, // Only need first-level relations (category, author)
     limit: 40,
     sort: '-publishedAt',
   })
