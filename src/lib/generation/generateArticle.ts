@@ -128,22 +128,23 @@ const TURKISH_REMINDER_SHORT = [
 ].join('\n')
 
 const BERLIN_DRUGS_TECHNO_CULTURE = [
-  'CRITICAL BERLIN CULTURE ELEMENTS - DRUGS AND TECHNO:',
-  "Berlin's identity is INSEPARABLE from its techno and drug culture. This is not optional flavor—it's the city's DNA.",
-  'When writing about Berlin, naturally weave in references to:',
-  '- Techno clubs: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, ://about blank, Wilde Renate, Salon zur Wilden Renate',
-  '- IMPORTANT: Do NOT only mention Berghain! Berlin has many iconic clubs. Vary your club references—Sisyphos, About Blank, Kater Blau, Golden Gate are just as culturally significant.',
-  '- The door policies and bouncers as cultural gatekeepers (not just Berghain—other clubs have their own characters)',
-  '- Drug use as a normal part of Berlin nightlife (ketamine, MDMA, cocaine, speed, GHB)',
-  "- Görlitzer Park as Berlin's open-air pharmacy",
-  '- After-parties that last for days, the blurry line between Saturday and Tuesday',
-  '- The walk of shame / stride of pride home at 2pm on a Monday',
-  '- Club bathrooms as social spaces (and transaction venues)',
-  "- The 'Berlin look': all black, tired, possibly still high from the weekend",
-  '- Späti culture as the support system for Berlin nightlife',
-  "Even when an article is NOT primarily about drugs or techno, these elements should appear naturally because they're part of daily Berlin life.",
-  'A story about bureaucracy might mention someone filling forms while coming down. A gentrification piece might reference club closures. A crime story might involve Görlitzer Park.',
-  'Make drugs and techno feel as natural and present as the Turkish community or the bureaucracy—because in Berlin, they are.',
+  'BERLIN CULTURE ELEMENTS - DRUGS AND TECHNO (USE SPARINGLY):',
+  "Berlin has a famous techno and drug culture, but it's ONE aspect of the city, not the ONLY aspect.",
+  'Only include drugs/techno references when they are DIRECTLY relevant to your story topic.',
+  'If your assigned topic is NOT about nightlife, drugs, or clubs, do NOT force these references in.',
+  '',
+  'When your topic IS about nightlife/drugs/clubs, you can reference:',
+  '- Techno clubs: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, Wilde Renate',
+  '- Vary your club references—do NOT only mention Berghain',
+  '- Drug culture elements when topically relevant',
+  '',
+  'IMPORTANT: Most Berlin stories should focus on OTHER aspects of the city:',
+  '- Bureaucracy, housing crisis, gentrification, Turkish community, neighborhood life',
+  '- BVG/transit chaos, Späti culture, local politics, expat struggles',
+  '- Crime, food culture, art scene, startup culture, daily life absurdities',
+  '',
+  'Drugs and techno are part of Berlin, but so are döner shops, Bürgeramt nightmares, bike theft, and passive-aggressive neighbor notes.',
+  'Write about the FULL spectrum of Berlin life, not just the clubbing scene.',
 ].join('\n')
 
 const CATEGORY_MAPPING_GUIDE = [
@@ -213,25 +214,15 @@ const AUTHOR_SELECTION = [
 ].join('\n')
 
 const DRUGS_TECHNO_HEADLINES = [
-  '═══════════════════════════════════════════════════════════════════',
-  'DRUGS AND TECHNO IN HEADLINES - THIS IS MANDATORY',
-  '═══════════════════════════════════════════════════════════════════',
-  'Berlin is synonymous with drugs and techno. Your headlines MUST reflect this.',
-  'When your topic involves drugs, techno, clubs, nightlife, or decadence, the headline MUST contain at least one of these keywords:',
+  'DRUGS AND TECHNO IN HEADLINES (ONLY WHEN TOPIC IS RELEVANT):',
+  'If—and ONLY if—your assigned topic is about nightlife, clubs, drugs, or decadence, then be specific:',
   '- Drug-related: ketamine, cocaine, MDMA, speed, drugs, high, dealer, Görlitzer Park, trip, coming down',
-  '- Club-related: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, RSO, Griessmuehle, techno, DJ, club, rave, bouncer, dancefloor, after-hours',
-  '- Decadence-related: bender, party, orgy, sex, hedonism, darkroom',
+  '- Club-related: Berghain, Sisyphos, About Blank, Kater Blau, Golden Gate, Kitkat, Tresor, techno, DJ, club, rave, bouncer',
   '',
-  'Example headlines that work:',
-  '- "Berghain Bouncer Starts Side Business Rating Pupils"',
-  '- "Görlitzer Park Dealer Launches Subscription Model with Newsletter"',
-  '- "Ketamine Enthusiast Accidentally Fixes His Life While Dissociated"',
-  '- "New Study: 87% of Berlin Techno DJs Just Pressing Play"',
-  '- "Man at Sisyphos Has Been Dancing to Same Loop for 14 Hours"',
-  '- "Local Club Introduces Sober Corner, Nobody Can Find It"',
+  'BUT: If your topic is about bureaucracy, housing, gentrification, crime, neighborhood life, etc.,',
+  'do NOT shoehorn drugs/techno into your headline. Write a headline that fits YOUR topic.',
   '',
-  'DO NOT write vague headlines like "Berlin Nightlife Sees Changes" - be SPECIFIC about drugs and techno!',
-  '═══════════════════════════════════════════════════════════════════',
+  'Berlin has MANY stories beyond the club scene. Match your headline to your actual subject matter.',
 ].join('\n')
 
 const INTELLECTUAL_HEADLINE_REFERENCES = [
@@ -1004,7 +995,7 @@ async function regenerateHeadline(args: {
   const llm = new ChatOpenAI({
     apiKey,
     model: repairModelName,
-    temperature: 2, // crazy creative  // Some creativity but more controlled
+    temperature: 1.7, // crazy creative  // Some creativity but more controlled
   })
 
   const bannedWordsLower = args.bannedOpeningWords.map((w) => w.toLowerCase())
@@ -1129,7 +1120,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const llm = new ChatOpenAI({
     apiKey,
     model: modelName,
-    temperature: 2, // crazy creative
+    temperature: 1.7, // crazy creative
   })
 
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
@@ -1277,11 +1268,18 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       scenario.includes('pupils'),
   )
 
-  // 20% chance to select from drugs/techno scenarios, 80% from all scenarios (reduced to avoid overuse)
-  const useDrugsOrTechnoScenario = Math.random() < 0.2
+  // 15% chance to select from drugs/techno scenarios, 85% from NON-drugs/techno scenarios
+  // This ensures drugs/techno content is roughly 1/3 of all articles (15% explicit + some overlap)
+  const useDrugsOrTechnoScenario = Math.random() < 0.15
+
+  // Filter OUT drugs/techno scenarios for the general pool
+  const nonDrugsTechnoScenarios = concreteBerlinScenarios.filter(
+    (scenario) => !drugsAndTechnoScenarios.includes(scenario),
+  )
+
   const selectedScenario = useDrugsOrTechnoScenario
     ? drugsAndTechnoScenarios[Math.floor(Math.random() * drugsAndTechnoScenarios.length)]
-    : concreteBerlinScenarios[Math.floor(Math.random() * concreteBerlinScenarios.length)]
+    : nonDrugsTechnoScenarios[Math.floor(Math.random() * nonDrugsTechnoScenarios.length)]
 
   // Randomly pick a topic focus to force variety (aligned with site categories)
   const topicFocuses = [
@@ -1553,15 +1551,20 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       topic.includes('dealer'),
   )
 
-  // 20% chance to select from drugs/techno topics, 80% from all topics (reduced to avoid overuse)
-  const useDrugsOrTechnoTopic = Math.random() < 0.2
+  // 15% chance to select from drugs/techno topics, 85% from NON-drugs/techno topics
+  // This ensures drugs/techno content is roughly 1/3 of all articles
+  const useDrugsOrTechnoTopic = Math.random() < 0.15
+
+  // Filter OUT drugs/techno topics for the general pool to prevent double-dipping
+  const nonDrugsTechnoTopics = topicFocuses.filter((topic) => !drugsAndTechnoTopics.includes(topic))
+
   let randomFocus: string
 
   if (useDrugsOrTechnoTopic) {
     randomFocus = drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
   } else {
     // If NOT about drugs/techno, 20% chance to pick startup topics
-    const startupTopics = topicFocuses.filter(
+    const startupTopics = nonDrugsTechnoTopics.filter(
       (topic) =>
         topic.includes('startup') ||
         topic.includes('tech bro') ||
@@ -1579,7 +1582,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     randomFocus =
       useStartupTopic && startupTopics.length > 0
         ? startupTopics[Math.floor(Math.random() * startupTopics.length)]
-        : topicFocuses[Math.floor(Math.random() * topicFocuses.length)]
+        : nonDrugsTechnoTopics[Math.floor(Math.random() * nonDrugsTechnoTopics.length)]
   }
 
   // When RSS topics are available, pick one to base the article on
@@ -1908,22 +1911,23 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     !useFeatureStoryPrompt
       ? [EDGE_SHORT, '', SPICE_IT_UP, '', INTELLECTUAL_EASTER_EGGS, ''].join('\n')
       : '',
-    DRUGS_TECHNO_HEADLINES,
+    // Only include drugs/techno headline guidance when topic is relevant
+    useDrugsOrTechnoTopic || useDrugsOrTechnoScenario ? DRUGS_TECHNO_HEADLINES : '',
     '',
     'HEADLINE VARIETY IS CRITICAL:',
     useFeatureStoryPrompt
       ? [
           'For feature/news stories, use traditional news headline formats:',
-          '- Direct, factual-sounding headlines: "Berghain Bouncer Launches Life Coaching Business" or "Ketamine Shortage Hits Wedding Späti Network"',
-          '- Question format: "Why Did Görlitzer Park Dealers Start Accepting Crypto?"',
-          '- Descriptive: "The Great Techno Exodus: DJs Fleeing to Leipzig"',
-          '- Keep it news-like but absurd, and include drug/techno keywords when relevant',
+          '- Direct, factual-sounding headlines that match your assigned topic',
+          '- Question format: "Why Did [Subject] Do [Action]?"',
+          '- Descriptive: "The Great [Event]: [Consequence]"',
+          '- Keep it news-like but absurd, matching your specific topic',
         ].join('\n')
       : [
           'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
           'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
           'Think like a real newspaper: headlines should grab attention with wit, not formula.',
-          'When the topic involves drugs/techno/nightlife, the headline MUST contain specific keywords (Berghain, ketamine, dealer, DJ, etc.)',
+          'Match your headline to your assigned topic—do not force unrelated themes into it.',
         ].join('\n'),
     '',
     INTELLECTUAL_HEADLINE_REFERENCES,
