@@ -58,7 +58,7 @@ export interface GenerateArticleResult {
 
 // Reusable prompt text blocks to avoid repetition
 
-const INTELLECTUAL_SOURCES = `Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin.`
+const INTELLECTUAL_SOURCES = `Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal, Oscar Wilde, Voltaire. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Nietzsche, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno, Confucius, I-Ching. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin.`
 
 const INTELLECTUAL_EASTER_EGGS = [
   'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
@@ -1268,9 +1268,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       scenario.includes('pupils'),
   )
 
-  // 15% chance to select from drugs/techno scenarios, 85% from NON-drugs/techno scenarios
-  // This ensures drugs/techno content is roughly 1/3 of all articles (15% explicit + some overlap)
-  const useDrugsOrTechnoScenario = Math.random() < 0.15
+  // 25% chance to select from drugs/techno scenarios, 75% from NON-drugs/techno scenarios
+  const useDrugsOrTechnoScenario = Math.random() < 0.25
 
   // Filter OUT drugs/techno scenarios for the general pool
   const nonDrugsTechnoScenarios = concreteBerlinScenarios.filter(
@@ -1551,9 +1550,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       topic.includes('dealer'),
   )
 
-  // 15% chance to select from drugs/techno topics, 85% from NON-drugs/techno topics
-  // This ensures drugs/techno content is roughly 1/3 of all articles
-  const useDrugsOrTechnoTopic = Math.random() < 0.15
+  // 25% chance to select from drugs/techno topics, 75% from NON-drugs/techno topics
+  const useDrugsOrTechnoTopic = Math.random() < 0.25
 
   // Filter OUT drugs/techno topics for the general pool to prevent double-dipping
   const nonDrugsTechnoTopics = topicFocuses.filter((topic) => !drugsAndTechnoTopics.includes(topic))
