@@ -231,17 +231,35 @@ export async function GET(req: Request) {
     const errors: string[] = []
     const usedCategories = new Set<string>()
 
+    // Variety tracking for drugs/techno and RSS
+    let lastWasDrugsTechno = false
+    let rssArticleCreated = false
+    const hasRssTopics = topicSummary.trim().length > 0
+
     for (let i = 0; i < ARTICLES_PER_RUN; i++) {
       try {
-        // 2/3 chance to include RSS topics for variety
-        const includeTopics = pickTwoThirds()
+        // Variety logic for drugs/techno: if last article was drugs/techno, this one should NOT be
+        // This ensures alternation and variety in the batch
+        const forceDrugsTechno = lastWasDrugsTechno ? false : undefined // Force non-drugs if last was drugs, otherwise random
+
+        // RSS logic: ensure at least one article uses RSS topics
+        // Force RSS for the last article if none have used it yet and RSS topics are available
+        const isLastArticle = i === ARTICLES_PER_RUN - 1
+        const forceRss = isLastArticle && !rssArticleCreated && hasRssTopics
+
+        // 2/3 chance to include RSS topics for variety (or forced if forceRss)
+        const includeTopics = forceRss || pickTwoThirds()
 
         // Prefer unused categories, but allow repeats if we've used all
         const unusedCategories = categories.filter((c) => !usedCategories.has(c.slug))
         const categoriesToUse = unusedCategories.length > 0 ? unusedCategories : categories
 
-        // Generate article with category distribution
-        const { article: generated, usedRssTopic } = await generateArticle({
+        // Generate article with category distribution and variety control
+        const {
+          article: generated,
+          usedRssTopic,
+          usedDrugsTechno,
+        } = await generateArticle({
           categories: categoriesToUse,
           authors,
           topicSummary,
@@ -250,7 +268,15 @@ export async function GET(req: Request) {
           recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
           recentHeadlinePatterns: uniquePatterns, // Patterns to avoid
           latestArticleContentSample, // Half of latest article to ensure new one is different
+          forceDrugsTechno, // Variety control: force non-drugs if last was drugs
+          forceRss, // Force RSS if needed for variety
         })
+
+        // Update variety tracking
+        lastWasDrugsTechno = usedDrugsTechno
+        if (usedRssTopic) {
+          rssArticleCreated = true
+        }
 
         // Track used category
         usedCategories.add(generated.categorySlug)

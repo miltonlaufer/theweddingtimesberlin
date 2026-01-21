@@ -24,6 +24,9 @@ export interface GenerateArticleInput {
   recentArticleExcerpts?: string[] // Optional excerpts (parallel array to titles, truncated to ~150 chars)
   recentHeadlinePatterns?: string[] // Patterns like "Berlin [verb] [noun]" to avoid
   latestArticleContentSample?: string // Half of the latest article's body text to ensure new article is different
+  // Variety control for cron job batches
+  forceDrugsTechno?: boolean // Force drugs/techno topic (true) or force non-drugs/techno (false), undefined = random 35%
+  forceRss?: boolean // Force using RSS topic if available
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -52,6 +55,8 @@ export interface GenerateArticleResult {
   article: GeneratedArticle
   /** The RSS topic that was provided to the LLM (if any). Track this server-side for reliability. */
   usedRssTopic: string | null
+  /** Whether this article used a drugs/techno topic/scenario. Used for variety tracking. */
+  usedDrugsTechno: boolean
 }
 
 /******************* PROMPT CONSTANTS ***********************/
@@ -106,6 +111,14 @@ const WEDDING_NEIGHBORHOOD_CONTEXT = [
   'The newspaper is named "The Wedding Times" because it covers the Wedding neighborhood in Berlin.',
   'When you see "Wedding" in context, it means the Berlin neighborhood (like Kreuzberg, Neukölln, Mitte, etc.), not a marriage ceremony.',
   'Write about life in the Wedding neighborhood, not about weddings as events.',
+  '',
+  'GENTRIFICATION CONTEXT: Wedding is experiencing massive gentrification. What was once a working-class, immigrant neighborhood is being transformed by:',
+  '- Hipster cafés replacing Turkish bakeries, yoga studios where döner shops used to be',
+  '- Skyrocketing rents pushing out longtime residents and Turkish families',
+  '- Co-working spaces, startup offices, and "creative hubs" moving in',
+  '- English menus appearing everywhere, German becoming optional',
+  '- Long-time Spätis closing, replaced by organic juice bars',
+  'This tension between old Wedding and new Wedding is a rich source of satire.',
 ].join('\n')
 
 const WEDDING_REMINDER_SHORT = [
@@ -120,6 +133,10 @@ const TURKISH_COMMUNITY_CONTEXT = [
   'The Turkish community is fair game for satire and edgy humor—make fun of them like you make fun of everyone else. But avoid racist stereotypes, slurs, or hateful content.',
   "Turkish döner shops, Turkish families, Turkish community events, Turkish-owned businesses are all part of Wedding's reality and should be mentioned when relevant.",
   "Satirize Turkish community elements with the same edgy, politically incorrect approach you use for everything—just don't be racist about it.",
+  '',
+  'GENTRIFICATION vs TURKISH COMMUNITY: There is a tension between the longtime Turkish community and the gentrifying newcomers.',
+  'Turkish families who have lived here for generations are being priced out by rising rents. Their döner shops and bakeries are being replaced by hipster cafés.',
+  'This clash of cultures—old Wedding vs new Wedding, Turkish grandmas vs tech bros, döner vs avocado toast—is ripe for satire.',
 ].join('\n')
 
 const TURKISH_REMINDER_SHORT = [
@@ -1160,8 +1177,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   })
 
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
-  // HARDCODED TO TRUE FOR TESTING - remove this line to restore random selection
-  const useFeatureStoryPrompt = Math.random() < 0.33
+  // When forceRss is true, skip feature story to ensure RSS topic is used
+  const useFeatureStoryPrompt = input.forceRss ? false : Math.random() < 0.33
 
   // Story types for the new prompt
   const storyTypes = [
@@ -1305,7 +1322,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   )
 
   // 35% chance to select from drugs/techno scenarios, 65% from NON-drugs/techno scenarios
-  const useDrugsOrTechnoScenario = Math.random() < 0.35
+  // Can be overridden by forceDrugsTechno parameter for variety control
+  const useDrugsOrTechnoScenario =
+    input.forceDrugsTechno !== undefined ? input.forceDrugsTechno : Math.random() < 0.35
 
   // Filter OUT drugs/techno scenarios for the general pool
   const nonDrugsTechnoScenarios = concreteBerlinScenarios.filter(
@@ -1587,7 +1606,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   )
 
   // 35% chance to select from drugs/techno topics, 65% from NON-drugs/techno topics
-  const useDrugsOrTechnoTopic = Math.random() < 0.35
+  // Can be overridden by forceDrugsTechno parameter for variety control
+  const useDrugsOrTechnoTopic =
+    input.forceDrugsTechno !== undefined ? input.forceDrugsTechno : Math.random() < 0.35
 
   // Filter OUT drugs/techno topics for the general pool to prevent double-dipping
   const nonDrugsTechnoTopics = topicFocuses.filter((topic) => !drugsAndTechnoTopics.includes(topic))
@@ -1597,8 +1618,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   if (useDrugsOrTechnoTopic) {
     randomFocus = drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
   } else {
-    // If NOT about drugs/techno, 20% chance to pick startup topics
-    const startupTopics = nonDrugsTechnoTopics.filter(
+    // If NOT about drugs/techno, 30% chance to pick startup/gentrification topics
+    const startupAndGentrificationTopics = nonDrugsTechnoTopics.filter(
       (topic) =>
         topic.includes('startup') ||
         topic.includes('tech bro') ||
@@ -1609,13 +1630,21 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         topic.includes('entrepreneur') ||
         topic.includes('disruptive') ||
         topic.includes('pitch night') ||
-        topic.includes('side hustle'),
+        topic.includes('side hustle') ||
+        topic.includes('gentrification') ||
+        topic.includes('yoga') ||
+        topic.includes('vegan') ||
+        topic.includes('mindfulness') ||
+        topic.includes('wellness') ||
+        topic.includes('expat'),
     )
 
-    const useStartupTopic = Math.random() < 0.2
+    const useStartupTopic = Math.random() < 0.3
     randomFocus =
-      useStartupTopic && startupTopics.length > 0
-        ? startupTopics[Math.floor(Math.random() * startupTopics.length)]
+      useStartupTopic && startupAndGentrificationTopics.length > 0
+        ? startupAndGentrificationTopics[
+            Math.floor(Math.random() * startupAndGentrificationTopics.length)
+          ]
         : nonDrugsTechnoTopics[Math.floor(Math.random() * nonDrugsTechnoTopics.length)]
   }
 
@@ -2030,6 +2059,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       return {
         article: repaired,
         usedRssTopic: actuallyUsedRssTopic,
+        usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
       }
     }
     let validated = validation.data
@@ -2060,6 +2090,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     return {
       article: validated,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
+      usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
     }
   } catch {
     // Fallback: deterministic repair using cheaper model
@@ -2071,6 +2102,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     return {
       article: repaired,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
+      usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
     }
   }
 }
