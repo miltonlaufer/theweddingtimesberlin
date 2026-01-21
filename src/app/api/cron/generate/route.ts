@@ -111,27 +111,36 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: 'Database unavailable' }, { status: 503 })
     }
 
+    // Fetch categories, authors, recent articles, and RSS topics in parallel (reduces initial queries)
+    const [categoriesRes, authorsRes, recentArticlesRes, rssTopicsResult] = await Promise.all([
+      payload.find({ collection: 'categories', limit: 100, sort: 'order' }),
+      payload.find({ collection: 'authors', limit: 100, sort: 'name' }),
+      payload.find({
+        collection: 'articles',
+        where: { status: { equals: 'published' } },
+        limit: 50,
+        sort: '-publishedAt',
+        depth: 0, // Don't need relations, just headlines/excerpts
+      }),
+      fetchRssTopics(),
+    ])
+
+    const { topicSummary } = rssTopicsResult
+
+    // Track final results (may be updated after seeding)
+    let categoriesFinal = categoriesRes
+    let authorsResFinal = authorsRes
+
     // Ensure baseline categories exist
-    const categoriesRes = await payload.find({
-      collection: 'categories',
-      limit: 100,
-      sort: 'order',
-    })
     if ((categoriesRes.totalDocs ?? 0) === 0) {
       for (const cat of BASELINE_CATEGORIES) {
         await payload.create({ collection: 'categories', data: cat })
       }
+      // Only refetch if we seeded
+      categoriesFinal = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
     }
 
-    // Refresh categories after potential seeding
-    let categoriesFinal = await payload.find({
-      collection: 'categories',
-      limit: 100,
-      sort: 'order',
-    })
-
     // Ensure author pool is sufficient
-    let authorsRes = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
     const currentAuthorsCount = authorsRes.totalDocs ?? 0
 
     if (currentAuthorsCount < MIN_AUTHOR_POOL) {
@@ -149,8 +158,8 @@ export async function GET(req: Request) {
         }
       }
 
-      // Refresh authors
-      authorsRes = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
+      // Only refetch if we created authors
+      authorsResFinal = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
     }
 
     // Build options for article generation
@@ -159,7 +168,7 @@ export async function GET(req: Request) {
     ).map((c) => ({ slug: c.slug, name: c.name }))
 
     const authors = (
-      authorsRes.docs as Array<{
+      authorsResFinal.docs as Array<{
         id: string
         slug: string
         name: string
@@ -179,19 +188,6 @@ export async function GET(req: Request) {
         { status: 500 },
       )
     }
-
-    // Fetch RSS topics once for all articles
-    const { topicSummary } = await fetchRssTopics()
-
-    // Fetch last 50 articles to avoid repetition and extract patterns
-    const recentArticlesRes = await payload.find({
-      collection: 'articles',
-      where: {
-        status: { equals: 'published' },
-      },
-      limit: 50,
-      sort: '-publishedAt',
-    })
     const recentArticleTitles = recentArticlesRes.docs
       .map((a) => {
         const doc = a as unknown as { headline?: string }
@@ -312,7 +308,7 @@ export async function GET(req: Request) {
 
         // Check if author exists, or if we need to create a new one
         // Try exact match first
-        const authorsArray = authorsRes.docs as Array<{ id: string | number; slug: string }>
+        const authorsArray = authorsResFinal.docs as Array<{ id: string | number; slug: string }>
         let authorDoc: { id: string | number; slug: string } | undefined = authorsArray.find(
           (a) => a.slug === generated.authorSlug,
         )
@@ -361,7 +357,7 @@ export async function GET(req: Request) {
               limit: 100,
               sort: 'name',
             })
-            authorsRes = refreshedAuthors
+            authorsResFinal = refreshedAuthors
           } catch {
             // If creation failed, try to find it again (might have been created concurrently)
             const existingAuthor = await payload.find({

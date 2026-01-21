@@ -63,8 +63,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'Database unavailable' }, { status: 503 })
   }
 
-  const categoriesRes = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
-  const authorsRes = await payload.find({ collection: 'authors', limit: 100, sort: 'name' })
+  // Fetch categories, authors, and recent articles in parallel (3 queries instead of 5)
+  const [categoriesRes, authorsRes, recentArticlesRes] = await Promise.all([
+    payload.find({ collection: 'categories', limit: 100, sort: 'order' }),
+    payload.find({ collection: 'authors', limit: 200, sort: 'name' }),
+    payload.find({
+      collection: 'articles',
+      where: { status: { equals: 'published' } },
+      limit: 50,
+      sort: '-publishedAt',
+      depth: 0, // Don't need relations, just headlines/excerpts
+    }),
+  ])
+
+  // Track if we need to refetch after seeding
+  let categoriesResFinal = categoriesRes
+  let authorsResFinal = authorsRes
 
   // Auto-bootstrap: if the DB is empty, seed minimal categories so generation can always run.
   const shouldSeedCategories = (categoriesRes.totalDocs ?? 0) === 0
@@ -83,6 +97,8 @@ export async function POST(req: Request) {
     for (const cat of baselineCategories) {
       await payload.create({ collection: 'categories', data: cat })
     }
+    // Only refetch if we seeded
+    categoriesResFinal = await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
   }
 
   // Auto-bootstrap authors: ensure we have a pool with bios so the LLM can pick meaningfully.
@@ -109,12 +125,9 @@ export async function POST(req: Request) {
         // Ignore duplicates/uniques; just move on.
       }
     }
+    // Only refetch if we created authors
+    authorsResFinal = await payload.find({ collection: 'authors', limit: 200, sort: 'name' })
   }
-
-  const categoriesResFinal = shouldSeedCategories
-    ? await payload.find({ collection: 'categories', limit: 100, sort: 'order' })
-    : categoriesRes
-  const authorsResFinal = await payload.find({ collection: 'authors', limit: 200, sort: 'name' })
 
   const categories = (
     categoriesResFinal.docs as Array<{ id: string; slug: string; name: string }>
@@ -150,15 +163,7 @@ export async function POST(req: Request) {
   const includeTopics = pickTwoThirds()
   const { topicSummary } = await fetchRssTopics()
 
-  // Fetch last 50 articles to avoid repetition and extract patterns
-  const recentArticlesRes = await payload.find({
-    collection: 'articles',
-    where: {
-      status: { equals: 'published' },
-    },
-    limit: 50,
-    sort: '-publishedAt',
-  })
+  // Use the recent articles we already fetched in the parallel query above
   const recentArticleTitles = recentArticlesRes.docs
     .map((a) => {
       const doc = a as unknown as { headline?: string }
