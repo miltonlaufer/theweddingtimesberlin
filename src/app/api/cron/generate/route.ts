@@ -231,24 +231,64 @@ export async function GET(req: Request) {
     const errors: string[] = []
     const usedCategories = new Set<string>()
 
-    // Variety tracking for drugs/techno and RSS
-    let lastWasDrugsTechno = false
-    let rssArticleCreated = false
+    // Variety tracking for the batch:
+    // - Exactly ONE drugs/techno article per batch
+    // - At least ONE RSS article (not drugs)
+    // - At least ONE non-RSS, non-drugs article
+    let drugsArticleDone = false
+    let rssNonDrugsArticleDone = false
+    let plainArticleDone = false // non-RSS, non-drugs
     const hasRssTopics = topicSummary.trim().length > 0
 
     for (let i = 0; i < ARTICLES_PER_RUN; i++) {
       try {
-        // Variety logic for drugs/techno: if last article was drugs/techno, this one should NOT be
-        // This ensures alternation and variety in the batch
-        const forceDrugsTechno = lastWasDrugsTechno ? false : undefined // Force non-drugs if last was drugs, otherwise random
+        // Determine what type of article to generate based on what we still need
+        let forceDrugsTechno: boolean | undefined
+        let forceRss: boolean | undefined
+        let includeTopics: boolean
 
-        // RSS logic: ensure at least one article uses RSS topics
-        // Force RSS for the last article if none have used it yet and RSS topics are available
-        const isLastArticle = i === ARTICLES_PER_RUN - 1
-        const forceRss = isLastArticle && !rssArticleCreated && hasRssTopics
+        const remainingArticles = ARTICLES_PER_RUN - i
 
-        // 2/3 chance to include RSS topics for variety (or forced if forceRss)
-        const includeTopics = forceRss || pickTwoThirds()
+        // First article: drugs/techno (get it out of the way)
+        if (i === 0 && !drugsArticleDone) {
+          forceDrugsTechno = true
+          forceRss = false
+          includeTopics = false
+        }
+        // Second article: RSS, no drugs (ensure variety)
+        else if (i === 1 && !rssNonDrugsArticleDone && hasRssTopics) {
+          forceDrugsTechno = false
+          forceRss = true
+          includeTopics = true
+        }
+        // Third article: plain (no RSS, no drugs)
+        else if (i === 2 && !plainArticleDone) {
+          forceDrugsTechno = false
+          forceRss = false
+          includeTopics = false
+        }
+        // Safety nets for remaining articles if requirements not yet met
+        else if (!drugsArticleDone && remainingArticles === 3) {
+          // Need drugs article, force it
+          forceDrugsTechno = true
+          forceRss = false
+          includeTopics = false
+        } else if (!rssNonDrugsArticleDone && hasRssTopics && remainingArticles === 2) {
+          // Need RSS non-drugs article
+          forceDrugsTechno = false
+          forceRss = true
+          includeTopics = true
+        } else if (!plainArticleDone && remainingArticles === 1) {
+          // Need plain article
+          forceDrugsTechno = false
+          forceRss = false
+          includeTopics = false
+        } else {
+          // All requirements met, generate random non-drugs article
+          forceDrugsTechno = drugsArticleDone ? false : undefined
+          forceRss = undefined
+          includeTopics = pickTwoThirds()
+        }
 
         // Prefer unused categories, but allow repeats if we've used all
         const unusedCategories = categories.filter((c) => !usedCategories.has(c.slug))
@@ -273,9 +313,14 @@ export async function GET(req: Request) {
         })
 
         // Update variety tracking
-        lastWasDrugsTechno = usedDrugsTechno
-        if (usedRssTopic) {
-          rssArticleCreated = true
+        if (usedDrugsTechno) {
+          drugsArticleDone = true
+        }
+        if (usedRssTopic && !usedDrugsTechno) {
+          rssNonDrugsArticleDone = true
+        }
+        if (!usedRssTopic && !usedDrugsTechno) {
+          plainArticleDone = true
         }
 
         // Track used category
