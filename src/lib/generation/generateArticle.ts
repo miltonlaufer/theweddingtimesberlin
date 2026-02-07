@@ -27,6 +27,7 @@ export interface GenerateArticleInput {
   // Variety control for cron job batches
   forceDrugsTechno?: boolean // Force drugs/techno topic (true) or force non-drugs/techno (false), undefined = random 35%
   forceRss?: boolean // Force using RSS topic if available
+  forceOpinion?: boolean // Force opinion/editorial piece (categorySlug "opinion", layout "opinion")
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -1181,8 +1182,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   })
 
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
-  // When forceRss is true, skip feature story to ensure RSS topic is used
-  const useFeatureStoryPrompt = input.forceRss ? false : Math.random() < 0.33
+  // When forceRss or forceOpinion is true, skip feature story
+  const useFeatureStoryPrompt = input.forceRss || input.forceOpinion ? false : Math.random() < 0.33
 
   // Story types for the new prompt
   const storyTypes = [
@@ -1617,9 +1618,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   // Filter OUT drugs/techno topics for the general pool to prevent double-dipping
   const nonDrugsTechnoTopics = topicFocuses.filter((topic) => !drugsAndTechnoTopics.includes(topic))
 
+  // Opinion-only topics (when forceOpinion is true)
+  const opinionOnlyTopics = topicFocuses.filter((t) => t.startsWith('[OPINION]'))
+
   let randomFocus: string
 
-  if (useDrugsOrTechnoTopic) {
+  if (input.forceOpinion && opinionOnlyTopics.length > 0) {
+    randomFocus = opinionOnlyTopics[Math.floor(Math.random() * opinionOnlyTopics.length)]
+  } else if (useDrugsOrTechnoTopic) {
     randomFocus = drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
   } else {
     // If NOT about drugs/techno, 30% chance to pick startup/gentrification topics
@@ -1965,6 +1971,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           'You MUST write an article about this specific topic. Do not ignore it.',
           'This is your PRIMARY directive - the article must be clearly about this topic.',
+          input.forceOpinion
+            ? [
+                '',
+                'MANDATORY: This article MUST be an opinion/editorial piece. You MUST set categorySlug to "opinion" and layout to "opinion".',
+              ].join('\n')
+            : '',
         ].join('\n')
 
   const userPrompt = [
@@ -2060,6 +2072,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         authors: input.authors,
         validationErrors: validation.error.issues,
       })
+      if (input.forceOpinion) {
+        repaired.categorySlug = 'opinion'
+        repaired.layout = 'opinion'
+      }
       return {
         article: repaired,
         usedRssTopic: actuallyUsedRssTopic,
@@ -2067,6 +2083,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       }
     }
     let validated = validation.data
+    if (input.forceOpinion) {
+      validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
+    }
     const langSample =
       `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
         0,
@@ -2091,6 +2110,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       })
     }
 
+    if (input.forceOpinion) {
+      validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
+    }
+
     return {
       article: validated,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
@@ -2103,6 +2126,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       categories: input.categories,
       authors: input.authors,
     })
+    if (input.forceOpinion) {
+      repaired.categorySlug = 'opinion'
+      repaired.layout = 'opinion'
+    }
     return {
       article: repaired,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt

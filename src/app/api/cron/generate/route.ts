@@ -63,14 +63,20 @@ function slugToCategoryName(slug: string): string {
 type SlotConfig = {
   forceDrugsTechno: boolean | undefined
   forceRss: boolean | undefined
+  forceOpinion: boolean
   includeTopics: boolean
 }
 
 /**
  * Precompute what type of article each slot should be (drugs, rss, plain, random).
  * Same variety rules as before: first = drugs, second = rss, third = plain, rest = random.
+ * When forceOpinionFirst is true, the first slot is an opinion piece.
  */
-function computeSlotConfigs(count: number, hasRssTopics: boolean): SlotConfig[] {
+function computeSlotConfigs(
+  count: number,
+  hasRssTopics: boolean,
+  forceOpinionFirst: boolean,
+): SlotConfig[] {
   const slots: SlotConfig[] = []
   let drugsAssigned = false
   let rssAssigned = false
@@ -80,45 +86,58 @@ function computeSlotConfigs(count: number, hasRssTopics: boolean): SlotConfig[] 
     const remaining = count - i
     let forceDrugsTechno: boolean | undefined
     let forceRss: boolean | undefined
+    let forceOpinion: boolean
     let includeTopics: boolean
 
-    if (i === 0 && !drugsAssigned) {
+    if (i === 0 && forceOpinionFirst) {
+      forceDrugsTechno = false
+      forceRss = false
+      forceOpinion = true
+      includeTopics = false
+    } else if (i === 0 && !drugsAssigned) {
       forceDrugsTechno = true
       forceRss = false
+      forceOpinion = false
       includeTopics = false
       drugsAssigned = true
     } else if (i === 1 && !rssAssigned && hasRssTopics) {
       forceDrugsTechno = false
       forceRss = true
+      forceOpinion = false
       includeTopics = true
       rssAssigned = true
     } else if (i === 2 && !plainAssigned) {
       forceDrugsTechno = false
       forceRss = false
+      forceOpinion = false
       includeTopics = false
       plainAssigned = true
     } else if (!drugsAssigned && remaining === 3) {
       forceDrugsTechno = true
       forceRss = false
+      forceOpinion = false
       includeTopics = false
       drugsAssigned = true
     } else if (!rssAssigned && hasRssTopics && remaining === 2) {
       forceDrugsTechno = false
       forceRss = true
+      forceOpinion = false
       includeTopics = true
       rssAssigned = true
     } else if (!plainAssigned && remaining === 1) {
       forceDrugsTechno = false
       forceRss = false
+      forceOpinion = false
       includeTopics = false
       plainAssigned = true
     } else {
       forceDrugsTechno = drugsAssigned ? false : undefined
       forceRss = undefined
+      forceOpinion = false
       includeTopics = pickTwoThirds()
     }
 
-    slots.push({ forceDrugsTechno, forceRss, includeTopics })
+    slots.push({ forceDrugsTechno, forceRss, forceOpinion, includeTopics })
   }
 
   return slots
@@ -201,6 +220,7 @@ async function generateOneArticle(
     latestArticleContentSample: ctx.latestArticleContentSample,
     forceDrugsTechno: slot.forceDrugsTechno,
     forceRss: slot.forceRss,
+    forceOpinion: slot.forceOpinion,
   })
 
   let categoryDoc = categoriesDocs.find((c) => c.slug === generated.categorySlug)
@@ -354,9 +374,39 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: 'Database unavailable' }, { status: 503 })
     }
 
-    // Fetch categories, authors, recent articles, and RSS topics in parallel (reduces initial queries)
-    const [categoriesRes, authorsRes, recentArticlesRes, rssTopicsResult] = await Promise.all([
-      payload.find({ collection: 'categories', limit: 100, sort: 'order' }),
+    // Check latest opinion article first (before everything): if none or older than 1 week, force an opinion this run
+    const categoriesForCheck = await payload.find({
+      collection: 'categories',
+      limit: 100,
+      sort: 'order',
+    })
+    const opinionCategory = (
+      categoriesForCheck.docs as Array<{ id: string | number; slug: string }>
+    ).find((c) => c.slug === 'opinion')
+
+    let forceOpinionThisRun = !opinionCategory
+    if (opinionCategory) {
+      const latestOpinionRes = await payload.find({
+        collection: 'articles',
+        where: {
+          status: { equals: 'published' },
+          category: { equals: opinionCategory.id },
+        },
+        limit: 1,
+        sort: '-publishedAt',
+        depth: 0,
+      })
+      const latestOpinion = latestOpinionRes.docs[0] as { publishedAt?: string } | undefined
+      if (!latestOpinion?.publishedAt) {
+        forceOpinionThisRun = true
+      } else {
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+        forceOpinionThisRun = new Date(latestOpinion.publishedAt).getTime() < weekAgo
+      }
+    }
+
+    // Fetch authors, recent articles, and RSS topics in parallel (categories already fetched above)
+    const [authorsRes, recentArticlesRes, rssTopicsResult] = await Promise.all([
       payload.find({ collection: 'authors', limit: 100, sort: 'name' }),
       payload.find({
         collection: 'articles',
@@ -367,6 +417,7 @@ export async function GET(req: Request) {
       }),
       fetchRssTopics(),
     ])
+    const categoriesRes = categoriesForCheck
 
     const { topicSummary } = rssTopicsResult
 
@@ -471,7 +522,7 @@ export async function GET(req: Request) {
 
     // Decide article types for all slots up front, then generate in parallel
     const hasRssTopics = topicSummary.trim().length > 0
-    const slotConfigs = computeSlotConfigs(ARTICLES_PER_RUN, hasRssTopics)
+    const slotConfigs = computeSlotConfigs(ARTICLES_PER_RUN, hasRssTopics, forceOpinionThisRun)
 
     const generateOneContext: GenerateOneContext = {
       payload,
