@@ -68,7 +68,7 @@ export interface GenerateArticleResult {
 
 // Reusable prompt text blocks to avoid repetition
 
-const INTELLECTUAL_SOURCES = `Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal, Oscar Wilde, Voltaire. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Nietzsche, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno, Confucius, I-Ching. Cinema: Truffaut, Coppola, Godard. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin.`
+const INTELLECTUAL_SOURCES = `Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal, Oscar Wilde, Voltaire, Dostoevsky, Tolstoy, James Joyce, Virginia Woolf, William Faulkner, Jorge Luis Borges, Gabriel Garcia Marquez, Thomas Mann, Herman Melville, Charles Dickens, Mark Twain, Edgar Allan Poe, Emily Dickinson, Walt Whitman, Baudelaire, Flaubert, Zola, Balzac, Victor Hugo, Goethe, Schiller, Chekhov, Gogol, Nabokov, Beckett, Ionesco, Brecht, Thomas Pynchon, Don DeLillo, Toni Morrison, Sylvia Plath, Albert Camus, Jean-Paul Sartre, Simone de Beauvoir, Roberto Bolano, Italo Calvino, Umberto Eco, Milan Kundera, Haruki Murakami, Salman Rushdie, Kurt Vonnegut, Hunter S. Thompson, Charles Bukowski, Jack Kerouac, William S. Burroughs, David Foster Wallace, Zadie Smith, Chimamanda Ngozi Adichie, Orwell, Aldous Huxley, Ray Bradbury, Isaac Asimov, Stanislaw Lem, J.G. Ballard, Ursula K. Le Guin, Margaret Atwood. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Nietzsche, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno, Confucius, I-Ching, Schopenhauer, Spinoza, Leibniz, John Stuart Mill, Hobbes, Locke, Rousseau, Voltaire, Montesquieu, Tocqueville, Hannah Arendt, Simone Weil, Michel Foucault, Gilles Deleuze, Slavoj Zizek, Judith Butler, Noam Chomsky, Peter Singer, Martha Nussbaum, Byung-Chul Han, Zygmunt Bauman, Theodor Adorno, Herbert Marcuse, Antonio Gramsci, Louis Althusser, Georg Lukacs, Karl Popper, Thomas Kuhn, Umberto Eco, Roland Barthes, Susan Sontag. Cinema: Truffaut, Coppola, Godard, Kubrick, Hitchcock, Fellini, Bergman, Tarkovsky, Kurosawa, David Lynch, Quentin Tarantino, Martin Scorsese, Werner Herzog, Wim Wenders, Fassbinder, Lars von Trier, Pedro Almodovar, Andrei Tarkovsky, Jean-Luc Godard, Orson Welles, Billy Wilder, Fritz Lang, Ridley Scott, the Coen Brothers, Spike Lee, Park Chan-wook, Bong Joon-ho, Denis Villeneuve, Charlie Kaufman, Wes Anderson, Sofia Coppola, Michael Haneke. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin, Andy Warhol, Basquiat, Banksy, Frida Kahlo, Salvador Dali, Magritte, Mondrian, Rothko, Pollock, Kandinsky, Klimt, Egon Schiele, Francis Bacon, Damien Hirst, Jeff Koons, Ai Weiwei, Marina Abramovic, Yoko Ono, Mozart, Wagner, Debussy, Stravinsky, Miles Davis, John Coltrane, Kraftwerk, Brian Eno, David Bowie, Radiohead, Bjork, Aphex Twin, Stockhausen.`
 
 const INTELLECTUAL_EASTER_EGGS = [
   'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
@@ -105,7 +105,18 @@ const EDGE_SHORT = [
 const SPICE_IT_UP = [
   'SPICE IT UP (subtle sexual innuendo):',
   '- Include 2-3 subtle double entendres or sexual innuendo that can be read innocently or suggestively',
-  '- Use phrases that have a second, sexual meaning when read carefully (e.g., "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance")',
+  '- Use phrases that have a second, sexual meaning when read carefully. VARY YOUR CHOICES widely from examples like:',
+  '  * "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance"',
+  '  * "coming from behind in the polls", "a firm grip on the situation", "going down in the rankings"',
+  '  * "mounting pressure", "climaxing at the wrong moment", "throbbing nightlife scene"',
+  '  * "slippery when wet (the Leopoldplatz fountain)", "getting into tight spaces", "a long and arduous entry process"',
+  '  * "blowing the budget", "stroking egos", "rubbing residents the wrong way"',
+  '  * "erected overnight", "the long-awaited opening", "pulling out of the deal at the last second"',
+  '  * "getting on top of the housing crisis", "riding the wave of gentrification", "finishing too quickly"',
+  '  * "exposed positions", "a backdoor arrangement", "stimulating the local economy"',
+  '  * "laying pipe (construction)", "going all the way to the Bürgeramt", "a satisfying resolution"',
+  '  * "grinding to a halt", "the tip of the iceberg", "sliding into new territory"',
+  '- DO NOT reuse the same innuendo across articles. Each article should have FRESH double entendres.',
   '- Keep it clever—readers should catch the double meaning',
   '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
 ].join('\n')
@@ -1889,6 +1900,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     'Remember: punch in all directions, mock everyone, but avoid slurs or explicit calls for harm.',
     '',
+    'ARTICLE LENGTH: The bodyMarkdown should be approximately 400 words. Do NOT exceed 500 words. Keep articles tight, punchy, and concise. Quality over quantity.',
+    '',
     IMAGE_GENERATION,
     '',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
@@ -1961,6 +1974,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'The connection to the real news should be CLEAR in the article, not just vaguely inspired.',
           'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.',
           '',
+          'ARTICLE LENGTH: The article should be approximately 400 words. Do NOT exceed 500 words. Keep it tight, punchy, and concise.',
+          '',
           'IMPORTANT: Since you are using this news topic, you MUST set "sourceRssTopic" in your JSON output to the EXACT news headline above.',
           `Copy this verbatim: "${selectedRssTopic}"`,
           '',
@@ -1971,6 +1986,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           'You MUST write an article about this specific topic. Do not ignore it.',
           'This is your PRIMARY directive - the article must be clearly about this topic.',
+          '',
+          'ARTICLE LENGTH: The article should be approximately 400 words. Do NOT exceed 500 words. Keep it tight, punchy, and concise.',
           input.forceOpinion
             ? [
                 '',
@@ -2005,6 +2022,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ].join('\n')
       : '',
     AUTHOR_SELECTION,
+    '',
+    'ARTICLE LENGTH: Keep the bodyMarkdown to approximately 400 words. Do NOT exceed 500 words. Tight, punchy writing is better than lengthy rambling.',
     '',
     'Return an article that could plausibly run on the front page of a satirical local paper.',
     '',
