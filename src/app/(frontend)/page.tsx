@@ -161,6 +161,13 @@ export default async function HomePage() {
     centerColumnAfterSpanning,
   } = buildHomeLayout({ otherArticles, headlineArticle, opinionArticles })
 
+  // Mobile: order by time descending, with two opinion pieces after the first article
+  const otherByTimeDesc = [...otherArticles].sort((a, b) => {
+    const aAt = a.publishedAt ?? ''
+    const bAt = b.publishedAt ?? ''
+    return bAt.localeCompare(aAt)
+  })
+
   return (
     <main className="py-10 w-full">
       <NytContainer>
@@ -170,34 +177,20 @@ export default async function HomePage() {
           <div className="order-1 lg:border-r lg:border-[#e2e2e2] lg:pr-6">
             {/******************* MOBILE LAYOUT ***********************/}
             <div className="lg:hidden">
-              {/* Center content */}
+              {/* First article (headline) */}
               {headlineArticle && <HeadlineArticle article={headlineArticle} />}
 
-              {/* Opinion Section */}
+              {/* Opinion Section (two pieces after the first article) */}
               {opinionArticles.length > 0 && <OpinionSection articles={opinionArticles} />}
 
-              {/* Additional Center Column Articles */}
-              {centerColumnArticles.length > 0 && (
+              {/* Rest ordered by time, newest first */}
+              {otherByTimeDesc.length > 0 && (
                 <div className="mt-8 pt-8 border-t-2 border-[rgba(18,18,18,0.7)]">
-                  {centerColumnArticles.map((article: IArticle, index: number) => (
+                  {otherByTimeDesc.map((article: IArticle, index: number) => (
                     <CenterColumnArticle
                       key={article.id}
                       article={article}
-                      isLast={index === centerColumnArticles.length - 1}
-                      showImage={articlesWithImages.has(String(article.id))}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Left column stories (all, no spanning on mobile) */}
-              {leftColumnArticles.length > 0 && (
-                <div className="mt-8 pt-8 border-t border-[#e2e2e2]">
-                  {leftColumnArticles.map((article: IArticle, index: number) => (
-                    <LeftColumnArticle
-                      key={article.id}
-                      article={article}
-                      isLast={index === leftColumnArticles.length - 1}
+                      isLast={index === otherByTimeDesc.length - 1}
                       showImage={articlesWithImages.has(String(article.id))}
                     />
                   ))}
