@@ -1,4 +1,28 @@
 import type { CollectionConfig } from 'payload'
+import { getBaseUrl } from '@/lib/getBaseUrl'
+import { postToInstagram } from '@/lib/instagram/postToInstagram'
+
+type ArticleDoc = {
+  headline?: string
+  slug?: string
+  excerpt?: string
+  featuredImageUrl?: string | null
+  status?: string
+}
+
+function shouldPostToInstagram(
+  doc: ArticleDoc,
+  previousDoc: ArticleDoc | null,
+  operation: 'create' | 'update' | 'delete',
+): boolean {
+  if (operation === 'delete') return false
+  if (doc.status !== 'published') return false
+  const hadImage = Boolean(doc.featuredImageUrl?.trim())
+  const hadHeadline = Boolean(doc.headline?.trim())
+  if (!hadImage || !hadHeadline) return false
+  if (operation === 'create') return true
+  return previousDoc?.status !== 'published'
+}
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -139,4 +163,34 @@ export const Articles: CollectionConfig = {
       },
     },
   ],
+  hooks: {
+    afterChange: [
+      ({ doc, previousDoc, operation }) => {
+        const d = doc as ArticleDoc
+        const prev = (previousDoc ?? null) as ArticleDoc | null
+        if (!shouldPostToInstagram(d, prev, operation as 'create' | 'update' | 'delete')) return
+
+        const imageUrl = d.featuredImageUrl?.trim()
+        const slug = d.slug?.trim()
+        const headline = d.headline?.trim()
+        const excerpt = d.excerpt?.trim()
+        if (!imageUrl || !slug || !headline) return
+
+        const articleUrl = `${getBaseUrl()}/article/${slug}`
+        const caption = excerpt
+          ? `${headline}\n\n${excerpt}\n\n${articleUrl}`
+          : `${headline}\n\n${articleUrl}`
+
+        postToInstagram({
+          imageUrl,
+          caption,
+          altText: headline,
+        }).then((result) => {
+          if (!result.ok) {
+            console.warn('[Instagram] Post failed:', result.error)
+          }
+        })
+      },
+    ],
+  },
 }
