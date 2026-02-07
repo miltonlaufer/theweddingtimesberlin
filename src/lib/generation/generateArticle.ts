@@ -1903,7 +1903,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         '- Include concrete details: "On Tuesday morning at 8:47am, residents of Müllerstraße 23 noticed..."',
         '- Name specific Berlin locations, streets, neighborhoods',
         '- Include dialogue, witness accounts, official statements (all fictional but realistic)',
-        '- The article should be 300-600 words of detailed, specific reporting',
+        '- The article should be approximately 400 words of detailed, specific reporting',
         '- MUST provide an imagePrompt: describe a photorealistic photo that would illustrate this news story',
         '',
         EDGE_SHORT,
