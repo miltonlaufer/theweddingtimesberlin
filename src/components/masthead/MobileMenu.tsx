@@ -51,6 +51,13 @@ export const MobileMenu: React.FC<MobileMenuProps> = React.memo(function MobileM
               {category.name}
             </Link>
           ))}
+          <Link
+            href="/archive"
+            onClick={onClose}
+            className="block font-sans text-lg font-semibold py-4 border-b border-[#e2e2e2] text-[#121212]"
+          >
+            Archive
+          </Link>
         </nav>
       </div>
     </div>
