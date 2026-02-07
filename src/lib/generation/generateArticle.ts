@@ -25,7 +25,8 @@ export interface GenerateArticleInput {
   recentHeadlinePatterns?: string[] // Patterns like "Berlin [verb] [noun]" to avoid
   latestArticleContentSample?: string // Half of the latest article's body text to ensure new article is different
   // Variety control for cron job batches
-  forceDrugsTechno?: boolean // Force drugs/techno topic (true) or force non-drugs/techno (false), undefined = random 35%
+  forceDrugsTechno?: boolean // Force drugs/techno topic (true) or force non-drugs/techno (false), undefined = random
+  forceStartup?: boolean // Force startup/gentrification topic (true) or force non-startup (false), undefined = random
   forceRss?: boolean // Force using RSS topic if available
   forceOpinion?: boolean // Force opinion/editorial piece (categorySlug "opinion", layout "opinion")
 }
@@ -62,6 +63,8 @@ export interface GenerateArticleResult {
   usedRssTopic: string | null
   /** Whether this article used a drugs/techno topic/scenario. Used for variety tracking. */
   usedDrugsTechno: boolean
+  /** Whether this article used a startup/gentrification topic/scenario. Used for variety tracking. */
+  usedStartup: boolean
 }
 
 /******************* PROMPT CONSTANTS ***********************/
@@ -210,6 +213,41 @@ const BERLIN_DRUGS_TECHNO_CULTURE_MILD = [
   'Berlin has many facets beyond the club scene: bureaucracy, housing crisis, gentrification,',
   'Turkish community, neighborhood life, BVG chaos, Späti culture, crime, food, art, startups.',
   'Write about what your topic calls for—do not shoehorn clubs or drugs into unrelated stories.',
+].join('\n')
+
+// Strong version - used when startup/gentrification topic IS selected
+const BERLIN_STARTUP_CULTURE_STRONG = [
+  'CRITICAL BERLIN CULTURE ELEMENTS - STARTUP AND GENTRIFICATION:',
+  "Berlin's transformation from a cheap, gritty, creative city into a sanitized startup playground is one of its defining tragedies. This is not optional flavor—it's the city's open wound.",
+  'Your topic is about startup culture/gentrification, so LEAN INTO IT FULLY:',
+  '- Co-working spaces: WeWork, Factory Berlin, Betahaus, St. Oberholz, the endless "creative hubs" with exposed brick',
+  '- IMPORTANT: Do NOT only mention WeWork! Vary your co-working/startup references.',
+  '- Tech bros explaining blockchain/AI/Web3 to baristas who could not care less',
+  '- Startup founders who think their app will save the world (it delivers smoothies)',
+  '- Pitch nights, demo days, "disruption" as a buzzword for selling the same thing with an app',
+  '- Venture capital money flooding in, turning dive bars into cocktail lounges',
+  '- The performative minimalism: owning nothing but a MacBook and calling it enlightenment',
+  '- English becoming the default language—menus, meetings, entire neighborhoods',
+  '- Yoga studios, mindfulness retreats, vegan brunch spots charging 18 euros for avocado toast',
+  '- The wellness-to-crypto pipeline: spiritual people who discovered NFTs',
+  '- Expats who moved here "for the culture" but only hang out with other expats in English-speaking bubbles',
+  '- Turkish bakeries becoming matcha cafés, Spätis becoming organic juice bars',
+  '- Rents doubling in 5 years, longtime residents pushed to the outskirts',
+  '- The hypocrisy: gentrifiers who attend anti-gentrification protests, then go home to their renovated Altbau',
+  '- Prenzlauer Berg parents with 3000-euro strollers lecturing about simplicity',
+  '- The "I moved here in 2019 and it was already ruined" crowd',
+  '- Startup culture as colonialism: extracting value from a city and giving back nothing but high rents',
+  '',
+  'Make startup culture and gentrification feel as present and invasive as it actually is—because in Berlin, it is eating the city alive.',
+].join('\n')
+
+// Mild version - used when startup/gentrification topic is NOT selected
+const BERLIN_STARTUP_CULTURE_MILD = [
+  'BERLIN CULTURE NOTE:',
+  'Your topic is NOT about startup culture/gentrification, so focus on your assigned subject.',
+  'Berlin has many facets beyond the tech scene: nightlife, bureaucracy, Turkish community,',
+  'neighborhood life, BVG chaos, Späti culture, crime, food, art, drugs/techno.',
+  'Write about what your topic calls for—do not shoehorn startups or gentrification into unrelated stories.',
 ].join('\n')
 
 const CATEGORY_MAPPING_GUIDE = [
@@ -1334,7 +1372,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Kater Blau floating platform detaches, attendees unbothered, continue dancing toward Poland',
   ]
 
-  // DRUGS AND TECHNO BIAS: 50% chance to pick from drugs/techno scenarios specifically
+  // DRUGS AND TECHNO scenarios
   const drugsAndTechnoScenarios = concreteBerlinScenarios.filter(
     (scenario) =>
       scenario.includes('Berghain') ||
@@ -1357,19 +1395,60 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       scenario.includes('pupils'),
   )
 
-  // 35% chance to select from drugs/techno scenarios, 65% from NON-drugs/techno scenarios
-  // Can be overridden by forceDrugsTechno parameter for variety control
-  const useDrugsOrTechnoScenario =
-    input.forceDrugsTechno !== undefined ? input.forceDrugsTechno : Math.random() < 0.35
+  // STARTUP AND GENTRIFICATION scenarios
+  const startupAndGentrificationScenarios = concreteBerlinScenarios.filter(
+    (scenario) =>
+      !drugsAndTechnoScenarios.includes(scenario) &&
+      (scenario.includes('gentrification') ||
+        scenario.includes('hipster') ||
+        scenario.includes('startup') ||
+        scenario.includes('co-working') ||
+        scenario.includes('yoga') ||
+        scenario.includes('vegan') ||
+        scenario.includes('expat') ||
+        scenario.includes('organic') ||
+        scenario.includes('vape shop') ||
+        scenario.includes('craft cocktail') ||
+        scenario.includes('brunch') ||
+        scenario.includes('artisanal') ||
+        scenario.includes('only serves food to people who can prove')),
+  )
 
-  // Filter OUT drugs/techno scenarios for the general pool
-  const nonDrugsTechnoScenarios = concreteBerlinScenarios.filter(
-    (scenario) => !drugsAndTechnoScenarios.includes(scenario),
+  // Three-way scenario selection: drugs/techno, startup, or general
+  // Can be overridden by forceDrugsTechno / forceStartup parameters
+  let useDrugsOrTechnoScenario: boolean
+  let useStartupScenario: boolean
+
+  if (input.forceDrugsTechno === true) {
+    useDrugsOrTechnoScenario = true
+    useStartupScenario = false
+  } else if (input.forceStartup === true) {
+    useDrugsOrTechnoScenario = false
+    useStartupScenario = true
+  } else if (input.forceDrugsTechno === false && input.forceStartup === false) {
+    useDrugsOrTechnoScenario = false
+    useStartupScenario = false
+  } else {
+    // Random: 35% drugs/techno, 30% startup, 35% general
+    const scenarioRoll = Math.random()
+    useDrugsOrTechnoScenario = scenarioRoll < 0.35
+    useStartupScenario = !useDrugsOrTechnoScenario && scenarioRoll < 0.65
+  }
+
+  // General pool: neither drugs/techno nor startup
+  const generalScenarios = concreteBerlinScenarios.filter(
+    (scenario) =>
+      !drugsAndTechnoScenarios.includes(scenario) &&
+      !startupAndGentrificationScenarios.includes(scenario),
   )
 
   const selectedScenario = useDrugsOrTechnoScenario
     ? drugsAndTechnoScenarios[Math.floor(Math.random() * drugsAndTechnoScenarios.length)]
-    : nonDrugsTechnoScenarios[Math.floor(Math.random() * nonDrugsTechnoScenarios.length)]
+    : useStartupScenario
+      ? startupAndGentrificationScenarios[
+          Math.floor(Math.random() * startupAndGentrificationScenarios.length)
+        ]
+      : generalScenarios[Math.floor(Math.random() * generalScenarios.length)]
 
   // Randomly pick a topic focus to force variety (aligned with site categories)
   const topicFocuses = [
@@ -1612,8 +1691,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '[OPINION] In praise of being a terrible neighbor',
   ]
 
-  // DRUGS AND TECHNO BIAS: 50% chance to pick from drugs/techno/nightlife/decadence topics specifically
-  // This ensures Berlin's most iconic cultural elements appear frequently
+  // DRUGS AND TECHNO topics
   const drugsAndTechnoTopics = topicFocuses.filter(
     (topic) =>
       topic.includes('drug') ||
@@ -1641,28 +1719,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       topic.includes('dealer'),
   )
 
-  // 35% chance to select from drugs/techno topics, 65% from NON-drugs/techno topics
-  // Can be overridden by forceDrugsTechno parameter for variety control
-  const useDrugsOrTechnoTopic =
-    input.forceDrugsTechno !== undefined ? input.forceDrugsTechno : Math.random() < 0.35
-
-  // Filter OUT drugs/techno topics for the general pool to prevent double-dipping
-  const nonDrugsTechnoTopics = topicFocuses.filter((topic) => !drugsAndTechnoTopics.includes(topic))
-
-  // Opinion-only topics (when forceOpinion is true)
-  const opinionOnlyTopics = topicFocuses.filter((t) => t.startsWith('[OPINION]'))
-
-  let randomFocus: string
-
-  if (input.forceOpinion && opinionOnlyTopics.length > 0) {
-    randomFocus = opinionOnlyTopics[Math.floor(Math.random() * opinionOnlyTopics.length)]
-  } else if (useDrugsOrTechnoTopic) {
-    randomFocus = drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
-  } else {
-    // If NOT about drugs/techno, 30% chance to pick startup/gentrification topics
-    const startupAndGentrificationTopics = nonDrugsTechnoTopics.filter(
-      (topic) =>
-        topic.includes('startup') ||
+  // STARTUP AND GENTRIFICATION topics
+  const startupAndGentrificationTopics = topicFocuses.filter(
+    (topic) =>
+      !drugsAndTechnoTopics.includes(topic) &&
+      (topic.includes('startup') ||
         topic.includes('tech bro') ||
         topic.includes('co-working') ||
         topic.includes('WeWork') ||
@@ -1677,16 +1738,58 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         topic.includes('vegan') ||
         topic.includes('mindfulness') ||
         topic.includes('wellness') ||
-        topic.includes('expat'),
-    )
+        topic.includes('expat') ||
+        topic.includes('rent') ||
+        topic.includes('housing') ||
+        topic.includes('Airbnb') ||
+        topic.includes('WG') ||
+        topic.includes('art scene') ||
+        topic.includes('galleries closing')),
+  )
 
-    const useStartupTopic = Math.random() < 0.3
+  // General topics: neither drugs/techno nor startup/gentrification
+  const generalTopics = topicFocuses.filter(
+    (topic) =>
+      !drugsAndTechnoTopics.includes(topic) && !startupAndGentrificationTopics.includes(topic),
+  )
+
+  // Three-way topic selection: drugs/techno, startup, or general
+  // Same logic as scenario selection, mirrored for topics
+  let useDrugsOrTechnoTopic: boolean
+  let useStartupTopic: boolean
+
+  if (input.forceDrugsTechno === true) {
+    useDrugsOrTechnoTopic = true
+    useStartupTopic = false
+  } else if (input.forceStartup === true) {
+    useDrugsOrTechnoTopic = false
+    useStartupTopic = true
+  } else if (input.forceDrugsTechno === false && input.forceStartup === false) {
+    useDrugsOrTechnoTopic = false
+    useStartupTopic = false
+  } else {
+    // Random: 35% drugs/techno, 30% startup, 35% general
+    const topicRoll = Math.random()
+    useDrugsOrTechnoTopic = topicRoll < 0.35
+    useStartupTopic = !useDrugsOrTechnoTopic && topicRoll < 0.65
+  }
+
+  // Opinion-only topics (when forceOpinion is true)
+  const opinionOnlyTopics = topicFocuses.filter((t) => t.startsWith('[OPINION]'))
+
+  let randomFocus: string
+
+  if (input.forceOpinion && opinionOnlyTopics.length > 0) {
+    randomFocus = opinionOnlyTopics[Math.floor(Math.random() * opinionOnlyTopics.length)]
+  } else if (useDrugsOrTechnoTopic) {
+    randomFocus = drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
+  } else if (useStartupTopic) {
     randomFocus =
-      useStartupTopic && startupAndGentrificationTopics.length > 0
-        ? startupAndGentrificationTopics[
-            Math.floor(Math.random() * startupAndGentrificationTopics.length)
-          ]
-        : nonDrugsTechnoTopics[Math.floor(Math.random() * nonDrugsTechnoTopics.length)]
+      startupAndGentrificationTopics[
+        Math.floor(Math.random() * startupAndGentrificationTopics.length)
+      ]
+  } else {
+    randomFocus = generalTopics[Math.floor(Math.random() * generalTopics.length)]
   }
 
   // When RSS topics are available, pick one to base the article on
@@ -1704,29 +1807,41 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const actuallyUsedRssTopic =
     !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
 
-  // Limit to 12 most recent articles to keep token usage reasonable
-  const maxRecentArticles = 12
+  // Pass up to 20 recent articles so the LLM has a clear picture of what NOT to write
+  const maxRecentArticles = 20
   const recentTitles = input.recentArticleTitles.slice(0, maxRecentArticles)
   const recentExcerpts = input.recentArticleExcerpts?.slice(0, maxRecentArticles) ?? []
 
   const recentTitlesSection =
     recentTitles.length > 0
       ? [
-          `\nCRITICAL: DO NOT repeat these recent article topics (${recentTitles.length} recent articles shown to avoid repetition):`,
+          '',
+          '═══════════════════════════════════════════════════════════════════',
+          'BLACKLIST - THESE ARTICLES ALREADY EXIST. DO NOT WRITE ANYTHING SIMILAR.',
+          '═══════════════════════════════════════════════════════════════════',
+          '',
+          `The following ${recentTitles.length} articles were ALREADY PUBLISHED RECENTLY.`,
+          'Your article MUST NOT overlap with ANY of them — not the topic, not the angle, not the characters, not the joke, not the premise.',
+          'Read each one carefully. If your idea resembles ANY of these, THROW IT OUT and pick something else.',
+          '',
           recentTitles
             .map((title, idx) => {
               const excerpt = recentExcerpts[idx]
               const excerptText = excerpt
-                ? ` - ${excerpt.length > 150 ? excerpt.slice(0, 147) + '...' : excerpt}`
+                ? ` — ${excerpt.length > 150 ? excerpt.slice(0, 147) + '...' : excerpt}`
                 : ''
-              return `${idx + 1}. "${title}"${excerptText}`
+              return `  ${idx + 1}. "${title}"${excerptText}`
             })
             .join('\n'),
           '',
-          'You must write about a COMPLETELY DIFFERENT topic/subject matter. Do not write about similar themes, similar situations, or similar characters.',
-          'If you see multiple articles about bureaucracy, write about something else entirely. If you see multiple articles about nightlife, choose a different angle.',
-          'The excerpts above show the actual content/story angle—avoid repeating these specific story ideas, not just the topics.',
-          '',
+          'RULES:',
+          '- If 2+ articles above are about bureaucracy, DO NOT write about bureaucracy.',
+          '- If 2+ articles above are about nightlife/clubs, DO NOT write about nightlife/clubs.',
+          '- If 2+ articles above are about gentrification, DO NOT write about gentrification.',
+          '- If an article above covers a specific situation (e.g., Späti loyalty programs), do NOT write about that same situation, even from a different angle.',
+          '- "Different" means a reader should NOT think "didn\'t I just read something like this?"',
+          '- When in doubt, pick a topic that appears ZERO times in the list above.',
+          '═══════════════════════════════════════════════════════════════════',
         ].join('\n')
       : ''
 
@@ -1735,21 +1850,22 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     ? [
         '',
         '═══════════════════════════════════════════════════════════════════',
-        'CRITICAL: YOUR ARTICLE MUST BE DIFFERENT FROM THE LATEST ONE',
+        'THE MOST RECENT ARTICLE (YOUR ARTICLE MUST BE NOTHING LIKE THIS)',
         '═══════════════════════════════════════════════════════════════════',
         '',
-        'Below is a sample from the MOST RECENT article published. Your new article MUST be distinctly different:',
-        '- Different topic/subject matter',
-        '- Different tone and approach',
-        '- Different story structure',
-        '- Different characters/situations',
+        'This is the article that was published RIGHT BEFORE yours.',
+        'Your article must feel like it was written by a DIFFERENT person about a DIFFERENT world:',
+        '- Completely different subject matter',
+        '- Different writing approach and structure',
+        '- Different characters, locations, situations',
+        '- If this article is funny-absurd, yours should be funny-critical (or vice versa)',
         '',
-        'LATEST ARTICLE CONTENT SAMPLE (DO NOT write something similar):',
+        'CONTENT SAMPLE (this is what readers JUST read — do NOT give them more of the same):',
         '---',
         input.latestArticleContentSample,
         '---',
         '',
-        'Write something FRESH and ORIGINAL that contrasts with the above.',
+        'A reader who just finished the article above should feel SURPRISED by yours — not bored by similarity.',
         '═══════════════════════════════════════════════════════════════════',
       ].join('\n')
     : ''
@@ -1881,6 +1997,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     useDrugsOrTechnoTopic || useDrugsOrTechnoScenario
       ? BERLIN_DRUGS_TECHNO_CULTURE_STRONG
       : BERLIN_DRUGS_TECHNO_CULTURE_MILD,
+    '',
+    // Use strong startup/gentrification encouragement when that topic is selected, mild version otherwise
+    useStartupTopic || useStartupScenario
+      ? BERLIN_STARTUP_CULTURE_STRONG
+      : BERLIN_STARTUP_CULTURE_MILD,
     '',
     'WRITING STYLE NOTES:',
     '- Reduce usage of the word "vibes" or "vibe"—it is overused. Prefer more specific, evocative language.',
@@ -2121,6 +2242,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         article: repaired,
         usedRssTopic: actuallyUsedRssTopic,
         usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
+        usedStartup: useStartupTopic || useStartupScenario,
       }
     }
     let validated = validation.data
@@ -2159,6 +2281,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       article: validated,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
       usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
+      usedStartup: useStartupTopic || useStartupScenario,
     }
   } catch {
     // Fallback: deterministic repair using cheaper model
@@ -2175,6 +2298,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       article: repaired,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
       usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
+      usedStartup: useStartupTopic || useStartupScenario,
     }
   }
 }

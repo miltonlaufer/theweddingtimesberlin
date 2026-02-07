@@ -62,82 +62,83 @@ function slugToCategoryName(slug: string): string {
 /** Slot config for one article: type decided up front so we can parallelize generation. */
 type SlotConfig = {
   forceDrugsTechno: boolean | undefined
+  forceStartup: boolean | undefined
   forceRss: boolean | undefined
   forceOpinion: boolean
   includeTopics: boolean
 }
 
 /**
- * Precompute what type of article each slot should be (drugs, rss, plain, random).
- * Same variety rules as before: first = drugs, second = rss, third = plain, rest = random.
- * When forceOpinionFirst is true, the first slot is an opinion piece.
+ * Precompute what type of article each slot should be.
+ * Works for ANY count (1, 4, 8, etc). Assigns guaranteed types by priority,
+ * then fills remaining slots with random articles.
+ *
+ * Priority order:
+ * 1. Opinion (if forceOpinionFirst)
+ * 2. Drugs/techno (always guaranteed)
+ * 3. Startup/gentrification (always guaranteed)
+ * 4. RSS-based (if hasRssTopics)
+ * 5. Remaining slots = random (internal 35/30/35 split)
  */
 function computeSlotConfigs(
   count: number,
   hasRssTopics: boolean,
   forceOpinionFirst: boolean,
 ): SlotConfig[] {
+  // Build the list of guaranteed slot types in priority order
+  const guaranteed: SlotConfig[] = []
+
+  if (forceOpinionFirst) {
+    guaranteed.push({
+      forceDrugsTechno: false,
+      forceStartup: false,
+      forceRss: false,
+      forceOpinion: true,
+      includeTopics: false,
+    })
+  }
+
+  guaranteed.push({
+    forceDrugsTechno: true,
+    forceStartup: false,
+    forceRss: false,
+    forceOpinion: false,
+    includeTopics: false,
+  })
+
+  guaranteed.push({
+    forceDrugsTechno: false,
+    forceStartup: true,
+    forceRss: false,
+    forceOpinion: false,
+    includeTopics: false,
+  })
+
+  if (hasRssTopics) {
+    guaranteed.push({
+      forceDrugsTechno: false,
+      forceStartup: false,
+      forceRss: true,
+      forceOpinion: false,
+      includeTopics: true,
+    })
+  }
+
+  // Take as many guaranteed slots as we can fit, then fill the rest with random
   const slots: SlotConfig[] = []
-  let drugsAssigned = false
-  let rssAssigned = false
-  let plainAssigned = false
-
   for (let i = 0; i < count; i++) {
-    const remaining = count - i
-    let forceDrugsTechno: boolean | undefined
-    let forceRss: boolean | undefined
-    let forceOpinion: boolean
-    let includeTopics: boolean
-
-    if (i === 0 && forceOpinionFirst) {
-      forceDrugsTechno = false
-      forceRss = false
-      forceOpinion = true
-      includeTopics = false
-    } else if (i === 0 && !drugsAssigned) {
-      forceDrugsTechno = true
-      forceRss = false
-      forceOpinion = false
-      includeTopics = false
-      drugsAssigned = true
-    } else if (i === 1 && !rssAssigned && hasRssTopics) {
-      forceDrugsTechno = false
-      forceRss = true
-      forceOpinion = false
-      includeTopics = true
-      rssAssigned = true
-    } else if (i === 2 && !plainAssigned) {
-      forceDrugsTechno = false
-      forceRss = false
-      forceOpinion = false
-      includeTopics = false
-      plainAssigned = true
-    } else if (!drugsAssigned && remaining === 3) {
-      forceDrugsTechno = true
-      forceRss = false
-      forceOpinion = false
-      includeTopics = false
-      drugsAssigned = true
-    } else if (!rssAssigned && hasRssTopics && remaining === 2) {
-      forceDrugsTechno = false
-      forceRss = true
-      forceOpinion = false
-      includeTopics = true
-      rssAssigned = true
-    } else if (!plainAssigned && remaining === 1) {
-      forceDrugsTechno = false
-      forceRss = false
-      forceOpinion = false
-      includeTopics = false
-      plainAssigned = true
+    if (i < guaranteed.length) {
+      slots.push(guaranteed[i])
     } else {
-      forceDrugsTechno = drugsAssigned ? false : undefined
-      forceRss = undefined
-      forceOpinion = false
-      includeTopics = pickTwoThirds()
+      // Random slot: let generateArticle's internal random logic decide the theme
+      slots.push({
+        forceDrugsTechno: undefined,
+        forceStartup: undefined,
+        forceRss: undefined,
+        forceOpinion: false,
+        includeTopics: pickTwoThirds(),
+      })
     }
-
-    slots.push({ forceDrugsTechno, forceRss, forceOpinion, includeTopics })
   }
 
   return slots
@@ -219,6 +220,7 @@ async function generateOneArticle(
     recentHeadlinePatterns: ctx.uniquePatterns,
     latestArticleContentSample: ctx.latestArticleContentSample,
     forceDrugsTechno: slot.forceDrugsTechno,
+    forceStartup: slot.forceStartup,
     forceRss: slot.forceRss,
     forceOpinion: slot.forceOpinion,
   })
