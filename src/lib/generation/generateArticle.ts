@@ -1048,7 +1048,7 @@ async function regenerateHeadline(args: {
   const llm = new ChatOpenAI({
     apiKey,
     model: repairModelName,
-    temperature: 1.7, // crazy creative  // Some creativity but more controlled
+    temperature: 1, 
   })
 
   const bannedWordsLower = args.bannedOpeningWords.map((w) => w.toLowerCase())
@@ -1173,7 +1173,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const llm = new ChatOpenAI({
     apiKey,
     model: modelName,
-    temperature: 1.7, // crazy creative
+    temperature: 1,
   })
 
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
