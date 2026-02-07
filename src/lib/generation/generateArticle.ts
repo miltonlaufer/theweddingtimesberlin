@@ -92,6 +92,22 @@ const EDGE_AND_POLITICAL_INCORRECTNESS = [
   '- Push boundaries. Be provocative. Make people think "can they say that?"',
   '- Use dark humor, shock value, and uncomfortable truths wrapped in absurdity',
   "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
+  '',
+  'COMEDIC VOICE - AUTHENTIC SOCIAL CRITICISM (THIS IS CRITICAL):',
+  '- Channel Louis CK, Ricky Gervais, George Carlin, Bill Hicks, Doug Stanhope, Bill Burr, Frankie Boyle.',
+  '- The humor must come from REAL uncomfortable truths about society, not just wacky absurdism.',
+  '- Say the thing everyone is THINKING but nobody dares to say out loud. Name the hypocrisy directly.',
+  '- Observe real human behavior and call out the bullshit: the performative activism, the moral posturing, the self-deception, the cowardice disguised as politeness.',
+  '- Examples of the RIGHT tone:',
+  '  * A gentrifier writing a think-piece about "preserving neighborhood character" from their 2000-euro loft',
+  '  * Expats who complain about other expats ruining the city while being expats themselves',
+  '  * People posting black squares on Instagram while their cleaning lady is undocumented',
+  '  * The guy who microdoses and calls it "wellness" but judges the Görlitzer Park dealer for selling weed',
+  '  * Berlin leftists who hate capitalism but need daddy to wire rent money every month',
+  '- The comedy is in the TRUTH, not in randomness. Every joke should make someone think "shit, that IS what people do".',
+  '- Be specific about WHO you are mocking and WHY. Vague satire is weak satire.',
+  '- Punch at real contradictions: people who claim to be open-minded but are the most judgmental, people who fetishize poverty while being rich, people who moved here "for the culture" but only hang out with other expats.',
+  '- The best joke is the one where the reader recognizes themselves and feels personally attacked.',
 ].join('\n')
 
 const EDGE_SHORT = [
@@ -100,6 +116,10 @@ const EDGE_SHORT = [
   '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
   '- Tackle taboo subjects with dark humor. Make fun of everyone equally.',
   '- Use uncomfortable truths wrapped in absurdity. Make readers squirm.',
+  '- Channel Louis CK / Ricky Gervais / George Carlin: say the thing everyone THINKS but nobody dares say.',
+  '- The comedy must come from REAL observations about human hypocrisy, not just random absurdism.',
+  '- Name specific contradictions: the gentrifier who mourns gentrification, the leftist funded by daddy, the wellness guru who does coke.',
+  '- The best satire makes the reader recognize themselves and feel personally attacked.',
 ].join('\n')
 
 const SPICE_IT_UP = [
@@ -1868,9 +1888,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     useFeatureStoryPrompt
       ? [
-          'Tone: Deadpan, serious journalism about absurd situations, but with an edge. Write with the straight-faced seriousness of a real news reporter covering something completely ridiculous, but push boundaries. The humor comes from the contrast between the serious tone and the absurd content, but also from making readers uncomfortable—they should think "I don\'t know if I should laugh at this".',
-          'Style: Write like a real local newspaper journalist—specific, detailed, factual-sounding but about something surreal. Include concrete details: names, addresses, times, quotes. Make it read like a real news article from a serious paper, but the story is absurd AND edgy. Challenge comfort zones. Make readers question their own reactions.',
-          'CRITICAL: This must be CONCRETE and SPECIFIC. No abstract concepts. Real names (fictional), real addresses, real times, real quotes. The absurdity is in the situation, not in abstract satire. But push it further—make it uncomfortable, politically incorrect, challenging.',
+          'Tone: Deadpan, serious journalism about absurd situations rooted in REAL social truths. Write with the straight-faced seriousness of a real news reporter, but the humor comes from brutal honesty about how people actually behave—the hypocrisy, the self-deception, the contradictions nobody wants to acknowledge. Think Louis CK doing journalism: the comedy is in naming what everyone sees but nobody says.',
+          'Style: Write like a real local newspaper journalist—specific, detailed, factual-sounding. Include concrete details: names, addresses, times, quotes. But underneath the journalistic veneer, every paragraph should contain an observation so uncomfortably true that readers feel personally called out. The reporter is not just covering absurdity—they are exposing the real human behavior behind it.',
+          'CRITICAL: This must be CONCRETE and SPECIFIC. No abstract concepts. Real names (fictional), real addresses, real times, real quotes. The absurdity is in the situation, not in abstract satire. But the REAL comedy is in the social criticism: why do people do this? What does it reveal about them? What hypocrisy does it expose?',
           '',
           EDGE_AND_POLITICAL_INCORRECTNESS,
           '',
@@ -1879,8 +1899,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           INTELLECTUAL_EASTER_EGGS,
         ].join('\n')
       : [
-          'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel the spirit of early South Park, Anthony Jeselnik, and classic British satire like Brass Eye. Mock sacred cows, poke fun at every demographic equally, and embrace taboo topics with gleeful abandon. Use dark humor, shock value, and absurdist takes on sensitive subjects. Nothing is off-limits except actual hate speech or calls to violence.',
-          'Style: write like a hungover journalist who has stopped caring about keeping their job—biting sarcasm, cynical observations, and jokes that make readers say "they cant print that".',
+          'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel Louis CK, Ricky Gervais, George Carlin, Bill Hicks, and classic British satire like Brass Eye. The comedy must come from REAL uncomfortable truths about society—hypocrisy, self-deception, moral posturing, the gap between what people say and what they do. Mock sacred cows, poke fun at every demographic equally, but always ground it in genuine social observation. The reader should think "holy shit, that IS what people do" not just "haha random". Nothing is off-limits except actual hate speech or calls to violence.',
+          'Style: write like a stand-up comedian who became a journalist—someone who sees through every lie, every performance, every bit of social theater. Biting observations about real human behavior, cynical but earned cynicism, jokes that land because they are TRUE. The best line in every article should be the one where the reader feels personally attacked. Think: Ricky Gervais hosting the Golden Globes, but about Berlin.',
           '',
           EDGE_AND_POLITICAL_INCORRECTNESS,
           '',
