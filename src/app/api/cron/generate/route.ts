@@ -59,6 +59,71 @@ function slugToCategoryName(slug: string): string {
     .join(' & ')
 }
 
+/** Slot config for one article: type decided up front so we can parallelize generation. */
+type SlotConfig = {
+  forceDrugsTechno: boolean | undefined
+  forceRss: boolean | undefined
+  includeTopics: boolean
+}
+
+/**
+ * Precompute what type of article each slot should be (drugs, rss, plain, random).
+ * Same variety rules as before: first = drugs, second = rss, third = plain, rest = random.
+ */
+function computeSlotConfigs(count: number, hasRssTopics: boolean): SlotConfig[] {
+  const slots: SlotConfig[] = []
+  let drugsAssigned = false
+  let rssAssigned = false
+  let plainAssigned = false
+
+  for (let i = 0; i < count; i++) {
+    const remaining = count - i
+    let forceDrugsTechno: boolean | undefined
+    let forceRss: boolean | undefined
+    let includeTopics: boolean
+
+    if (i === 0 && !drugsAssigned) {
+      forceDrugsTechno = true
+      forceRss = false
+      includeTopics = false
+      drugsAssigned = true
+    } else if (i === 1 && !rssAssigned && hasRssTopics) {
+      forceDrugsTechno = false
+      forceRss = true
+      includeTopics = true
+      rssAssigned = true
+    } else if (i === 2 && !plainAssigned) {
+      forceDrugsTechno = false
+      forceRss = false
+      includeTopics = false
+      plainAssigned = true
+    } else if (!drugsAssigned && remaining === 3) {
+      forceDrugsTechno = true
+      forceRss = false
+      includeTopics = false
+      drugsAssigned = true
+    } else if (!rssAssigned && hasRssTopics && remaining === 2) {
+      forceDrugsTechno = false
+      forceRss = true
+      includeTopics = true
+      rssAssigned = true
+    } else if (!plainAssigned && remaining === 1) {
+      forceDrugsTechno = false
+      forceRss = false
+      includeTopics = false
+      plainAssigned = true
+    } else {
+      forceDrugsTechno = drugsAssigned ? false : undefined
+      forceRss = undefined
+      includeTopics = pickTwoThirds()
+    }
+
+    slots.push({ forceDrugsTechno, forceRss, includeTopics })
+  }
+
+  return slots
+}
+
 /**
  * Extract plain text from Lexical rich text content.
  * Walks the node tree and extracts text from text nodes.
@@ -88,6 +153,184 @@ function extractTextFromLexical(content: unknown): string {
   }
 
   return extractFromNodes(root.root.children).replace(/\s+/g, ' ').trim()
+}
+
+/** Result of successfully creating one article (used after parallel generation). */
+type CreatedArticleResult = {
+  id: string
+  slug: string
+  featuredImageUrl: string | null
+  categorySlug: string
+}
+
+/** Shared context for generating a single article (used by parallel workers). */
+type GenerateOneContext = {
+  payload: Awaited<ReturnType<typeof getPayload>>
+  categories: Array<{ slug: string; name: string }>
+  authors: Array<{ slug: string; name: string; title?: string; bio?: string }>
+  categoriesDocs: Array<{ id: string | number; slug: string; order?: number }>
+  authorsDocs: Array<{ id: string | number; slug: string }>
+  topicSummary: string
+  recentArticleTitles: string[]
+  recentArticleExcerpts: string[]
+  uniquePatterns: string[]
+  latestArticleContentSample: string | undefined
+  sanitizedEditorConfig: Awaited<ReturnType<typeof sanitizeServerEditorConfig>>
+}
+
+/**
+ * Generate one article (LLM + image + DB create). Used in parallel for the whole batch.
+ * Resolves category/author from shared docs or creates if missing.
+ */
+async function generateOneArticle(
+  ctx: GenerateOneContext,
+  slotIndex: number,
+  slot: SlotConfig,
+): Promise<CreatedArticleResult> {
+  const { payload, categories, authors, categoriesDocs, topicSummary } = ctx
+  if (!payload) throw new Error('Payload unavailable')
+
+  const { article: generated, usedRssTopic } = await generateArticle({
+    categories,
+    authors,
+    topicSummary,
+    includeTopics: slot.includeTopics,
+    recentArticleTitles: ctx.recentArticleTitles.slice(0, 40),
+    recentArticleExcerpts: ctx.recentArticleExcerpts.slice(0, 40),
+    recentHeadlinePatterns: ctx.uniquePatterns,
+    latestArticleContentSample: ctx.latestArticleContentSample,
+    forceDrugsTechno: slot.forceDrugsTechno,
+    forceRss: slot.forceRss,
+  })
+
+  let categoryDoc = categoriesDocs.find((c) => c.slug === generated.categorySlug)
+  if (!categoryDoc) {
+    try {
+      const categoryName = slugToCategoryName(generated.categorySlug)
+      const maxOrder = Math.max(...categoriesDocs.map((c) => c.order ?? 0), 0)
+      const newCategory = await payload.create({
+        collection: 'categories',
+        data: {
+          name: categoryName,
+          slug: generated.categorySlug,
+          order: maxOrder + 1,
+        },
+      })
+      categoryDoc = { id: newCategory.id, slug: generated.categorySlug }
+    } catch {
+      const existingCategory = await payload.find({
+        collection: 'categories',
+        where: { slug: { equals: generated.categorySlug } },
+        limit: 1,
+      })
+      if (existingCategory.docs.length > 0) {
+        const found = existingCategory.docs[0] as { id: string | number; slug: string }
+        categoryDoc = { id: found.id, slug: found.slug }
+      } else {
+        throw new Error(`Failed to create category "${generated.categorySlug}"`)
+      }
+    }
+  }
+
+  const authorsArray = ctx.authorsDocs
+  let authorDoc = authorsArray.find((a) => a.slug === generated.authorSlug)
+  if (!authorDoc) {
+    const withPrefix = `new-author-${generated.authorSlug}`
+    authorDoc = authorsArray.find((a) => a.slug === withPrefix)
+    if (!authorDoc && generated.authorSlug.startsWith('new-author-')) {
+      const withoutPrefix = generated.authorSlug.replace(/^new-author-/, '')
+      authorDoc = authorsArray.find((a) => a.slug === withoutPrefix)
+    }
+    if (!authorDoc) {
+      const lowerSlug = generated.authorSlug.toLowerCase()
+      authorDoc = authorsArray.find(
+        (a) =>
+          a.slug.toLowerCase() === lowerSlug ||
+          a.slug.toLowerCase() === `new-author-${lowerSlug}` ||
+          a.slug.toLowerCase().replace(/^new-author-/, '') === lowerSlug,
+      )
+    }
+  }
+
+  if (!authorDoc && generated.newAuthorName) {
+    try {
+      const newAuthor = await payload.create({
+        collection: 'authors',
+        data: {
+          name: generated.newAuthorName,
+          slug: generated.authorSlug,
+          title: generated.newAuthorTitle ?? undefined,
+          bio: generated.newAuthorBio ?? undefined,
+        },
+      })
+      authorDoc = { id: newAuthor.id, slug: generated.authorSlug }
+    } catch {
+      const existingAuthor = await payload.find({
+        collection: 'authors',
+        where: { slug: { equals: generated.authorSlug } },
+        limit: 1,
+      })
+      if (existingAuthor.docs.length > 0) {
+        const found = existingAuthor.docs[0] as { id: string | number; slug: string }
+        authorDoc = { id: found.id, slug: found.slug }
+      } else {
+        throw new Error(`Failed to create author "${generated.authorSlug}"`)
+      }
+    }
+  }
+
+  if (!authorDoc) {
+    throw new Error(`Author slug "${generated.authorSlug}" not found and no newAuthorName provided`)
+  }
+
+  const lexical = convertMarkdownToLexical({
+    editorConfig: ctx.sanitizedEditorConfig,
+    markdown: generated.bodyMarkdown,
+  })
+
+  const slug = `${slugify(generated.headline)}-${Date.now()}-${slotIndex}`
+
+  let featuredImageUrl: string | undefined
+  const imagePrompt = typeof generated.imagePrompt === 'string' ? generated.imagePrompt : ''
+  if (imagePrompt.length > 0) {
+    try {
+      const uploaded = await generateAndUploadImage({
+        prompt: imagePrompt,
+        fileBaseName: slug,
+      })
+      featuredImageUrl = uploaded.publicUrl
+    } catch {
+      // Continue without image
+    }
+  }
+
+  const created = await payload.create({
+    collection: 'articles',
+    data: {
+      headline: generated.headline,
+      subheadline: generated.subheadline ?? undefined,
+      slug,
+      featuredImageUrl,
+      imageCaption: generated.imageCaption ?? undefined,
+      content: lexical,
+      excerpt: generated.excerpt ?? undefined,
+      category: categoryDoc.id,
+      author: authorDoc.id,
+      publishedAt: new Date().toISOString(),
+      status: 'published',
+      isFeatured: generated.isFeatured,
+      isHeadline: slotIndex === 0 ? generated.isHeadline : false,
+      layout: generated.layout,
+      sourceRssTopic: usedRssTopic ?? undefined,
+    },
+  })
+
+  return {
+    id: String(created.id),
+    slug,
+    featuredImageUrl: featuredImageUrl ?? null,
+    categorySlug: generated.categorySlug,
+  }
 }
 
 /******************* ROUTE HANDLER ***********************/
@@ -226,299 +469,50 @@ export async function GET(req: Request) {
       payload.config,
     )
 
-    // Generate multiple articles
+    // Decide article types for all slots up front, then generate in parallel
+    const hasRssTopics = topicSummary.trim().length > 0
+    const slotConfigs = computeSlotConfigs(ARTICLES_PER_RUN, hasRssTopics)
+
+    const generateOneContext: GenerateOneContext = {
+      payload,
+      categories,
+      authors,
+      categoriesDocs: categoriesFinal.docs as Array<{
+        id: string | number
+        slug: string
+        order?: number
+      }>,
+      authorsDocs: authorsResFinal.docs as Array<{ id: string | number; slug: string }>,
+      topicSummary,
+      recentArticleTitles,
+      recentArticleExcerpts,
+      uniquePatterns,
+      latestArticleContentSample,
+      sanitizedEditorConfig,
+    }
+
+    const results = await Promise.allSettled(
+      slotConfigs.map((slot, i) => generateOneArticle(generateOneContext, i, slot)),
+    )
+
     const createdArticles: Array<{ id: string; slug: string; featuredImageUrl: string | null }> = []
     const errors: string[] = []
     const usedCategories = new Set<string>()
 
-    // Variety tracking for the batch:
-    // - Exactly ONE drugs/techno article per batch
-    // - At least ONE RSS article (not drugs)
-    // - At least ONE non-RSS, non-drugs article
-    let drugsArticleDone = false
-    let rssNonDrugsArticleDone = false
-    let plainArticleDone = false // non-RSS, non-drugs
-    const hasRssTopics = topicSummary.trim().length > 0
-
-    for (let i = 0; i < ARTICLES_PER_RUN; i++) {
-      try {
-        // Determine what type of article to generate based on what we still need
-        let forceDrugsTechno: boolean | undefined
-        let forceRss: boolean | undefined
-        let includeTopics: boolean
-
-        const remainingArticles = ARTICLES_PER_RUN - i
-
-        // First article: drugs/techno (get it out of the way)
-        if (i === 0 && !drugsArticleDone) {
-          forceDrugsTechno = true
-          forceRss = false
-          includeTopics = false
-        }
-        // Second article: RSS, no drugs (ensure variety)
-        else if (i === 1 && !rssNonDrugsArticleDone && hasRssTopics) {
-          forceDrugsTechno = false
-          forceRss = true
-          includeTopics = true
-        }
-        // Third article: plain (no RSS, no drugs)
-        else if (i === 2 && !plainArticleDone) {
-          forceDrugsTechno = false
-          forceRss = false
-          includeTopics = false
-        }
-        // Safety nets for remaining articles if requirements not yet met
-        else if (!drugsArticleDone && remainingArticles === 3) {
-          // Need drugs article, force it
-          forceDrugsTechno = true
-          forceRss = false
-          includeTopics = false
-        } else if (!rssNonDrugsArticleDone && hasRssTopics && remainingArticles === 2) {
-          // Need RSS non-drugs article
-          forceDrugsTechno = false
-          forceRss = true
-          includeTopics = true
-        } else if (!plainArticleDone && remainingArticles === 1) {
-          // Need plain article
-          forceDrugsTechno = false
-          forceRss = false
-          includeTopics = false
-        } else {
-          // All requirements met, generate random non-drugs article
-          forceDrugsTechno = drugsArticleDone ? false : undefined
-          forceRss = undefined
-          includeTopics = pickTwoThirds()
-        }
-
-        // Prefer unused categories, but allow repeats if we've used all
-        const unusedCategories = categories.filter((c) => !usedCategories.has(c.slug))
-        const categoriesToUse = unusedCategories.length > 0 ? unusedCategories : categories
-
-        // Generate article with category distribution and variety control
-        const {
-          article: generated,
-          usedRssTopic,
-          usedDrugsTechno,
-        } = await generateArticle({
-          categories: categoriesToUse,
-          authors,
-          topicSummary,
-          includeTopics,
-          recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
-          recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
-          recentHeadlinePatterns: uniquePatterns, // Patterns to avoid
-          latestArticleContentSample, // Half of latest article to ensure new one is different
-          forceDrugsTechno, // Variety control: force non-drugs if last was drugs
-          forceRss, // Force RSS if needed for variety
-        })
-
-        // Update variety tracking
-        if (usedDrugsTechno) {
-          drugsArticleDone = true
-        }
-        if (usedRssTopic && !usedDrugsTechno) {
-          rssNonDrugsArticleDone = true
-        }
-        if (!usedRssTopic && !usedDrugsTechno) {
-          plainArticleDone = true
-        }
-
-        // Track used category
-        usedCategories.add(generated.categorySlug)
-
-        // Map slugs to IDs - create category if it doesn't exist
-        let categoryDoc = (
-          categoriesFinal.docs as Array<{ id: string | number; slug: string }>
-        ).find((c) => c.slug === generated.categorySlug)
-
-        // If category doesn't exist, create it
-        if (!categoryDoc) {
-          try {
-            const categoryName = slugToCategoryName(generated.categorySlug)
-            const maxOrder = Math.max(
-              ...(categoriesFinal.docs as unknown as Array<{ order?: number }>).map(
-                (c) => c.order ?? 0,
-              ),
-              0,
-            )
-            const newOrder = maxOrder + 1
-
-            const newCategory = await payload.create({
-              collection: 'categories',
-              data: {
-                name: categoryName,
-                slug: generated.categorySlug,
-                order: newOrder,
-              },
-            })
-            categoryDoc = { id: newCategory.id, slug: generated.categorySlug }
-
-            // Refresh categories list for next iteration
-            const refreshedCategories = await payload.find({
-              collection: 'categories',
-              limit: 100,
-              sort: 'order',
-            })
-            categoriesFinal = refreshedCategories
-          } catch {
-            // If creation failed, try to find it again (might have been created concurrently)
-            const existingCategory = await payload.find({
-              collection: 'categories',
-              where: { slug: { equals: generated.categorySlug } },
-              limit: 1,
-            })
-            if (existingCategory.docs.length > 0) {
-              const found = existingCategory.docs[0] as { id: string | number; slug: string }
-              categoryDoc = { id: found.id, slug: found.slug }
-            } else {
-              errors.push(`Article ${i + 1}: Failed to create category "${generated.categorySlug}"`)
-              continue
-            }
-          }
-        }
-
-        // Check if author exists, or if we need to create a new one
-        // Try exact match first
-        const authorsArray = authorsResFinal.docs as Array<{ id: string | number; slug: string }>
-        let authorDoc: { id: string | number; slug: string } | undefined = authorsArray.find(
-          (a) => a.slug === generated.authorSlug,
-        )
-
-        // If not found, try fuzzy matching (LLM sometimes drops or adds "new-author-" prefix)
-        if (!authorDoc) {
-          // Try with "new-author-" prefix
-          const withPrefix = `new-author-${generated.authorSlug}`
-          authorDoc = authorsArray.find((a) => a.slug === withPrefix)
-
-          // Try without "new-author-" prefix
-          if (!authorDoc && generated.authorSlug.startsWith('new-author-')) {
-            const withoutPrefix = generated.authorSlug.replace(/^new-author-/, '')
-            authorDoc = authorsArray.find((a) => a.slug === withoutPrefix)
-          }
-
-          // Try case-insensitive match as last resort
-          if (!authorDoc) {
-            const lowerSlug = generated.authorSlug.toLowerCase()
-            authorDoc = authorsArray.find(
-              (a) =>
-                a.slug.toLowerCase() === lowerSlug ||
-                a.slug.toLowerCase() === `new-author-${lowerSlug}` ||
-                a.slug.toLowerCase().replace(/^new-author-/, '') === lowerSlug,
-            )
-          }
-        }
-
-        // If author doesn't exist and new author fields are provided, create the author
-        if (!authorDoc && generated.newAuthorName) {
-          try {
-            const newAuthor = await payload.create({
-              collection: 'authors',
-              data: {
-                name: generated.newAuthorName,
-                slug: generated.authorSlug,
-                title: generated.newAuthorTitle ?? undefined,
-                bio: generated.newAuthorBio ?? undefined,
-              },
-            })
-            authorDoc = { id: newAuthor.id, slug: generated.authorSlug }
-
-            // Refresh authors list for next iteration
-            const refreshedAuthors = await payload.find({
-              collection: 'authors',
-              limit: 100,
-              sort: 'name',
-            })
-            authorsResFinal = refreshedAuthors
-          } catch {
-            // If creation failed, try to find it again (might have been created concurrently)
-            const existingAuthor = await payload.find({
-              collection: 'authors',
-              where: { slug: { equals: generated.authorSlug } },
-              limit: 1,
-            })
-            if (existingAuthor.docs.length > 0) {
-              const found = existingAuthor.docs[0] as { id: string | number; slug: string }
-              authorDoc = { id: found.id, slug: found.slug }
-            } else {
-              errors.push(`Article ${i + 1}: Failed to create author "${generated.authorSlug}"`)
-              continue
-            }
-          }
-        }
-
-        if (!authorDoc) {
-          errors.push(
-            `Article ${i + 1}: Author slug "${generated.authorSlug}" not found and no newAuthorName provided`,
-          )
-          continue
-        }
-
-        // Convert markdown to Lexical
-        const lexical = convertMarkdownToLexical({
-          editorConfig: sanitizedEditorConfig,
-          markdown: generated.bodyMarkdown,
-        })
-
-        const slug = `${slugify(generated.headline)}-${Date.now()}-${i}`
-
-        // Generate image if imagePrompt is provided
-        let featuredImageUrl: string | undefined
-        const imagePrompt = typeof generated.imagePrompt === 'string' ? generated.imagePrompt : ''
-        const shouldGenerateImage = imagePrompt.length > 0
-
-        if (shouldGenerateImage) {
-          try {
-            const uploaded = await generateAndUploadImage({
-              prompt: imagePrompt,
-              fileBaseName: slug,
-            })
-            featuredImageUrl = uploaded.publicUrl
-          } catch {
-            // Image generation failed - continue without image
-          }
-        }
-
-        // Create article in Payload
-        const created = await payload.create({
-          collection: 'articles',
-          data: {
-            headline: generated.headline,
-            subheadline: generated.subheadline ?? undefined,
-            slug,
-            featuredImageUrl,
-            imageCaption: generated.imageCaption ?? undefined,
-            content: lexical,
-            excerpt: generated.excerpt ?? undefined,
-            category: categoryDoc.id,
-            author: authorDoc.id,
-            publishedAt: new Date().toISOString(),
-            status: 'published',
-            isFeatured: generated.isFeatured,
-            isHeadline: i === 0 ? generated.isHeadline : false, // Only first can be headline
-            layout: generated.layout,
-            sourceRssTopic: usedRssTopic ?? undefined, // Track if article was inspired by RSS news (server-side tracking)
-          },
-        })
-
+    results.forEach((outcome, i) => {
+      if (outcome.status === 'fulfilled') {
         createdArticles.push({
-          id: String(created.id),
-          slug,
-          featuredImageUrl: featuredImageUrl ?? null,
+          id: outcome.value.id,
+          slug: outcome.value.slug,
+          featuredImageUrl: outcome.value.featuredImageUrl,
         })
-
-        // Add the new headline to recentArticleTitles to avoid repetition in subsequent iterations
-        recentArticleTitles.unshift(generated.headline)
-        // Also update the patterns to avoid similar structures
-        const newPatterns = extractHeadlinePatterns([generated.headline])
-        for (const pattern of newPatterns) {
-          if (!uniquePatterns.includes(pattern)) {
-            uniquePatterns.push(pattern)
-          }
-        }
-      } catch (error) {
-        errors.push(`Article ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        usedCategories.add(outcome.value.categorySlug)
+      } else {
+        errors.push(
+          `Article ${i + 1}: ${outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)}`,
+        )
       }
-    }
+    })
 
     // Send push notifications if articles were created
     let notificationResult: { sent: number; failed: number; errors: string[] } | null = null
