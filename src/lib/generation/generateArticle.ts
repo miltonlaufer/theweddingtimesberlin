@@ -44,7 +44,11 @@ export const GeneratedArticleSchema = z.object({
   isFeatured: z.boolean(),
   isHeadline: z.boolean(),
   imageCaption: z.string().max(160).optional().nullable(),
-  imagePrompt: z.string().max(600).optional().nullable(),
+  imagePrompt: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((s) => (s != null && s.length > 600 ? s.slice(0, 600) : s)),
   // RSS source tracking - if article was inspired by an RSS news topic
   sourceRssTopic: z.string().max(300).optional().nullable(),
 })
@@ -1048,7 +1052,7 @@ async function regenerateHeadline(args: {
   const llm = new ChatOpenAI({
     apiKey,
     model: repairModelName,
-    temperature: 1, 
+    temperature: 1,
   })
 
   const bannedWordsLower = args.bannedOpeningWords.map((w) => w.toLowerCase())
