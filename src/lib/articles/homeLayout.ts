@@ -55,15 +55,8 @@ const estimateHeight = (article: IArticle, column: Column, showImage: boolean): 
   return Math.round(imageHeight + titleHeight + metaHeight + spacing)
 }
 
-const hasImageInColumn = (article: IArticle, column: Column, index: number): boolean => {
-  if (!article.featuredImageUrl) return false
-  if (column === 'center') return true
-  const hash = normalizeId(article.id)
-    .split('')
-    .reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  if (column === 'left') return hash % 5 < 4
-  if (column === 'right') return index < 3 || hash % 5 < 3
-  return true
+const hasImageInColumn = (article: IArticle): boolean => {
+  return Boolean(article.featuredImageUrl)
 }
 
 export interface HomeLayoutResult {
@@ -98,13 +91,11 @@ export function buildHomeLayout(args: {
   let rightHeight = 0
 
   for (const article of otherArticles) {
-    const leftShowImg = hasImageInColumn(article, 'left', leftColumnArticles.length)
-    const centerShowImg = hasImageInColumn(article, 'center', centerColumnArticles.length)
-    const rightShowImg = hasImageInColumn(article, 'right', rightColumnArticles.length)
+    const showImg = hasImageInColumn(article)
 
-    const leftH = estimateHeight(article, 'left', leftShowImg)
-    const centerH = estimateHeight(article, 'center', centerShowImg)
-    const rightH = estimateHeight(article, 'right', rightShowImg)
+    const leftH = estimateHeight(article, 'left', showImg)
+    const centerH = estimateHeight(article, 'center', showImg)
+    const rightH = estimateHeight(article, 'right', showImg)
 
     if (leftHeight <= centerHeight && leftHeight <= rightHeight) {
       leftColumnArticles.push(article)
@@ -118,47 +109,22 @@ export function buildHomeLayout(args: {
     }
   }
 
+  // Show images for ALL articles that have them
   const articlesWithImages = new Set<string>()
 
-  centerColumnArticles.forEach((article) => {
+  const allArticlesToCheck = [
+    ...(headlineArticle ? [headlineArticle] : []),
+    ...opinionArticles,
+    ...leftColumnArticles,
+    ...centerColumnArticles,
+    ...rightColumnArticles,
+  ]
+
+  for (const article of allArticlesToCheck) {
     if (article.featuredImageUrl) {
       articlesWithImages.add(normalizeId(article.id))
     }
-  })
-
-  if (headlineArticle?.featuredImageUrl) {
-    articlesWithImages.add(normalizeId(headlineArticle.id))
   }
-
-  opinionArticles.forEach((article) => {
-    if (article.featuredImageUrl) {
-      articlesWithImages.add(normalizeId(article.id))
-    }
-  })
-
-  leftColumnArticles.forEach((article) => {
-    if (article.featuredImageUrl) {
-      const idStr = normalizeId(article.id)
-      const hash = idStr.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-      if (hash % 5 < 4) {
-        articlesWithImages.add(idStr)
-      }
-    }
-  })
-
-  rightColumnArticles.forEach((article, index) => {
-    if (article.featuredImageUrl) {
-      if (index < 3) {
-        articlesWithImages.add(normalizeId(article.id))
-      } else {
-        const idStr = normalizeId(article.id)
-        const hash = idStr.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-        if (hash % 5 < 3) {
-          articlesWithImages.add(idStr)
-        }
-      }
-    }
-  })
 
   const leftColumnSpanningIndex = LEFT_TOP_COUNT
   const leftColumnTopArticles = leftColumnArticles.slice(0, leftColumnSpanningIndex)
