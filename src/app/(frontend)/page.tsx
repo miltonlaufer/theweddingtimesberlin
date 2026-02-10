@@ -142,8 +142,9 @@ export default async function HomePage() {
     )
   }
 
-  const headlineArticle =
-    nonOpinionArticles.find((a: IArticle) => a.isHeadline) ?? nonOpinionArticles[0]
+  // Always use the most recent article as the headline.
+  // nonOpinionArticles is already sorted by -publishedAt, so [0] is the newest.
+  const headlineArticle = nonOpinionArticles[0]
   const headlineId = headlineArticle?.id
 
   // Only non-opinion articles go into the regular columns (excluding the headline)
