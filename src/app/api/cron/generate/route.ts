@@ -421,7 +421,26 @@ export async function GET(req: Request) {
     ])
     const categoriesRes = categoriesForCheck
 
-    const { topicSummary } = rssTopicsResult
+    // Filter out RSS topics that were already used by recent articles to prevent cross-batch repetition.
+    // Recent articles store the RSS topic they were inspired by in sourceRssTopic.
+    const recentlyUsedRssTopics = new Set(
+      recentArticlesRes.docs
+        .map((a) => {
+          const doc = a as unknown as { sourceRssTopic?: string }
+          return doc.sourceRssTopic
+        })
+        .filter((t): t is string => typeof t === 'string' && t.length > 0)
+        .map((t) => t.toLowerCase()),
+    )
+
+    // Remove RSS topics that match (or closely match) already-used ones
+    const freshTopics = rssTopicsResult.topics.filter(
+      (t) => !recentlyUsedRssTopics.has(t.title.toLowerCase()),
+    )
+    const topicSummary =
+      freshTopics.length > 0
+        ? freshTopics.map((t) => `- [${t.source}] ${t.title}`).join('\n')
+        : rssTopicsResult.topicSummary // fallback to unfiltered if all were used
 
     // Track final results (may be updated after seeding)
     let categoriesFinal = categoriesRes
@@ -544,6 +563,9 @@ export async function GET(req: Request) {
       sanitizedEditorConfig,
     }
 
+    // ⚠️ DO NOT CHANGE THIS TO SEQUENTIAL (e.g. for-loop with await).
+    // Parallel generation is REQUIRED — sequential generation causes Vercel cron timeouts.
+    // Each article takes 30-60s to generate (LLM + image), so 4-8 articles sequentially = 2-8 min = timeout.
     const results = await Promise.allSettled(
       slotConfigs.map((slot, i) => generateOneArticle(generateOneContext, i, slot)),
     )

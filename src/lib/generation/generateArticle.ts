@@ -1468,10 +1468,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     useDrugsOrTechnoScenario = false
     useStartupScenario = false
   } else {
-    // Random: 35% drugs/techno, 30% startup, 35% general
+    // Random: 20% drugs/techno, 20% startup, 60% general
     const scenarioRoll = Math.random()
-    useDrugsOrTechnoScenario = scenarioRoll < 0.35
-    useStartupScenario = !useDrugsOrTechnoScenario && scenarioRoll < 0.65
+    useDrugsOrTechnoScenario = scenarioRoll < 0.2
+    useStartupScenario = !useDrugsOrTechnoScenario && scenarioRoll < 0.4
   }
 
   // General pool: neither drugs/techno nor startup
@@ -1807,10 +1807,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     useDrugsOrTechnoTopic = false
     useStartupTopic = false
   } else {
-    // Random: 35% drugs/techno, 30% startup, 35% general
+    // Random: 20% drugs/techno, 35% startup, 45% general
     const topicRoll = Math.random()
-    useDrugsOrTechnoTopic = topicRoll < 0.35
-    useStartupTopic = !useDrugsOrTechnoTopic && topicRoll < 0.65
+    useDrugsOrTechnoTopic = topicRoll < 0.2
+    useStartupTopic = !useDrugsOrTechnoTopic && topicRoll < 0.55
   }
 
   // Opinion-only topics (when forceOpinion is true)
@@ -1851,35 +1851,106 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const recentTitles = input.recentArticleTitles.slice(0, maxRecentArticles)
   const recentExcerpts = input.recentArticleExcerpts?.slice(0, maxRecentArticles) ?? []
 
+  // Pre-analysis: use a cheap model to summarize what recent articles already covered,
+  // so the main LLM gets a clear, structured blacklist instead of raw titles it might gloss over.
+  let recentArticlesSummary = ''
+  if (recentTitles.length > 0) {
+    try {
+      const analysisModelName = process.env.OPENAI_ANALYSIS_MODEL ?? 'gpt-5-nano-2025-08-07'
+      const analysisLlm = new ChatOpenAI({
+        apiKey,
+        model: analysisModelName,
+        temperature: 0,
+      })
+
+      const titlesWithExcerpts = recentTitles
+        .map((title, idx) => {
+          const excerpt = recentExcerpts[idx]
+          return excerpt ? `- "${title}" — ${excerpt.slice(0, 150)}` : `- "${title}"`
+        })
+        .join('\n')
+
+      const analysisResponse = await analysisLlm.invoke([
+        {
+          role: 'system',
+          content: [
+            'You are an editorial assistant. Analyze the following list of recently published satirical newspaper articles.',
+            'Your job: produce a STRUCTURED SUMMARY of what has already been covered so a writer knows what to AVOID.',
+            'Output ONLY the summary, no commentary. Be exhaustive — miss nothing.',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: [
+            'Analyze these recently published articles and produce a structured blacklist:\n',
+            titlesWithExcerpts,
+            '',
+            'Produce the following sections:',
+            '',
+            'PLACES ALREADY USED (list every specific venue, street, park, neighborhood, or institution mentioned):',
+            '- ...',
+            '',
+            'TOPICS ALREADY COVERED (list every distinct subject/theme/angle):',
+            '- ...',
+            '',
+            'SUBSTANCES/DRUGS MENTIONED (list any drugs, substances, or drug-related references):',
+            '- ...',
+            '',
+            'SPECIFIC JOKES/PREMISES ALREADY DONE (list the core comedic premise of each article in one sentence):',
+            '- ...',
+            '',
+            'OVERREPRESENTED THEMES (topics that appear in 2+ articles — these are ESPECIALLY off-limits):',
+            '- ...',
+          ].join('\n'),
+        },
+      ])
+
+      recentArticlesSummary =
+        typeof analysisResponse.content === 'string'
+          ? analysisResponse.content
+          : JSON.stringify(analysisResponse.content)
+    } catch {
+      // If analysis fails, fall back to raw titles (handled below)
+    }
+  }
+
   const recentTitlesSection =
     recentTitles.length > 0
       ? [
           '',
           '═══════════════════════════════════════════════════════════════════',
-          'BLACKLIST - THESE ARTICLES ALREADY EXIST. DO NOT WRITE ANYTHING SIMILAR.',
+          'BLACKLIST - EVERYTHING BELOW HAS BEEN DONE. DO NOT REPEAT ANY OF IT.',
           '═══════════════════════════════════════════════════════════════════',
           '',
-          `The following ${recentTitles.length} articles were ALREADY PUBLISHED RECENTLY.`,
-          'Your article MUST NOT overlap with ANY of them — not the topic, not the angle, not the characters, not the joke, not the premise.',
-          'Read each one carefully. If your idea resembles ANY of these, THROW IT OUT and pick something else.',
+          recentArticlesSummary.length > 0
+            ? [
+                'An editorial assistant analyzed our recent articles and produced this blacklist.',
+                'EVERY item below is OFF-LIMITS. If your article touches ANY of these, SCRAP IT and start over.',
+                '',
+                recentArticlesSummary,
+              ].join('\n')
+            : [
+                `The following ${recentTitles.length} articles were ALREADY PUBLISHED RECENTLY.`,
+                '',
+                recentTitles
+                  .map((title, idx) => {
+                    const excerpt = recentExcerpts[idx]
+                    const excerptText = excerpt
+                      ? ` — ${excerpt.length > 150 ? excerpt.slice(0, 147) + '...' : excerpt}`
+                      : ''
+                    return `  ${idx + 1}. "${title}"${excerptText}`
+                  })
+                  .join('\n'),
+              ].join('\n'),
           '',
-          recentTitles
-            .map((title, idx) => {
-              const excerpt = recentExcerpts[idx]
-              const excerptText = excerpt
-                ? ` — ${excerpt.length > 150 ? excerpt.slice(0, 147) + '...' : excerpt}`
-                : ''
-              return `  ${idx + 1}. "${title}"${excerptText}`
-            })
-            .join('\n'),
-          '',
-          'RULES:',
-          '- If 2+ articles above are about bureaucracy, DO NOT write about bureaucracy.',
-          '- If 2+ articles above are about nightlife/clubs, DO NOT write about nightlife/clubs.',
-          '- If 2+ articles above are about gentrification, DO NOT write about gentrification.',
-          '- If an article above covers a specific situation (e.g., Späti loyalty programs), do NOT write about that same situation, even from a different angle.',
+          'ABSOLUTE RULES:',
+          '- Do NOT write about any PLACE listed above.',
+          '- Do NOT write about any TOPIC listed above.',
+          '- Do NOT mention any SUBSTANCE listed above.',
+          '- Do NOT reuse any JOKE or PREMISE listed above, even from a different angle.',
+          '- If a theme appears in OVERREPRESENTED, it is COMPLETELY off-limits — zero tolerance.',
           '- "Different" means a reader should NOT think "didn\'t I just read something like this?"',
-          '- When in doubt, pick a topic that appears ZERO times in the list above.',
+          '- When in doubt, pick something that appears NOWHERE in the blacklist.',
           '═══════════════════════════════════════════════════════════════════',
         ].join('\n')
       : ''
