@@ -97,7 +97,7 @@ const EDGE_AND_POLITICAL_INCORRECTNESS = [
   "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
   '',
   'COMEDIC VOICE - AUTHENTIC SOCIAL CRITICISM (THIS IS CRITICAL):',
-  '- Channel Louis CK, Ricky Gervais, George Carlin, Bill Hicks, Doug Stanhope, Bill Burr, Frankie Boyle.',
+  '- Channel Oscar Wilde, Louis CK, Ricky Gervais, George Carlin, Bill Hicks, Doug Stanhope, Bill Burr, Frankie Boyle.',
   '- The humor must come from REAL uncomfortable truths about society, not just wacky absurdism.',
   '- Say the thing everyone is THINKING but nobody dares to say out loud. Name the hypocrisy directly.',
   '- Observe real human behavior and call out the bullshit: the performative activism, the moral posturing, the self-deception, the cowardice disguised as politeness.',
@@ -119,7 +119,7 @@ const EDGE_SHORT = [
   '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
   '- Tackle taboo subjects with dark humor. Make fun of everyone equally.',
   '- Use uncomfortable truths wrapped in absurdity. Make readers squirm.',
-  '- Channel Louis CK / Ricky Gervais / George Carlin: say the thing everyone THINKS but nobody dares say.',
+  '- Channel Oscar Wilde / Louis CK / Ricky Gervais / George Carlin: say the thing everyone THINKS but nobody dares say.',
   '- The comedy must come from REAL observations about human hypocrisy, not just random absurdism.',
   '- Name specific contradictions: the gentrifier who mourns gentrification, the leftist funded by daddy, the wellness guru who does coke.',
   '- The best satire makes the reader recognize themselves and feel personally attacked.',
@@ -384,7 +384,7 @@ const IMAGE_PROMPT_INSTRUCTIONS = [
 
 const SURREALISM_AND_LOCAL_KNOWLEDGE = [
   'SURREALISM STYLE (CRITICAL - THIS DEFINES THE PAPER):',
-  'The best articles have a TINY surrealist twist grounded in REAL local knowledge. Think Yorgos Lanthimos, David Lynch, Monty Python, Boris Vian:',
+  'The best articles have a TINY surrealist or absurdist twist grounded in REAL local knowledge. Think Yorgos Lanthimos, David Lynch, Monty Python, Boris Vian, Groucho Marx:',
   '- The premise is just ONE small step beyond reality — not 10 steps. One impossible thing happens; everything else reacts realistically.',
   '- The surreal element MUST be rooted in a REAL, SPECIFIC detail about the place. You need to KNOW the location to make the joke work.',
   '',
@@ -2073,7 +2073,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           INTELLECTUAL_EASTER_EGGS,
         ].join('\n')
       : [
-          'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel Louis CK, Ricky Gervais, George Carlin, Bill Hicks, and classic British satire like Brass Eye. The comedy must come from REAL uncomfortable truths about society—hypocrisy, self-deception, moral posturing, the gap between what people say and what they do. Mock sacred cows, poke fun at every demographic equally, but always ground it in genuine social observation. The reader should think "holy shit, that IS what people do" not just "haha random". Nothing is off-limits except actual hate speech or calls to violence.',
+          'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel Oscar Wilde, Louis CK, Ricky Gervais, George Carlin, Bill Hicks, and classic British satire like Brass Eye. The comedy must come from REAL uncomfortable truths about society—hypocrisy, self-deception, moral posturing, the gap between what people say and what they do. Mock sacred cows, poke fun at every demographic equally, but always ground it in genuine social observation. The reader should think "holy shit, that IS what people do" not just "haha random". Nothing is off-limits except actual hate speech or calls to violence.',
           'Style: write like a stand-up comedian who became a journalist—someone who sees through every lie, every performance, every bit of social theater. Biting observations about real human behavior, cynical but earned cynicism, jokes that land because they are TRUE. The best line in every article should be the one where the reader feels personally attacked. Think: Ricky Gervais hosting the Golden Globes, but about Berlin.',
           '',
           EDGE_AND_POLITICAL_INCORRECTNESS,
