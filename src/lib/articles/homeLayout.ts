@@ -84,15 +84,15 @@ export function buildHomeLayout(args: {
 
   const leftColumnArticles: IArticle[] = []
   const centerColumnArticles: IArticle[] = []
-  const rightColumnArticles: IArticle[] = []
+  let rightColumnArticles: IArticle[] = []
 
   let leftHeight = 0
   let centerHeight = centerTopFixedHeight
   let rightHeight = 0
 
+  // First pass: run height-balancing to determine how many articles go to the right column
   for (const article of otherArticles) {
     const showImg = hasImageInColumn(article)
-
     const leftH = estimateHeight(article, 'left', showImg)
     const centerH = estimateHeight(article, 'center', showImg)
     const rightH = estimateHeight(article, 'right', showImg)
@@ -106,6 +106,33 @@ export function buildHomeLayout(args: {
     } else {
       rightColumnArticles.push(article)
       rightHeight += rightH
+    }
+  }
+
+  const rightCount = rightColumnArticles.length
+  if (rightCount > 0) {
+    // Right column must show only the oldest articles (no summary there). Reserve the
+    // tail of otherArticles (oldest) for the right; redistribute the rest to left/center only.
+    rightColumnArticles = otherArticles.slice(-rightCount)
+    const articlesForLeftCenter = otherArticles.slice(0, otherArticles.length - rightCount)
+
+    leftColumnArticles.length = 0
+    centerColumnArticles.length = 0
+    leftHeight = 0
+    centerHeight = centerTopFixedHeight
+
+    for (const article of articlesForLeftCenter) {
+      const showImg = hasImageInColumn(article)
+      const leftH = estimateHeight(article, 'left', showImg)
+      const centerH = estimateHeight(article, 'center', showImg)
+
+      if (leftHeight <= centerHeight) {
+        leftColumnArticles.push(article)
+        leftHeight += leftH
+      } else {
+        centerColumnArticles.push(article)
+        centerHeight += centerH
+      }
     }
   }
 
