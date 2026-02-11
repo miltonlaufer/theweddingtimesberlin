@@ -6,17 +6,52 @@
 
 const INSTAGRAM_API_VERSION = 'v21.0'
 const INSTAGRAM_GRAPH_BASE = 'https://graph.instagram.com'
+const CONTAINER_POLL_INTERVAL_MS = 2500
+const CONTAINER_POLL_TIMEOUT_MS = 120000
 
 export interface PostToInstagramParams {
   imageUrl: string
   caption: string
   altText?: string
+  /** Facebook Place/Page ID for post location (e.g. INSTAGRAM_LOCATION_ID for "Wedding, Berlin"). */
+  locationId?: string
 }
 
 export interface PostToInstagramResult {
   ok: boolean
   mediaId?: string
   error?: string
+}
+
+/**
+ * Poll container status until FINISHED or ERROR/EXPIRED. Required before media_publish.
+ */
+async function waitForContainerReady(
+  containerId: string,
+  accessToken: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const deadline = Date.now() + CONTAINER_POLL_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    const res = await fetch(
+      `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`,
+    )
+    const data = (await res.json()) as { status_code?: string; error?: { message: string } }
+    if (data.error) {
+      return { ok: false, error: data.error.message ?? 'Failed to get container status' }
+    }
+    const status = data.status_code
+    if (status === 'FINISHED') {
+      return { ok: true }
+    }
+    if (status === 'ERROR' || status === 'EXPIRED') {
+      return {
+        ok: false,
+        error: status === 'EXPIRED' ? 'Container expired' : 'Container processing failed',
+      }
+    }
+    await new Promise((r) => setTimeout(r, CONTAINER_POLL_INTERVAL_MS))
+  }
+  return { ok: false, error: 'Container did not finish processing in time' }
 }
 
 /**
@@ -34,10 +69,12 @@ export async function postToInstagram(
     return { ok: false, error: 'Instagram posting is not configured' }
   }
 
-  const { imageUrl, caption, altText } = params
+  const { imageUrl, caption, altText, locationId } = params
   if (!imageUrl?.trim() || !caption?.trim()) {
     return { ok: false, error: 'imageUrl and caption are required' }
   }
+
+  const locationIdToUse = locationId?.trim() || process.env.INSTAGRAM_LOCATION_ID?.trim()
 
   try {
     const createRes = await fetch(
@@ -52,6 +89,7 @@ export async function postToInstagram(
           image_url: imageUrl.trim(),
           caption: caption.trim().slice(0, 2200),
           ...(altText?.trim() ? { alt_text: altText.trim().slice(0, 100) } : {}),
+          ...(locationIdToUse ? { location_id: locationIdToUse } : {}),
         }),
       },
     )
@@ -63,6 +101,11 @@ export async function postToInstagram(
     }
 
     const containerId = createData.id
+
+    const ready = await waitForContainerReady(containerId, accessToken)
+    if (!ready.ok) {
+      return { ok: false, error: ready.error }
+    }
 
     const publishRes = await fetch(
       `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${igUserId}/media_publish`,

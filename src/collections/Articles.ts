@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
-import { getBaseUrl } from '@/lib/getBaseUrl'
+import { CANONICAL_SITE_URL } from '@/lib/getBaseUrl'
+import { createAndUploadInstagramImage } from '@/lib/instagram/createInstagramImage'
 import { postToInstagram } from '@/lib/instagram/postToInstagram'
 
 type ArticleDoc = {
@@ -173,23 +174,32 @@ export const Articles: CollectionConfig = {
         const imageUrl = d.featuredImageUrl?.trim()
         const slug = d.slug?.trim()
         const headline = d.headline?.trim()
-        const excerpt = d.excerpt?.trim()
+        const excerpt = d.excerpt?.trim() ?? null
         if (!imageUrl || !slug || !headline) return
 
-        const articleUrl = `${getBaseUrl()}/article/${slug}`
+        const articleUrl = `${CANONICAL_SITE_URL}/article/${slug}`
         const caption = excerpt
           ? `${headline}\n\n${excerpt}\n\n${articleUrl}`
           : `${headline}\n\n${articleUrl}`
 
-        postToInstagram({
-          imageUrl,
-          caption,
-          altText: headline,
-        }).then((result) => {
-          if (!result.ok) {
-            console.warn('[Instagram] Post failed:', result.error)
-          }
-        })
+        setTimeout(() => {
+          createAndUploadInstagramImage({ imageUrl, headline, excerpt }, slug)
+            .then(({ publicUrl }) =>
+              postToInstagram({
+                imageUrl: publicUrl,
+                caption,
+                altText: headline,
+              }),
+            )
+            .then((result) => {
+              if (!result.ok) {
+                console.warn('[Instagram] Post failed:', result.error)
+              }
+            })
+            .catch((err) => {
+              console.warn('[Instagram] Create/upload or post failed:', err)
+            })
+        }, 0)
       },
     ],
   },

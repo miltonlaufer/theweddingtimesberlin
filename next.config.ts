@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
   },
   // Ensure Payload packages are transpiled correctly
   transpilePackages: ['@payloadcms/next', '@payloadcms/ui', '@payloadcms/richtext-lexical'],
+  // Native Node addons must not be bundled by webpack (they are .node binaries)
+  serverExternalPackages: ['@napi-rs/canvas'],
 }
 
 export default withSerwist(withPayload(nextConfig))

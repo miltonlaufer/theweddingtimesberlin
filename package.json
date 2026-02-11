@@ -21,6 +21,7 @@
     "@aws-sdk/client-s3": "^3.971.0",
     "@langchain/core": "^1.1.15",
     "@langchain/openai": "^1.2.2",
+    "@napi-rs/canvas": "^0.1.91",
     "@payloadcms/db-postgres": "^3.70.0",
     "@payloadcms/db-sqlite": "^3.70.0",
     "@payloadcms/email-resend": "^3.71.1",

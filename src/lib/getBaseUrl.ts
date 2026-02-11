@@ -1,3 +1,6 @@
+/** Canonical site URL for links that must never be localhost (e.g. Instagram captions). */
+export const CANONICAL_SITE_URL = 'https://theweddingtimesberlin.de'
+
 export function getBaseUrl(): string {
   // In production, ALWAYS use the production domain (not Vercel preview URLs)
   // This ensures Open Graph/Twitter cards always point to the canonical domain
