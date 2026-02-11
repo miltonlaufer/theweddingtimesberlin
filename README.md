@@ -116,6 +116,9 @@ curl -X POST "http://localhost:3050/api/debug/generate-article"
 
 # Dry run (returns JSON without saving)
 curl -X POST "http://localhost:3050/api/debug/generate-article?publish=0"
+
+# Save as draft (creates DB record with status=draft)
+curl -X POST "http://localhost:3050/api/debug/generate-article?draft"
 ```
 
 ### Environment variables (LLM)
@@ -125,6 +128,15 @@ curl -X POST "http://localhost:3050/api/debug/generate-article?publish=0"
 - `OPENAI_IMAGE_MODEL` (optional; defaults to `gpt-image-1`)
 - `OPENAI_REPAIR_MODEL` (optional; fallback model for JSON repair)
 - `OPENAI_AUTHOR_MODEL` (optional; model for generating fictional authors)
+- `OPENAI_BRIEF_MODEL` (optional; satire-brief model, defaults to `OPENAI_MODEL`)
+- `OPENAI_CRITIC_MODEL` (optional; critique scorer model)
+- `OPENAI_REWRITE_MODEL` (optional; critique rewrite model, defaults to `OPENAI_MODEL`)
+- `OPENAI_TRANSLATE_MODEL` (optional; translation model, defaults to `OPENAI_REPAIR_MODEL`)
+- `OPENAI_TONE_PROFILE` (optional; `balanced` | `acidic` | `merciless`, default: `acidic`)
+- `SATIRE_MIN_CRITIQUE_SCORE` (optional; 1-10 threshold for rewrite pass, default: `7`)
+- `BLACKLIST_SUMMARY_CACHE_TTL_HOURS` (optional; DB cache TTL for blacklist summaries, default: `24`)
+- `BLACKLIST_SUMMARY_CACHE_PRUNE_CHANCE` (optional; cleanup probability per cache read, default: `0.2`)
+- `BLACKLIST_SUMMARY_CACHE_PRUNE_SCAN_LIMIT` (optional; max rows scanned per cleanup run, default: `200`)
 
 ### Optional RSS overrides
 
@@ -317,6 +329,15 @@ The service worker (`src/sw.ts`) handles:
 - `OPENAI_IMAGE_MODEL` - Image generation model (default: `gpt-image-1.5`)
 - `OPENAI_REPAIR_MODEL` - JSON repair fallback model
 - `OPENAI_AUTHOR_MODEL` - Author generation model
+- `OPENAI_BRIEF_MODEL` - Satire brief model (default: `OPENAI_MODEL`)
+- `OPENAI_CRITIC_MODEL` - Satire critique model
+- `OPENAI_REWRITE_MODEL` - Critique rewrite model (default: `OPENAI_MODEL`)
+- `OPENAI_TRANSLATE_MODEL` - Translation model (default: `OPENAI_REPAIR_MODEL`)
+- `OPENAI_TONE_PROFILE` - Satire tone profile: `balanced`, `acidic`, or `merciless`
+- `SATIRE_MIN_CRITIQUE_SCORE` - Minimum critique score to skip rewrite (default: `7`)
+- `BLACKLIST_SUMMARY_CACHE_TTL_HOURS` - DB cache TTL (hours) for blacklist summaries (default: `24`)
+- `BLACKLIST_SUMMARY_CACHE_PRUNE_CHANCE` - Expired-cache cleanup probability per read (default: `0.2`)
+- `BLACKLIST_SUMMARY_CACHE_PRUNE_SCAN_LIMIT` - Max cache rows scanned per cleanup run (default: `200`)
 - `RSS_BERLINER_ZEITUNG_FEED` - Berliner Zeitung RSS feed URL
 - `RSS_NYTIMES_FEED` - NYT RSS feed override
 - `ARTICLES_PER_RUN` - Articles to generate per cron run (default: 8, can be overridden via env var)

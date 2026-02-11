@@ -69,6 +69,33 @@ export interface GenerateArticleResult {
   usedStartup: boolean
 }
 
+type ToneProfile = 'balanced' | 'acidic' | 'merciless'
+
+const SatireBriefSchema = z.object({
+  discomfortThesis: z.string().min(20).max(260),
+  institutionTarget: z.string().min(4).max(140),
+  hypocrisyMechanism: z.string().min(12).max(260),
+  rightWingJab: z.string().min(12).max(260),
+  leftWingJab: z.string().min(12).max(260),
+  requiredConcreteDetails: z.array(z.string().min(3).max(120)).min(2).max(6),
+  forbiddenCheapShots: z.array(z.string().min(3).max(120)).min(2).max(5),
+})
+
+type SatireBrief = z.infer<typeof SatireBriefSchema>
+
+const SatireCritiqueSchema = z.object({
+  darknessScore: z.number().int().min(1).max(10),
+  politicalCriticismScore: z.number().int().min(1).max(10),
+  discomfortScore: z.number().int().min(1).max(10),
+  specificityScore: z.number().int().min(1).max(10),
+  passes: z.boolean(),
+  strongestLine: z.string().max(220),
+  weaknesses: z.array(z.string().min(6).max(180)).min(1).max(5),
+  revisionInstructions: z.array(z.string().min(6).max(200)).min(1).max(6),
+})
+
+type SatireCritique = z.infer<typeof SatireCritiqueSchema>
+
 /******************* LOGGING ***********************/
 
 const LOG = {
@@ -215,6 +242,15 @@ const EDGE_SHORT = [
   '- Name specific contradictions: the gentrifier who mourns gentrification, the leftist funded by daddy, the wellness guru who does coke.',
   '- The best satire makes the reader recognize themselves and feel personally attacked.',
 ].join('\n')
+
+const TONE_PROFILE_GUIDANCE: Record<ToneProfile, string> = {
+  balanced:
+    'Write biting satire with controlled aggression. Criticize institutions and hypocrisy hard, but keep punchlines measured.',
+  acidic:
+    'Write darker satire with sharp political criticism. Be ruthless about hypocrisy and force uncomfortable self-recognition.',
+  merciless:
+    'Write maximum-intensity dark satire. Be clinically cynical, politically aggressive, and socially uncomfortable while avoiding slurs, hate speech, and calls for harm.',
+}
 
 const AVOID_OVERUSED_THEMES = [
   'AVOID OVERUSING THESE THEMES (they matter, but we run them into the ground):',
@@ -1057,24 +1093,301 @@ export function extractOverusedKeywords(titles: string[]): {
 
 /******************* VALIDATION / REPAIR ***********************/
 
+function resolveToneProfile(raw: string | undefined): ToneProfile {
+  const normalized = (raw ?? 'acidic').trim().toLowerCase()
+  if (normalized === 'balanced' || normalized === 'acidic' || normalized === 'merciless') {
+    return normalized
+  }
+  return 'acidic'
+}
+
+function clampScore(value: number, min = 1, max = 10): number {
+  if (!Number.isFinite(value)) return min
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+
+function buildSatireBriefSection(brief: SatireBrief | null): string {
+  if (!brief) {
+    return [
+      'SATIRE BRIEF (fallback):',
+      '- Target specific institutions and social hypocrisy, not identity groups.',
+      '- Include criticism that can sting right-wing posturing and left-wing performativity in the same piece.',
+      '- Keep the comedy uncomfortable, concrete, and socially observant.',
+    ].join('\n')
+  }
+
+  return [
+    'SATIRE BRIEF (MANDATORY - USE THESE ANCHORS):',
+    `- Discomfort thesis: ${brief.discomfortThesis}`,
+    `- Institutional target: ${brief.institutionTarget}`,
+    `- Hypocrisy mechanism to expose: ${brief.hypocrisyMechanism}`,
+    `- Right-leaning jab to include: ${brief.rightWingJab}`,
+    `- Left-leaning jab to include: ${brief.leftWingJab}`,
+    '- Required concrete details:',
+    ...brief.requiredConcreteDetails.map((d) => `  * ${d}`),
+    '- Forbidden cheap shots:',
+    ...brief.forbiddenCheapShots.map((d) => `  * ${d}`),
+  ].join('\n')
+}
+
+async function generateSatireBrief(args: {
+  apiKey: string
+  modelName: string
+  toneProfile: ToneProfile
+  topicContext: string
+  recentTitles: string[]
+  blacklistSummary: string
+  useFeatureStoryPrompt: boolean
+  selectedRssTopic: string | null
+  randomFocus: string
+}): Promise<SatireBrief | null> {
+  const briefModelName = process.env.OPENAI_BRIEF_MODEL ?? args.modelName
+  const llm = new ChatOpenAI({
+    apiKey: args.apiKey,
+    model: briefModelName,
+    temperature: 1,
+  })
+
+  const recentTitles = args.recentTitles
+    .slice(0, 8)
+    .map((t, i) => `${i + 1}. ${t}`)
+    .join('\n')
+
+  const systemPrompt = [
+    'You are an editorial strategist creating a SATIRE BRIEF for one article.',
+    'Output MUST be strict JSON only.',
+    'Focus on dark humor and political criticism grounded in social observation.',
+    'Critique institutions, ideologies, and behaviors; avoid slurs, hate speech, and calls for harm.',
+    `Tone profile guidance: ${TONE_PROFILE_GUIDANCE[args.toneProfile]}`,
+  ].join('\n')
+
+  const userPrompt = [
+    'Create a brief that forces uncomfortable satire with political bite.',
+    '',
+    'Context:',
+    `- Topic context: ${args.topicContext}`,
+    `- Feature/news style: ${args.useFeatureStoryPrompt ? 'yes' : 'no'}`,
+    `- RSS topic (if any): ${args.selectedRssTopic ?? 'none'}`,
+    `- Focus direction: ${args.randomFocus}`,
+    '',
+    recentTitles.length > 0 ? ['Recent titles (avoid overlap):', recentTitles, ''].join('\n') : '',
+    args.blacklistSummary.length > 0
+      ? ['Blacklist summary (hard avoid):', args.blacklistSummary.slice(0, 2500), ''].join('\n')
+      : '',
+    'JSON schema:',
+    '{',
+    '  "discomfortThesis": string,',
+    '  "institutionTarget": string,',
+    '  "hypocrisyMechanism": string,',
+    '  "rightWingJab": string,',
+    '  "leftWingJab": string,',
+    '  "requiredConcreteDetails": string[],',
+    '  "forbiddenCheapShots": string[]',
+    '}',
+    '',
+    'Requirements:',
+    '- rightWingJab and leftWingJab must both be included and be specific.',
+    '- requiredConcreteDetails must contain 2-6 tangible details to anchor realism.',
+    '- forbiddenCheapShots must contain lazy joke patterns to avoid.',
+    '- Keep this strategic and practical. No essay.',
+  ].join('\n')
+
+  try {
+    const raw = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ])
+
+    const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
+    const jsonText = extractFirstJsonObject(text)
+    const parsed = JSON.parse(jsonText) as unknown
+    const validation = SatireBriefSchema.safeParse(parsed)
+    if (!validation.success) return null
+    return validation.data
+  } catch {
+    return null
+  }
+}
+
+async function critiqueSatireArticle(args: {
+  apiKey: string
+  modelName: string
+  toneProfile: ToneProfile
+  article: GeneratedArticle
+  brief: SatireBrief | null
+}): Promise<SatireCritique | null> {
+  const criticModelName =
+    process.env.OPENAI_CRITIC_MODEL ??
+    process.env.OPENAI_REPAIR_MODEL ??
+    process.env.OPENAI_MODEL ??
+    args.modelName
+
+  const llm = new ChatOpenAI({
+    apiKey: args.apiKey,
+    model: criticModelName,
+    temperature: 0,
+  })
+
+  const systemPrompt = [
+    'You are a satire editor scoring an article for darkness and political criticism.',
+    'Output MUST be strict JSON only.',
+    'Do not sanitize. Judge based on writing quality and satirical sharpness.',
+    'Penalize vagueness and generic absurdism. Reward specificity and social observation.',
+    'No score inflation.',
+  ].join('\n')
+
+  const userPrompt = [
+    `Tone profile target: ${args.toneProfile} (${TONE_PROFILE_GUIDANCE[args.toneProfile]})`,
+    '',
+    args.brief
+      ? ['Original satire brief (target state):', JSON.stringify(args.brief), ''].join('\n')
+      : '',
+    'Article JSON to evaluate:',
+    JSON.stringify(args.article),
+    '',
+    'Score each dimension from 1-10:',
+    '- darknessScore: how cynical / uncomfortable the satire is',
+    '- politicalCriticismScore: how sharp the ideological/institutional critique is',
+    '- discomfortScore: how much the reader feels called out',
+    '- specificityScore: concrete detail and social precision',
+    '',
+    'JSON schema:',
+    '{',
+    '  "darknessScore": number,',
+    '  "politicalCriticismScore": number,',
+    '  "discomfortScore": number,',
+    '  "specificityScore": number,',
+    '  "passes": boolean,',
+    '  "strongestLine": string,',
+    '  "weaknesses": string[],',
+    '  "revisionInstructions": string[]',
+    '}',
+    '',
+    'Set passes=true only if ALL scores are at least 7.',
+    'revisionInstructions should be concrete and directly actionable.',
+  ].join('\n')
+
+  try {
+    const raw = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ])
+    const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
+    const jsonText = extractFirstJsonObject(text)
+    const parsed = JSON.parse(jsonText) as unknown
+    const validation = SatireCritiqueSchema.safeParse(parsed)
+    if (!validation.success) return null
+    return validation.data
+  } catch {
+    return null
+  }
+}
+
+function shouldRewriteFromCritique(critique: SatireCritique, minScore: number): boolean {
+  const scoreFloor = clampScore(minScore)
+  return (
+    !critique.passes ||
+    critique.darknessScore < scoreFloor ||
+    critique.politicalCriticismScore < scoreFloor ||
+    critique.discomfortScore < scoreFloor ||
+    critique.specificityScore < Math.max(6, scoreFloor - 1)
+  )
+}
+
+async function rewriteArticleFromCritique(args: {
+  apiKey: string
+  modelName: string
+  article: GeneratedArticle
+  critique: SatireCritique
+  brief: SatireBrief | null
+  toneProfile: ToneProfile
+  categories: GeneratorCategoryOption[]
+  authors: GeneratorAuthorOption[]
+}): Promise<GeneratedArticle> {
+  const rewriteModelName = process.env.OPENAI_REWRITE_MODEL ?? args.modelName
+  const llm = new ChatOpenAI({
+    apiKey: args.apiKey,
+    model: rewriteModelName,
+    temperature: 0.9,
+  })
+
+  const categoriesList = safeStringList(args.categories)
+  const authorsList = safeStringList(args.authors)
+
+  const systemPrompt = [
+    'You are rewriting an existing satirical article JSON to increase dark political bite.',
+    'Make targeted edits. Preserve the core premise, setting, and structure unless critique says otherwise.',
+    'Do NOT flatten voice. Keep or increase sarcasm and cynicism.',
+    'Target institutions and ideology performance, not identity-based attacks.',
+    'No slurs, hate speech, or calls for harm.',
+    'Output MUST be strict JSON only.',
+  ].join('\n')
+
+  const userPrompt = [
+    `Tone profile target: ${args.toneProfile} (${TONE_PROFILE_GUIDANCE[args.toneProfile]})`,
+    '',
+    args.brief ? ['Original satire brief:', JSON.stringify(args.brief), ''].join('\n') : '',
+    'Critique scores and plan:',
+    JSON.stringify(args.critique),
+    '',
+    'Existing categorySlug options (or create new):',
+    categoriesList,
+    '',
+    'Existing authorSlug options (or create new with required fields):',
+    authorsList,
+    '',
+    'Required JSON schema:',
+    JSON_SCHEMA,
+    '',
+    'Article to rewrite:',
+    JSON.stringify(args.article),
+    '',
+    'CRITICAL RULES:',
+    '- Keep valid JSON schema.',
+    '- Apply the revisionInstructions directly.',
+    '- Increase specificity: names, places, observable behavior.',
+    '- Keep the piece uncomfortable and politically critical in both directions.',
+    '- Preserve category/author unless clearly incompatible with revised content.',
+  ].join('\n')
+
+  const raw = await llm.invoke([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ])
+
+  const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
+  const jsonText = extractFirstJsonObject(text)
+  const parsed = JSON.parse(jsonText) as unknown
+  const validation = GeneratedArticleSchema.safeParse(parsed)
+  if (validation.success) return validation.data
+
+  return await repairToSchema({
+    badOutput: text,
+    categories: args.categories,
+    authors: args.authors,
+    validationErrors: validation.error.issues,
+  })
+}
+
 function looksNonEnglish(text: string): boolean {
-  // Heuristic: detect common German function words and umlauts.
+  // Detect substantial German language usage, not isolated names with umlauts.
   const lower = text.toLowerCase()
-  const germanMarkers = [
-    ' der ',
-    ' die ',
-    ' das ',
-    ' und ',
-    ' nicht ',
-    ' ist ',
-    ' mit ',
-    ' für ',
-    ' im ',
-    ' auf ',
-  ]
-  const hasMarkers = germanMarkers.some((m) => lower.includes(m))
+  const germanMarkers = ['der', 'die', 'das', 'und', 'nicht', 'ist', 'mit', 'für', 'im', 'auf']
+  const markerHits = germanMarkers.filter((word) =>
+    new RegExp(`\\b${word}\\b`, 'i').test(lower),
+  ).length
+  const germanWordMatches =
+    lower.match(
+      /\b(der|die|das|und|nicht|ist|mit|für|fuer|im|auf|ein|eine|den|dem|des|aber|auch)\b/g,
+    )?.length ?? 0
+  const totalWords = lower.split(/\s+/).filter(Boolean).length
+  if (totalWords === 0) return false
+  const germanDensity = germanWordMatches / totalWords
   const hasUmlaut = /[äöüß]/i.test(text)
-  return hasMarkers || hasUmlaut
+  if (markerHits >= 2) return true
+  if (germanDensity >= 0.12) return true
+  if (hasUmlaut && (markerHits >= 1 || germanDensity >= 0.08)) return true
+  return false
 }
 
 async function translateToEnglish(args: {
@@ -1104,16 +1417,18 @@ async function translateToEnglish(args: {
   const authorsList = safeStringList(args.authors)
 
   const systemPrompt = [
-    'You are a translation-and-structure tool.',
-    'Translate the provided article fields to US English while preserving satire tone.',
+    'You are a translation-and-structure tool for satirical article JSON.',
+    'Translate to US English while preserving the exact comedic voice, cynicism, and political criticism.',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
     'Rules:',
+    '- Make MINIMAL edits. Do not rewrite style unless needed for translation.',
     '- categorySlug can be existing OR new.',
     '- authorSlug can be existing OR new. If new, you MUST provide newAuthorName, newAuthorTitle, newAuthorBio.',
     '- If the input has a new authorSlug but is missing newAuthorName/Title/Bio, GENERATE them based on the slug.',
     '- Keep the same JSON schema and field types.',
     '- Ensure bodyMarkdown is English markdown (no code blocks).',
     '- Preserve and translate newAuthorName, newAuthorTitle, newAuthorBio if present.',
+    '- Keep controversial satire if policy-safe; do not sanitize by default.',
   ].join('\n')
 
   const userPrompt = [
@@ -1125,7 +1440,7 @@ async function translateToEnglish(args: {
     '',
     'CRITICAL: If authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio.',
     '',
-    'Translate this JSON to US English (preserve structure, ensure new author fields if needed):',
+    'Translate this JSON to US English (minimal edits, preserve tone and political bite, ensure new author fields if needed):',
     JSON.stringify(args.bad),
   ].join('\n')
 
@@ -1179,17 +1494,20 @@ async function repairToSchema(args: {
   const authorsList = safeStringList(args.authors)
 
   const systemPrompt = [
-    'You are a JSON repair tool.',
+    'You are a JSON repair tool for satirical article outputs.',
     'You will be given malformed or schema-invalid content produced by another model.',
     'Your job is to output STRICT JSON that matches the required schema.',
     'Rules:',
     '- Output JSON only (no markdown fences, no extra commentary).',
+    '- Preserve original wording, style, sarcasm, and political criticism whenever possible.',
+    '- Use SURGICAL edits only. Change only what is required to make schema-valid JSON.',
     '- All text fields must be in US English.',
     '- categorySlug can be an existing one OR a new category slug (lowercase, hyphens).',
     '- authorSlug can be an existing one OR a new author slug. If the authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio.',
     '- If the input has a new authorSlug but is missing newAuthorName/newAuthorTitle/newAuthorBio, you MUST GENERATE them based on the slug and article context.',
     '- Ensure bodyMarkdown is a single markdown string (no code blocks).',
     '- Respect ALL max-length limits; rewrite text to fit without truncating mid-word.',
+    '- Do not sanitize edgy political satire unless required to remove explicit policy violations.',
   ].join('\n')
 
   const validationErrorsSection =
@@ -1225,7 +1543,7 @@ async function repairToSchema(args: {
     'CRITICAL: If authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio. Generate them based on the slug and article context if missing.',
     '',
     validationErrorsSection,
-    'Bad output to repair:',
+    'Bad output to repair (preserve tone; edit minimally):',
     args.badOutput,
   ].join('\n')
 
@@ -1280,6 +1598,7 @@ async function shortenToSchema(args: {
     'You are a copy editor for JSON outputs.',
     'Shorten ONLY the fields listed to meet max length limits.',
     'Do not truncate mid-word; rewrite to fit while preserving meaning and tone.',
+    'Use minimal edits. Keep sarcasm and political criticism intact.',
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
     'categorySlug can be existing OR new. authorSlug can be existing OR new (if new, ensure newAuthorName/Title/Bio are provided).',
     'If the input has a new authorSlug but is missing newAuthorName/Title/Bio, GENERATE them based on the slug.',
@@ -1479,7 +1798,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   }
 
   const modelName = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
+  const toneProfile = resolveToneProfile(process.env.OPENAI_TONE_PROFILE)
+  const minCritiqueScore = clampScore(Number(process.env.SATIRE_MIN_CRITIQUE_SCORE ?? '7'))
   console.log(`${LOG.prefix} Model: ${modelName}`)
+  console.log(
+    `${LOG.prefix} Tone profile: ${toneProfile} | min critique score: ${minCritiqueScore}`,
+  )
 
   const llm = new ChatOpenAI({
     apiKey,
@@ -2295,9 +2619,35 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
         ].join('\n')
 
+  const topicContext = useFeatureStoryPrompt
+    ? selectedScenario
+    : hasRssTopics && selectedRssTopic
+      ? selectedRssTopic
+      : randomFocus
+  const satireBrief = await generateSatireBrief({
+    apiKey,
+    modelName,
+    toneProfile,
+    topicContext,
+    recentTitles,
+    blacklistSummary: recentArticlesSummary,
+    useFeatureStoryPrompt,
+    selectedRssTopic,
+    randomFocus,
+  })
+  const satireBriefSection = buildSatireBriefSection(satireBrief)
+  if (satireBrief) {
+    console.log(
+      `${LOG.prefix} Satire brief generated | institution target: ${satireBrief.institutionTarget}`,
+    )
+  } else {
+    console.log(`${LOG.prefix} Satire brief generation failed; using fallback instructions`)
+  }
+
   const systemPrompt = [
     'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
     'Language: write everything in US English (no German, no other languages).',
+    `Tone profile: ${toneProfile.toUpperCase()} — ${TONE_PROFILE_GUIDANCE[toneProfile]}`,
     '',
     '═══════════════════════════════════════════════════════════════════',
     'ABSOLUTE RULE — DO NOT USE ANY EXAMPLES FROM THIS PROMPT',
@@ -2328,6 +2678,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- Instead of "the vibe was off", try "the atmosphere felt wrong", "something was different", "the energy had shifted", etc.',
     '- Do NOT use overly precise clock times like "at 3:47pm" or "at 6:42 a.m." — they sound forced and robotic.',
     '- Instead use APPROXIMATE times: "around 9:40 am", "reportedly around 10:30", "sometime before noon", "early that evening", "in the morning", "shortly after midnight".',
+    '',
+    satireBriefSection,
     '',
     AVOID_OVERUSED_THEMES,
     '',
@@ -2472,6 +2824,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     topicsSection,
     'Important: ALL text fields must be written in US English.',
     '',
+    `Tone profile target: ${toneProfile.toUpperCase()} (${TONE_PROFILE_GUIDANCE[toneProfile]})`,
+    '',
+    satireBriefSection,
+    '',
     useFeatureStoryPrompt
       ? [
           'CRITICAL FOR FEATURE/NEWS STORIES:',
@@ -2561,26 +2917,19 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
     const validation = GeneratedArticleSchema.safeParse(parsed)
+    let validated: GeneratedArticle
     if (!validation.success) {
       console.log(`${LOG.prefix} Schema validation failed, repairing...`)
-      const repaired = await repairToSchema({
+      validated = await repairToSchema({
         badOutput: text,
         categories: input.categories,
         authors: input.authors,
         validationErrors: validation.error.issues,
       })
-      if (input.forceOpinion) {
-        repaired.categorySlug = 'opinion'
-        repaired.layout = 'opinion'
-      }
-      return {
-        article: repaired,
-        usedRssTopic: actuallyUsedRssTopic,
-        usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
-        usedStartup: useStartupTopic || useStartupScenario,
-      }
+    } else {
+      validated = validation.data
     }
-    let validated = validation.data
+
     if (input.forceOpinion) {
       validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
     }
@@ -2606,6 +2955,60 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         bannedOpeningWords,
         recentTitles: input.recentArticleTitles,
       })
+    }
+
+    try {
+      const critique = await critiqueSatireArticle({
+        apiKey,
+        modelName,
+        toneProfile,
+        article: validated,
+        brief: satireBrief,
+      })
+
+      if (critique) {
+        console.log(
+          `${LOG.prefix} Critique scores | dark=${critique.darknessScore} political=${critique.politicalCriticismScore} discomfort=${critique.discomfortScore} specificity=${critique.specificityScore}`,
+        )
+        if (shouldRewriteFromCritique(critique, minCritiqueScore)) {
+          console.log(`${LOG.prefix} Critique below threshold; rewriting article for stronger bite`)
+          validated = await rewriteArticleFromCritique({
+            apiKey,
+            modelName,
+            article: validated,
+            critique,
+            brief: satireBrief,
+            toneProfile,
+            categories: input.categories,
+            authors: input.authors,
+          })
+
+          const rewrittenLangSample =
+            `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
+              0,
+              1200,
+            )
+          if (looksNonEnglish(rewrittenLangSample)) {
+            validated = await translateToEnglish({
+              bad: validated,
+              categories: input.categories,
+              authors: input.authors,
+            })
+          }
+
+          if (headlineViolatesBannedWords(validated.headline, bannedOpeningWords)) {
+            validated = await regenerateHeadline({
+              article: validated,
+              bannedOpeningWords,
+              recentTitles: input.recentArticleTitles,
+            })
+          }
+        }
+      } else {
+        console.log(`${LOG.prefix} Critique unavailable; keeping first-pass article`)
+      }
+    } catch (err) {
+      console.warn(`${LOG.prefix} Critique/rewrite step failed; keeping current article`, err)
     }
 
     if (input.forceOpinion) {

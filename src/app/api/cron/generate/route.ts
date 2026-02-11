@@ -7,6 +7,7 @@ import {
   extractHeadlinePatterns,
   summarizeRecentArticlesForBlacklist,
 } from '@/lib/generation/generateArticle'
+import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { sendPushNotifications } from '@/lib/push/sendNotifications'
@@ -571,10 +572,22 @@ export async function GET(req: Request) {
     // Do not run this per article — same summary is passed to all slots.
     CRON_LOG.step('STEP 2b: Pre-analysis (summarize recent articles for blacklist, once)')
     const maxRecentForAnalysis = 20
-    const precomputedBlacklistSummary = await summarizeRecentArticlesForBlacklist({
-      titles: recentArticleTitles.slice(0, maxRecentForAnalysis),
-      excerpts: recentArticleExcerpts.slice(0, maxRecentForAnalysis),
+    const titlesForAnalysis = recentArticleTitles.slice(0, maxRecentForAnalysis)
+    const excerptsForAnalysis = recentArticleExcerpts.slice(0, maxRecentForAnalysis)
+    const blacklistCache = await getOrComputeBlacklistSummary({
+      payload,
+      titles: titlesForAnalysis,
+      excerpts: excerptsForAnalysis,
+      computeSummary: () =>
+        summarizeRecentArticlesForBlacklist({
+          titles: titlesForAnalysis,
+          excerpts: excerptsForAnalysis,
+        }),
     })
+    const precomputedBlacklistSummary = blacklistCache.summary
+    console.log(
+      `${CRON_LOG.prefix} Pre-analysis cache: ${blacklistCache.cacheHit ? 'HIT' : 'MISS'} | signature=${blacklistCache.signature.slice(0, 12)}...`,
+    )
     console.log(
       `${CRON_LOG.prefix} Pre-analysis done | summary length: ${precomputedBlacklistSummary.length} chars`,
     )

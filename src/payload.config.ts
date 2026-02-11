@@ -13,6 +13,7 @@ import { Authors } from './collections/Authors'
 import { Media } from './collections/Media'
 import { Users } from './collections/Users'
 import { PushSubscriptions } from './collections/PushSubscriptions'
+import { GenerationCache } from './collections/GenerationCache'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -24,7 +25,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Articles, Categories, Authors, Media, PushSubscriptions],
+  collections: [Users, Articles, Categories, Authors, Media, PushSubscriptions, GenerationCache],
   editor: lexicalEditor(),
   email: resendAdapter({
     apiKey: process.env.RESEND_API_KEY!,

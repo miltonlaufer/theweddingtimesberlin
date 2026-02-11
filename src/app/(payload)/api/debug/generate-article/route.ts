@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getPayload } from '@/lib/payload'
 import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
-import { generateArticle, extractHeadlinePatterns } from '@/lib/generation/generateArticle'
+import {
+  generateArticle,
+  extractHeadlinePatterns,
+  summarizeRecentArticlesForBlacklist,
+} from '@/lib/generation/generateArticle'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
+import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
 import {
   convertMarkdownToLexical,
   defaultEditorConfig,
@@ -56,6 +61,9 @@ export async function POST(req: Request) {
 
   const url = new URL(req.url)
   const publish = url.searchParams.get('publish') !== '0'
+  // Presence-based flag: /api/debug/generate-article?draft
+  const saveAsDraft = url.searchParams.has('draft')
+  const articleStatus: 'published' | 'draft' = saveAsDraft ? 'draft' : 'published'
 
   const payload = await getPayload()
 
@@ -181,6 +189,22 @@ export async function POST(req: Request) {
   // Extract headline patterns to avoid repetition (using the enhanced function from generateArticle)
   const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
   const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
+  const maxRecentForAnalysis = 20
+  const titlesForAnalysis = recentArticleTitles.slice(0, maxRecentForAnalysis)
+  const excerptsForAnalysis = recentArticleExcerpts.slice(0, maxRecentForAnalysis)
+  const blacklistCache = await getOrComputeBlacklistSummary({
+    payload,
+    titles: titlesForAnalysis,
+    excerpts: excerptsForAnalysis,
+    computeSummary: () =>
+      summarizeRecentArticlesForBlacklist({
+        titles: titlesForAnalysis,
+        excerpts: excerptsForAnalysis,
+      }),
+  })
+  console.log(
+    `[DEBUG-GENERATE] Pre-analysis cache: ${blacklistCache.cacheHit ? 'HIT' : 'MISS'} | signature=${blacklistCache.signature.slice(0, 12)}...`,
+  )
 
   const { article: generated, usedRssTopic } = await generateArticle({
     categories,
@@ -189,6 +213,7 @@ export async function POST(req: Request) {
     includeTopics,
     recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
     recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
+    precomputedBlacklistSummary: blacklistCache.summary,
     recentHeadlinePatterns: uniquePatterns,
   })
 
@@ -366,8 +391,8 @@ export async function POST(req: Request) {
       excerpt: generated.excerpt ?? undefined,
       category: categoryDoc.id,
       author: authorDoc.id,
-      publishedAt: new Date().toISOString(),
-      status: 'published',
+      publishedAt: articleStatus === 'published' ? new Date().toISOString() : undefined,
+      status: articleStatus,
       isFeatured: generated.isFeatured,
       isHeadline: generated.isHeadline,
       layout: generated.layout,
@@ -377,7 +402,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    created: { id: created.id, slug },
+    created: { id: created.id, slug, status: articleStatus },
     featuredImageUrl: featuredImageUrl ?? null,
   })
 }
