@@ -119,6 +119,7 @@ export async function summarizeRecentArticlesForBlacklist(params: {
           'You are an editorial assistant. Analyze the following list of recently published satirical newspaper articles.',
           'Your job: produce a STRUCTURED SUMMARY of what has already been covered so a writer knows what to AVOID.',
           'Output ONLY the summary, no commentary. Be exhaustive — miss nothing. List every place, topic, substance, and joke premise.',
+          'Phrase each item as something to AVOID (e.g. "Bikes vanishing / scooters replacing them"), not as an interesting idea. The writer must not be inspired by this list.',
         ].join(' '),
       },
       {
@@ -645,6 +646,104 @@ export function analyzeHeadlineStructures(titles: string[]): {
 export function extractHeadlinePatterns(titles: string[]): string[] {
   const { overusedOpenings } = analyzeHeadlineStructures(titles)
   return overusedOpenings
+}
+
+/** Minimal stopwords for overlap check (subset of extractOverusedKeywords stopwords). */
+const OVERLAP_STOPWORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'but',
+  'for',
+  'with',
+  'from',
+  'into',
+  'that',
+  'this',
+  'are',
+  'was',
+  'were',
+  'have',
+  'has',
+  'had',
+  'been',
+  'being',
+  'will',
+  'would',
+  'could',
+  'not',
+  'you',
+  'your',
+  'they',
+  'their',
+  'what',
+  'when',
+  'where',
+  'which',
+  'who',
+  'how',
+  'all',
+  'any',
+  'can',
+  'her',
+  'his',
+  'its',
+  'our',
+  'out',
+  'say',
+  'see',
+  'she',
+  'than',
+  'them',
+  'then',
+  'these',
+  'those',
+  'own',
+])
+
+/**
+ * Extract significant (non-stopword, length >= 3) words from text, lowercase.
+ * Used to detect overlap between an RSS topic and blacklisted content.
+ */
+function getSignificantWords(text: string): Set<string> {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+  const out = new Set<string>()
+  for (const w of words) {
+    const cleaned = w.replace(/[^a-z]/g, '')
+    if (cleaned.length >= 3 && !OVERLAP_STOPWORDS.has(cleaned)) out.add(cleaned)
+  }
+  return out
+}
+
+/**
+ * Returns true if the RSS topic line overlaps too much with recent article titles
+ * or the blacklist summary (same story already covered). Used to avoid assigning
+ * an RSS topic that we have already satirized (e.g. "47 bikes / scooters").
+ */
+export function rssTopicOverlapsBlacklist(params: {
+  rssTopicLine: string
+  recentArticleTitles: string[]
+  blacklistSummary: string
+  minOverlapWords?: number
+}): boolean {
+  const { rssTopicLine, recentArticleTitles, blacklistSummary, minOverlapWords = 2 } = params
+  const topicWords = getSignificantWords(rssTopicLine)
+  if (topicWords.size === 0) return false
+
+  const blacklistText = [...recentArticleTitles, blacklistSummary].join(' ')
+  const blacklistWords = getSignificantWords(blacklistText)
+
+  let overlap = 0
+  for (const w of topicWords) {
+    if (blacklistWords.has(w)) overlap += 1
+    if (overlap >= minOverlapWords) return true
+  }
+  return false
 }
 
 /**
@@ -1930,30 +2029,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     randomFocus = generalTopics[Math.floor(Math.random() * generalTopics.length)]
   }
 
-  // When RSS topics are available, pick one to base the article on
-  const rssTopics = input.topicSummary
-    .trim()
-    .split('\n')
-    .filter((line) => line.length > 0)
-  const hasRssTopics = input.includeTopics && rssTopics.length > 0
-  const selectedRssTopic = hasRssTopics
-    ? rssTopics[Math.floor(Math.random() * rssTopics.length)]
-    : null
-
-  // Track whether RSS topic was ACTUALLY used in the prompt (not just selected)
-  // RSS topics are only used when NOT a feature story AND RSS topics are available
-  const actuallyUsedRssTopic =
-    !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
-
-  LOG.step(
-    `STEP 2: topic/scenario selected | featureStory=${useFeatureStoryPrompt} | rss=${!!actuallyUsedRssTopic} | drugsTechno=${useDrugsOrTechnoTopic || useDrugsOrTechnoScenario} | startup=${useStartupTopic || useStartupScenario}`,
-  )
-  if (actuallyUsedRssTopic) {
-    console.log(`${LOG.prefix} RSS topic: ${actuallyUsedRssTopic.slice(0, 80)}...`)
-  }
-
-  // Pass up to 20 recent articles so the LLM has a clear picture of what NOT to write.
-  // Input to blacklist is one title + one excerpt per article (no other summaries).
+  // Build blacklist (recent titles + summary) BEFORE selecting RSS topic so we can exclude
+  // RSS topics that overlap with already-covered stories (e.g. same bikes/scooters story).
   const maxRecentArticles = 20
   const recentTitles = input.recentArticleTitles.slice(0, maxRecentArticles)
   const recentExcerpts = input.recentArticleExcerpts?.slice(0, maxRecentArticles) ?? []
@@ -1984,6 +2061,47 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     recentArticlesSummary = ''
   }
 
+  // When RSS topics are available, pick one that does NOT overlap with the blacklist.
+  // Otherwise we keep assigning the same real-world story (e.g. bikes/scooters) and the LLM
+  // produces yet another variation of an article we told it to avoid.
+  const rssTopicsRaw = input.topicSummary
+    .trim()
+    .split('\n')
+    .filter((line) => line.length > 0)
+  const rssTopics =
+    rssTopicsRaw.length > 0 && recentTitles.length > 0
+      ? rssTopicsRaw.filter(
+          (line) =>
+            !rssTopicOverlapsBlacklist({
+              rssTopicLine: line,
+              recentArticleTitles: recentTitles,
+              blacklistSummary: recentArticlesSummary,
+              minOverlapWords: 2,
+            }),
+        )
+      : rssTopicsRaw
+  if (rssTopicsRaw.length > 0 && rssTopics.length < rssTopicsRaw.length) {
+    console.log(
+      `${LOG.prefix} Filtered ${rssTopicsRaw.length - rssTopics.length} RSS topic(s) that overlap blacklist`,
+    )
+  }
+  const hasRssTopics = input.includeTopics && rssTopics.length > 0
+  const selectedRssTopic = hasRssTopics
+    ? rssTopics[Math.floor(Math.random() * rssTopics.length)]
+    : null
+
+  // Track whether RSS topic was ACTUALLY used in the prompt (not just selected)
+  // RSS topics are only used when NOT a feature story AND RSS topics are available
+  const actuallyUsedRssTopic =
+    !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
+
+  LOG.step(
+    `STEP 2: topic/scenario selected | featureStory=${useFeatureStoryPrompt} | rss=${!!actuallyUsedRssTopic} | drugsTechno=${useDrugsOrTechnoTopic || useDrugsOrTechnoScenario} | startup=${useStartupTopic || useStartupScenario}`,
+  )
+  if (actuallyUsedRssTopic) {
+    console.log(`${LOG.prefix} RSS topic: ${actuallyUsedRssTopic.slice(0, 80)}...`)
+  }
+
   const rawTitlesBlock = recentTitles
     .map((title, idx) => {
       const excerpt = recentExcerpts[idx]
@@ -2001,6 +2119,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '═══════════════════════════════════════════════════════════════════',
           'BLACKLIST - MANDATORY: DO NOT REPEAT ANY OF THIS. YOUR TOPIC MUST NOT OVERLAP.',
           '═══════════════════════════════════════════════════════════════════',
+          '',
+          'WARNING: The content below is FORBIDDEN. Do NOT use it as inspiration. Do NOT write',
+          'variations, sequels, or the same joke from a different angle. Your story must be on a',
+          'completely different subject. If your idea is even remotely similar to any premise below,',
+          'pick something else.',
           '',
           recentArticlesSummary.length > 0
             ? [
