@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getPayload } from '@/lib/payload'
 import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
-import { generateArticle, extractHeadlinePatterns } from '@/lib/generation/generateArticle'
+import {
+  generateArticle,
+  extractHeadlinePatterns,
+  summarizeRecentArticlesForBlacklist,
+} from '@/lib/generation/generateArticle'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { sendPushNotifications } from '@/lib/push/sendNotifications'
@@ -11,6 +15,17 @@ import {
   defaultEditorConfig,
   sanitizeServerEditorConfig,
 } from '@payloadcms/richtext-lexical'
+
+/******************* LOGGING ***********************/
+
+const CRON_LOG = {
+  prefix: '[CRON-GENERATE]',
+  sep: '════════════════════════════════════════════════════════════════',
+  step: (label: string) =>
+    console.log(
+      `${CRON_LOG.prefix} ${CRON_LOG.sep}\n${CRON_LOG.prefix} ${label}\n${CRON_LOG.prefix} ${CRON_LOG.sep}`,
+    ),
+}
 
 /******************* CONSTANTS ***********************/
 
@@ -193,6 +208,8 @@ type GenerateOneContext = {
   topicSummary: string
   recentArticleTitles: string[]
   recentArticleExcerpts: string[]
+  /** Precomputed once per batch so we do not call the analysis model per article. */
+  precomputedBlacklistSummary: string
   uniquePatterns: string[]
   latestArticleContentSample: string | undefined
   sanitizedEditorConfig: Awaited<ReturnType<typeof sanitizeServerEditorConfig>>
@@ -207,6 +224,9 @@ async function generateOneArticle(
   slotIndex: number,
   slot: SlotConfig,
 ): Promise<CreatedArticleResult> {
+  console.log(
+    `${CRON_LOG.prefix} ${CRON_LOG.sep}\n${CRON_LOG.prefix} ARTICLE ${slotIndex + 1} - generateOneArticle started (LLM + image + DB)\n${CRON_LOG.prefix} ${CRON_LOG.sep}`,
+  )
   const { payload, categories, authors, categoriesDocs, topicSummary } = ctx
   if (!payload) throw new Error('Payload unavailable')
 
@@ -217,6 +237,7 @@ async function generateOneArticle(
     includeTopics: slot.includeTopics,
     recentArticleTitles: ctx.recentArticleTitles.slice(0, 40),
     recentArticleExcerpts: ctx.recentArticleExcerpts.slice(0, 40),
+    precomputedBlacklistSummary: ctx.precomputedBlacklistSummary,
     recentHeadlinePatterns: ctx.uniquePatterns,
     latestArticleContentSample: ctx.latestArticleContentSample,
     forceDrugsTechno: slot.forceDrugsTechno,
@@ -224,6 +245,9 @@ async function generateOneArticle(
     forceRss: slot.forceRss,
     forceOpinion: slot.forceOpinion,
   })
+  console.log(
+    `${CRON_LOG.prefix}   Article ${slotIndex + 1}: LLM done | headline: "${generated.headline.slice(0, 50)}..."`,
+  )
 
   let categoryDoc = categoriesDocs.find((c) => c.slug === generated.categorySlug)
   if (!categoryDoc) {
@@ -316,16 +340,19 @@ async function generateOneArticle(
   const imagePrompt = typeof generated.imagePrompt === 'string' ? generated.imagePrompt : ''
   if (imagePrompt.length > 0) {
     try {
+      console.log(`${CRON_LOG.prefix}   Article ${slotIndex + 1}: generating image...`)
       const uploaded = await generateAndUploadImage({
         prompt: imagePrompt,
         fileBaseName: slug,
       })
       featuredImageUrl = uploaded.publicUrl
-    } catch {
-      // Continue without image
+      console.log(`${CRON_LOG.prefix}   Article ${slotIndex + 1}: image uploaded`)
+    } catch (err) {
+      console.warn(`${CRON_LOG.prefix}   Article ${slotIndex + 1}: image failed`, err)
     }
   }
 
+  console.log(`${CRON_LOG.prefix}   Article ${slotIndex + 1}: saving to DB...`)
   const created = await payload.create({
     collection: 'articles',
     data: {
@@ -346,6 +373,9 @@ async function generateOneArticle(
       sourceRssTopic: usedRssTopic ?? undefined,
     },
   })
+  console.log(
+    `${CRON_LOG.prefix}   Article ${slotIndex + 1}: saved | id=${created.id} slug=${slug}`,
+  )
 
   return {
     id: String(created.id),
@@ -358,6 +388,7 @@ async function generateOneArticle(
 /******************* ROUTE HANDLER ***********************/
 
 export async function GET(req: Request) {
+  CRON_LOG.step('STEP 1: Cron job started')
   // Verify cron secret (Vercel sends this header for cron jobs)
   const cronSecret = process.env.CRON_SECRET
   const authHeader = req.headers.get('authorization')
@@ -370,6 +401,7 @@ export async function GET(req: Request) {
   }
 
   try {
+    CRON_LOG.step('STEP 2: Fetching Payload and data')
     const payload = await getPayload()
 
     if (!payload) {
@@ -535,6 +567,24 @@ export async function GET(req: Request) {
     const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
     const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
 
+    // Pre-analysis once per batch: summarize recent articles for blacklist (title + excerpt per article).
+    // Do not run this per article — same summary is passed to all slots.
+    CRON_LOG.step('STEP 2b: Pre-analysis (summarize recent articles for blacklist, once)')
+    const maxRecentForAnalysis = 20
+    const precomputedBlacklistSummary = await summarizeRecentArticlesForBlacklist({
+      titles: recentArticleTitles.slice(0, maxRecentForAnalysis),
+      excerpts: recentArticleExcerpts.slice(0, maxRecentForAnalysis),
+    })
+    console.log(
+      `${CRON_LOG.prefix} Pre-analysis done | summary length: ${precomputedBlacklistSummary.length} chars`,
+    )
+    if (precomputedBlacklistSummary.length > 0) {
+      const trim =
+        precomputedBlacklistSummary.slice(0, 500) +
+        (precomputedBlacklistSummary.length > 500 ? '...' : '')
+      console.log(`${CRON_LOG.prefix} Pre-analysis output (trimmed):\n${trim}`)
+    }
+
     // Prepare editor config once
     const sanitizedEditorConfig = await sanitizeServerEditorConfig(
       defaultEditorConfig,
@@ -544,6 +594,14 @@ export async function GET(req: Request) {
     // Decide article types for all slots up front, then generate in parallel
     const hasRssTopics = topicSummary.trim().length > 0
     const slotConfigs = computeSlotConfigs(ARTICLES_PER_RUN, hasRssTopics, forceOpinionThisRun)
+    CRON_LOG.step(
+      `STEP 3: Slot configs computed | articles=${ARTICLES_PER_RUN} | rss=${hasRssTopics} | forceOpinion=${forceOpinionThisRun}`,
+    )
+    slotConfigs.forEach((s, i) => {
+      console.log(
+        `${CRON_LOG.prefix}   slot ${i + 1}: opinion=${s.forceOpinion} drugsTechno=${s.forceDrugsTechno} startup=${s.forceStartup} rss=${s.forceRss} topics=${s.includeTopics}`,
+      )
+    })
 
     const generateOneContext: GenerateOneContext = {
       payload,
@@ -558,6 +616,7 @@ export async function GET(req: Request) {
       topicSummary,
       recentArticleTitles,
       recentArticleExcerpts,
+      precomputedBlacklistSummary,
       uniquePatterns,
       latestArticleContentSample,
       sanitizedEditorConfig,
@@ -566,9 +625,11 @@ export async function GET(req: Request) {
     // ⚠️ DO NOT CHANGE THIS TO SEQUENTIAL (e.g. for-loop with await).
     // Parallel generation is REQUIRED — sequential generation causes Vercel cron timeouts.
     // Each article takes 30-60s to generate (LLM + image), so 4-8 articles sequentially = 2-8 min = timeout.
+    CRON_LOG.step('STEP 4: Generating all articles in parallel')
     const results = await Promise.allSettled(
       slotConfigs.map((slot, i) => generateOneArticle(generateOneContext, i, slot)),
     )
+    CRON_LOG.step('STEP 5: All articles generated')
 
     const createdArticles: Array<{ id: string; slug: string; featuredImageUrl: string | null }> = []
     const errors: string[] = []
@@ -582,17 +643,21 @@ export async function GET(req: Request) {
           featuredImageUrl: outcome.value.featuredImageUrl,
         })
         usedCategories.add(outcome.value.categorySlug)
+        console.log(`${CRON_LOG.prefix}   Result ${i + 1}: OK ${outcome.value.slug}`)
       } else {
-        errors.push(
-          `Article ${i + 1}: ${outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)}`,
-        )
+        const errMsg =
+          outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
+        errors.push(`Article ${i + 1}: ${errMsg}`)
+        console.error(`${CRON_LOG.prefix}   Result ${i + 1}: FAILED ${errMsg}`)
       }
     })
+    CRON_LOG.step(`STEP 6: Results ${createdArticles.length} created, ${errors.length} errors`)
 
     // Send push notifications if articles were created
     let notificationResult: { sent: number; failed: number; errors: string[] } | null = null
     if (createdArticles.length > 0) {
       try {
+        CRON_LOG.step('STEP 7: Sending push notifications')
         const headlineArticle = createdArticles[0]
         const articleCount = createdArticles.length
         const notificationTitle =
@@ -618,6 +683,7 @@ export async function GET(req: Request) {
     const revalidatedPaths: string[] = []
     if (createdArticles.length > 0) {
       try {
+        CRON_LOG.step('STEP 8: Revalidating cache')
         // Revalidate home page
         revalidatePath('/')
         revalidatedPaths.push('/')
@@ -633,13 +699,16 @@ export async function GET(req: Request) {
           revalidatedPaths.push(`/section/${categorySlug}`)
         }
 
-        console.log('Revalidated cache for paths:', revalidatedPaths)
+        console.log(`${CRON_LOG.prefix} Revalidated:`, revalidatedPaths)
       } catch (error) {
         // Log but don't fail the cron job if cache revalidation fails
-        console.error('Failed to revalidate cache:', error)
+        console.error(`${CRON_LOG.prefix} Failed to revalidate cache:`, error)
       }
     }
 
+    CRON_LOG.step(
+      `STEP 9: Cron job finished | created=${createdArticles.length} errors=${errors.length}`,
+    )
     return NextResponse.json({
       ok: createdArticles.length > 0,
       created: createdArticles,

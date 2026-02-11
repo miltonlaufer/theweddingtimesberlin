@@ -29,6 +29,8 @@ export interface GenerateArticleInput {
   forceStartup?: boolean // Force startup/gentrification topic (true) or force non-startup (false), undefined = random
   forceRss?: boolean // Force using RSS topic if available
   forceOpinion?: boolean // Force opinion/editorial piece (categorySlug "opinion", layout "opinion")
+  /** When set, pre-analysis is skipped and this summary is used for the blacklist. Cron runs analysis once per batch. */
+  precomputedBlacklistSummary?: string
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -65,6 +67,94 @@ export interface GenerateArticleResult {
   usedDrugsTechno: boolean
   /** Whether this article used a startup/gentrification topic/scenario. Used for variety tracking. */
   usedStartup: boolean
+}
+
+/******************* LOGGING ***********************/
+
+const LOG = {
+  prefix: '[ARTICLE]',
+  sep: '────────────────────────────────────────────────────────────────',
+  step: (label: string) =>
+    console.log(`${LOG.prefix} ${LOG.sep}\n${LOG.prefix} ${label}\n${LOG.prefix} ${LOG.sep}`),
+  /** Log a string trimmed to maxLen chars with "..." if truncated. */
+  trimmed: (label: string, value: string, maxLen = 600) => {
+    const trimmed = value.length <= maxLen ? value : value.slice(0, maxLen) + '...'
+    console.log(`${LOG.prefix} ${label} (${value.length} chars):\n${trimmed}`)
+  },
+}
+
+/**
+ * Run the cheap-model pre-analysis once per batch. Input: one title and one excerpt per recent article
+ * (no other summaries). Do not set temperature — some models (e.g. gpt-5-nano) only support default.
+ * Returns structured blacklist text or '' on failure.
+ */
+export async function summarizeRecentArticlesForBlacklist(params: {
+  titles: string[]
+  excerpts?: string[]
+  apiKey?: string
+}): Promise<string> {
+  const { titles, excerpts = [], apiKey: providedKey } = params
+  const apiKey = providedKey ?? process.env.OPENAI_API_KEY
+  if (!apiKey || titles.length === 0) return ''
+
+  const analysisModelName = process.env.OPENAI_ANALYSIS_MODEL ?? 'gpt-5-nano-2025-08-07'
+  const analysisLlm = new ChatOpenAI({
+    apiKey,
+    model: analysisModelName,
+    // Do not set temperature: nano and some models only support default (1).
+  })
+
+  const titlesWithExcerpts = titles
+    .map((title, idx) => {
+      const excerpt = excerpts[idx]
+      return excerpt ? `- "${title}" — ${excerpt.slice(0, 150)}` : `- "${title}"`
+    })
+    .join('\n')
+
+  try {
+    const analysisResponse = await analysisLlm.invoke([
+      {
+        role: 'system',
+        content: [
+          'You are an editorial assistant. Analyze the following list of recently published satirical newspaper articles.',
+          'Your job: produce a STRUCTURED SUMMARY of what has already been covered so a writer knows what to AVOID.',
+          'Output ONLY the summary, no commentary. Be exhaustive — miss nothing. List every place, topic, substance, and joke premise.',
+        ].join(' '),
+      },
+      {
+        role: 'user',
+        content: [
+          'Analyze these recently published articles and produce a structured blacklist:\n',
+          titlesWithExcerpts,
+          '',
+          'Produce the following sections (include every item you can extract):',
+          '',
+          'PLACES ALREADY USED (list every specific venue, street, park, neighborhood, or institution mentioned):',
+          '- ...',
+          '',
+          'TOPICS ALREADY COVERED (list every distinct subject/theme/angle):',
+          '- ...',
+          '',
+          'SUBSTANCES/DRUGS MENTIONED (list any drugs, substances, or drug-related references):',
+          '- ...',
+          '',
+          'SPECIFIC JOKES/PREMISES ALREADY DONE (list the core comedic premise of each article in one sentence):',
+          '- ...',
+          '',
+          'OVERREPRESENTED THEMES (topics that appear in 2+ articles — these are ESPECIALLY off-limits):',
+          '- ...',
+        ].join('\n'),
+      },
+    ])
+
+    const summary =
+      typeof analysisResponse.content === 'string'
+        ? analysisResponse.content
+        : JSON.stringify(analysisResponse.content)
+    return summary
+  } catch {
+    return ''
+  }
 }
 
 /******************* PROMPT CONSTANTS ***********************/
@@ -123,6 +213,13 @@ const EDGE_SHORT = [
   '- The comedy must come from REAL observations about human hypocrisy, not just random absurdism.',
   '- Name specific contradictions: the gentrifier who mourns gentrification, the leftist funded by daddy, the wellness guru who does coke.',
   '- The best satire makes the reader recognize themselves and feel personally attacked.',
+].join('\n')
+
+const AVOID_OVERUSED_THEMES = [
+  'AVOID OVERUSING THESE THEMES (they matter, but we run them into the ground):',
+  '- "Authenticity" / "real Berlin" / "keeping it real" / "the old Berlin" — do NOT make this the central joke again unless the blacklist shows it has not been used recently.',
+  '- Rent / rent prices / "daddy pays the rent" / "cheap rent" / rent protests — do NOT make rent the main punchline again unless the blacklist shows it has not been used recently.',
+  '- Prefer other angles: bureaucracy, nightlife specifics, food, neighborhood politics, expat hypocrisy, tech/startups, local characters, crime, absurd local events. Use authenticity and rent sparingly.',
 ].join('\n')
 
 const SPICE_IT_UP = [
@@ -1276,12 +1373,14 @@ function headlineViolatesBannedWords(headline: string, bannedOpeningWords: strin
 /******************* MAIN ***********************/
 
 export async function generateArticle(input: GenerateArticleInput): Promise<GenerateArticleResult> {
+  LOG.step('STEP 1: generateArticle started')
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     throw new Error('Missing OPENAI_API_KEY')
   }
 
   const modelName = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
+  console.log(`${LOG.prefix} Model: ${modelName}`)
 
   const llm = new ChatOpenAI({
     apiKey,
@@ -1846,101 +1945,79 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const actuallyUsedRssTopic =
     !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
 
-  // Pass up to 20 recent articles so the LLM has a clear picture of what NOT to write
+  LOG.step(
+    `STEP 2: topic/scenario selected | featureStory=${useFeatureStoryPrompt} | rss=${!!actuallyUsedRssTopic} | drugsTechno=${useDrugsOrTechnoTopic || useDrugsOrTechnoScenario} | startup=${useStartupTopic || useStartupScenario}`,
+  )
+  if (actuallyUsedRssTopic) {
+    console.log(`${LOG.prefix} RSS topic: ${actuallyUsedRssTopic.slice(0, 80)}...`)
+  }
+
+  // Pass up to 20 recent articles so the LLM has a clear picture of what NOT to write.
+  // Input to blacklist is one title + one excerpt per article (no other summaries).
   const maxRecentArticles = 20
   const recentTitles = input.recentArticleTitles.slice(0, maxRecentArticles)
   const recentExcerpts = input.recentArticleExcerpts?.slice(0, maxRecentArticles) ?? []
 
-  // Pre-analysis: use a cheap model to summarize what recent articles already covered,
-  // so the main LLM gets a clear, structured blacklist instead of raw titles it might gloss over.
-  let recentArticlesSummary = ''
-  if (recentTitles.length > 0) {
-    try {
-      const analysisModelName = process.env.OPENAI_ANALYSIS_MODEL ?? 'gpt-5-nano-2025-08-07'
-      const analysisLlm = new ChatOpenAI({
-        apiKey,
-        model: analysisModelName,
-        temperature: 0,
-      })
-
-      const titlesWithExcerpts = recentTitles
-        .map((title, idx) => {
-          const excerpt = recentExcerpts[idx]
-          return excerpt ? `- "${title}" — ${excerpt.slice(0, 150)}` : `- "${title}"`
-        })
-        .join('\n')
-
-      const analysisResponse = await analysisLlm.invoke([
-        {
-          role: 'system',
-          content: [
-            'You are an editorial assistant. Analyze the following list of recently published satirical newspaper articles.',
-            'Your job: produce a STRUCTURED SUMMARY of what has already been covered so a writer knows what to AVOID.',
-            'Output ONLY the summary, no commentary. Be exhaustive — miss nothing.',
-          ].join(' '),
-        },
-        {
-          role: 'user',
-          content: [
-            'Analyze these recently published articles and produce a structured blacklist:\n',
-            titlesWithExcerpts,
-            '',
-            'Produce the following sections:',
-            '',
-            'PLACES ALREADY USED (list every specific venue, street, park, neighborhood, or institution mentioned):',
-            '- ...',
-            '',
-            'TOPICS ALREADY COVERED (list every distinct subject/theme/angle):',
-            '- ...',
-            '',
-            'SUBSTANCES/DRUGS MENTIONED (list any drugs, substances, or drug-related references):',
-            '- ...',
-            '',
-            'SPECIFIC JOKES/PREMISES ALREADY DONE (list the core comedic premise of each article in one sentence):',
-            '- ...',
-            '',
-            'OVERREPRESENTED THEMES (topics that appear in 2+ articles — these are ESPECIALLY off-limits):',
-            '- ...',
-          ].join('\n'),
-        },
-      ])
-
-      recentArticlesSummary =
-        typeof analysisResponse.content === 'string'
-          ? analysisResponse.content
-          : JSON.stringify(analysisResponse.content)
-    } catch {
-      // If analysis fails, fall back to raw titles (handled below)
+  let recentArticlesSummary: string
+  if (input.precomputedBlacklistSummary !== undefined) {
+    recentArticlesSummary = input.precomputedBlacklistSummary
+    if (recentArticlesSummary.length > 0) {
+      console.log(
+        `${LOG.prefix} Using precomputed blacklist summary (${recentArticlesSummary.length} chars)`,
+      )
     }
+  } else if (recentTitles.length > 0) {
+    LOG.step('STEP 3: pre-analysis (summarize recent articles for blacklist)')
+    recentArticlesSummary = await summarizeRecentArticlesForBlacklist({
+      titles: recentTitles,
+      excerpts: recentExcerpts,
+      apiKey,
+    })
+    if (recentArticlesSummary.length > 0) {
+      console.log(
+        `${LOG.prefix} Pre-analysis SUCCESS | summary length: ${recentArticlesSummary.length} chars`,
+      )
+    } else {
+      console.log(`${LOG.prefix} Pre-analysis returned empty (will use raw titles only)`)
+    }
+  } else {
+    recentArticlesSummary = ''
   }
+
+  const rawTitlesBlock = recentTitles
+    .map((title, idx) => {
+      const excerpt = recentExcerpts[idx]
+      const excerptText = excerpt
+        ? ` — ${excerpt.length > 150 ? excerpt.slice(0, 147) + '...' : excerpt}`
+        : ''
+      return `  ${idx + 1}. "${title}"${excerptText}`
+    })
+    .join('\n')
 
   const recentTitlesSection =
     recentTitles.length > 0
       ? [
           '',
           '═══════════════════════════════════════════════════════════════════',
-          'BLACKLIST - EVERYTHING BELOW HAS BEEN DONE. DO NOT REPEAT ANY OF IT.',
+          'BLACKLIST - MANDATORY: DO NOT REPEAT ANY OF THIS. YOUR TOPIC MUST NOT OVERLAP.',
           '═══════════════════════════════════════════════════════════════════',
           '',
           recentArticlesSummary.length > 0
             ? [
-                'An editorial assistant analyzed our recent articles and produced this blacklist.',
-                'EVERY item below is OFF-LIMITS. If your article touches ANY of these, SCRAP IT and start over.',
+                'An editorial assistant analyzed recent articles. EVERY item in the summary below is OFF-LIMITS.',
+                'You MUST pick a topic, place, and premise that do NOT appear in this blacklist. If your idea overlaps, SCRAP IT.',
                 '',
+                '--- STRUCTURED BLACKLIST (places, topics, substances, jokes, overrepresented themes) ---',
                 recentArticlesSummary,
+                '',
+                '--- RECENT ARTICLE TITLES (do not write anything similar in topic, angle, or joke) ---',
+                rawTitlesBlock,
               ].join('\n')
             : [
                 `The following ${recentTitles.length} articles were ALREADY PUBLISHED RECENTLY.`,
+                'Your article MUST NOT overlap in topic, angle, joke, or premise.',
                 '',
-                recentTitles
-                  .map((title, idx) => {
-                    const excerpt = recentExcerpts[idx]
-                    const excerptText = excerpt
-                      ? ` — ${excerpt.length > 150 ? excerpt.slice(0, 147) + '...' : excerpt}`
-                      : ''
-                    return `  ${idx + 1}. "${title}"${excerptText}`
-                  })
-                  .join('\n'),
+                rawTitlesBlock,
               ].join('\n'),
           '',
           'ABSOLUTE RULES:',
@@ -1948,8 +2025,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Do NOT write about any TOPIC listed above.',
           '- Do NOT mention any SUBSTANCE listed above.',
           '- Do NOT reuse any JOKE or PREMISE listed above, even from a different angle.',
-          '- If a theme appears in OVERREPRESENTED, it is COMPLETELY off-limits — zero tolerance.',
-          '- "Different" means a reader should NOT think "didn\'t I just read something like this?"',
+          '- If a theme appears in OVERREPRESENTED, it is COMPLETELY off-limits.',
+          '- Your headline and premise must be clearly distinct from every title above.',
           '- When in doubt, pick something that appears NOWHERE in the blacklist.',
           '═══════════════════════════════════════════════════════════════════',
         ].join('\n')
@@ -2129,6 +2206,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- Do NOT use overly precise clock times like "at 3:47pm" or "at 6:42 a.m." — they sound forced and robotic.',
     '- Instead use APPROXIMATE times: "around 9:40 am", "reportedly around 10:30", "sometime before noon", "early that evening", "in the morning", "shortly after midnight".',
     '',
+    AVOID_OVERUSED_THEMES,
+    '',
     SURREALISM_AND_LOCAL_KNOWLEDGE,
     '',
     useFeatureStoryPrompt
@@ -2239,6 +2318,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'The connection to the real news should be CLEAR in the article, not just vaguely inspired.',
           'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.',
           '',
+          'MAKE THE REAL-NEWS TOPIC OBVIOUS TO READERS:',
+          '- Readers must understand which real-world news story you are satirizing WITHOUT reading the summary or metadata.',
+          '- In the OPENING (first paragraph, subheadline, or headline) explicitly reference or clearly echo the news topic so a reader can say "this is about X".',
+          '- Example: if the news is "Company X announces layoffs", your lead or subhead should make that clear (e.g. "In response to recent layoffs at...", "As tech firms slash jobs..."). Do not hide the connection.',
+          '',
           'ARTICLE LENGTH: The article should be approximately 400 words. Do NOT exceed 500 words. Keep it tight, punchy, and concise.',
           '',
           'IMPORTANT: Since you are using this news topic, you MUST set "sourceRssTopic" in your JSON output to the EXACT news headline above.',
@@ -2338,18 +2422,24 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     IMAGE_PROMPT_INSTRUCTIONS,
   ].join('\n')
 
+  LOG.trimmed('System prompt', systemPrompt, 600)
+  LOG.trimmed('User prompt', userPrompt, 600)
+  LOG.step('STEP 4: main LLM invoke (article generation)')
   const raw = await llm.invoke([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
   ])
+  LOG.step('STEP 5: main LLM done, parsing and validating')
 
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
+  LOG.trimmed('LLM output', text, 800)
 
   try {
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
     const validation = GeneratedArticleSchema.safeParse(parsed)
     if (!validation.success) {
+      console.log(`${LOG.prefix} Schema validation failed, repairing...`)
       const repaired = await repairToSchema({
         badOutput: text,
         categories: input.categories,
@@ -2399,6 +2489,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
     }
 
+    LOG.step('STEP 6: generateArticle finished (valid output)')
     return {
       article: validated,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
@@ -2406,6 +2497,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       usedStartup: useStartupTopic || useStartupScenario,
     }
   } catch {
+    console.log(`${LOG.prefix} Parse/validation error, repairing...`)
     // Fallback: deterministic repair using cheaper model
     const repaired = await repairToSchema({
       badOutput: text,
@@ -2416,6 +2508,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       repaired.categorySlug = 'opinion'
       repaired.layout = 'opinion'
     }
+    LOG.step('STEP 6: generateArticle finished (repaired after parse error)')
     return {
       article: repaired,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
