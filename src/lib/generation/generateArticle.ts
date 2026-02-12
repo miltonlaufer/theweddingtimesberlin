@@ -15,6 +15,11 @@ export interface GeneratorAuthorOption {
   bio?: string
 }
 
+export interface CanonicalStoryReference {
+  author: string
+  story: string
+}
+
 export interface GenerateArticleInput {
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
@@ -24,6 +29,7 @@ export interface GenerateArticleInput {
   recentArticleExcerpts?: string[] // Optional excerpts (parallel array to titles, truncated to ~150 chars)
   recentHeadlinePatterns?: string[] // Patterns like "Berlin [verb] [noun]" to avoid
   latestArticleContentSample?: string // Half of the latest article's body text to ensure new article is different
+  recentCanonicalStoryReferences?: CanonicalStoryReference[] // Latest canonical references to avoid repeating author/story pairs
   // Variety control for cron job batches
   forceDrugsTechno?: boolean // Force drugs/techno topic (true) or force non-drugs/techno (false), undefined = random
   forceStartup?: boolean // Force startup/gentrification topic (true) or force non-startup (false), undefined = random
@@ -55,6 +61,9 @@ export const GeneratedArticleSchema = z.object({
     .transform((s) => (s != null && s.length > 600 ? s.slice(0, 600) : s)),
   // RSS source tracking - if article was inspired by an RSS news topic
   sourceRssTopic: z.string().max(300).optional().nullable(),
+  // Canonical story source tracking - used when canonical adaptation mode is active
+  canonicalSourceAuthor: z.string().max(120).optional().nullable(),
+  canonicalSourceStory: z.string().max(220).optional().nullable(),
 })
 
 export type GeneratedArticle = z.infer<typeof GeneratedArticleSchema>
@@ -416,6 +425,31 @@ const OPINION_PIECE_FORMAT = [
   '- End with a memorable closing line or call to action.',
 ].join('\n')
 
+const CANONICAL_WEDDING_STORY_STRUCTURE = [
+  'CANONICAL ADAPTATION STRUCTURE (ACTIVE FOR THIS ARTICLE):',
+  '- This article MUST be built as a Wedding/Berlin adaptation of ONE canonical Western story.',
+  '- Pick exactly one source tradition: Bible, Greek mythology, Shakespeare, Cervantes, or another widely recognized Western canon story.',
+  '- Adapt the core conflict/archetypes/themes into Wedding/Berlin reality while keeping all your other assigned instructions (topic, tone, satire, local details).',
+  '- Do NOT retell the source beat-by-beat. Loose adaptation is preferred; take the essence and transform it.',
+  '- Keep the piece grounded as satire/news-style writing for The Wedding Times, not as fantasy lore exposition.',
+  '- REQUIRED NARRATIVE SHAPE: write as a journalistic chronicle with a clear protagonist and a chronological sequence of events.',
+  '- MAIN CHARACTER REQUIREMENT: choose one clearly identifiable main character (full name, role, and relation to Wedding/Berlin) and keep them central from beginning to end.',
+  '- SUPPORTING CAST: include 1-3 supporting characters (witnesses, officials, neighbors, rivals, etc.) who interact with the main character and move the story forward.',
+  '- STAKES: make explicit what the main character wants, what blocks them, and what they risk losing (status, money, reputation, housing, access, relationships, etc.).',
+  '- ARC: show a progression for the main character (initial situation -> pressure/conflict -> decision/action -> outcome or cliffhanger).',
+  '- TURNING POINTS: include at least one clear turning point where new information, a public reaction, or an institutional decision changes the direction of events.',
+  '- The body MUST include: (1) setup scene, (2) triggering incident, (3) escalation with concrete actions/reactions, (4) consequence or unresolved ending.',
+  '- Use concrete chronology markers (for example: "on Monday morning", "later that afternoon", "by evening", "the next day").',
+  '- Include named characters and at least one quote tied to the event sequence.',
+  '- Avoid abstract essay mode. This is a reported story about what happened, in order.',
+  '- This assignment is NOT for opinion pieces. Do NOT output categorySlug "opinion" or layout "opinion" when this mode is active.',
+  '- In your article text, explicitly mention the source author/tradition and story title/work you adapted from at least once.',
+  '- You MUST fill canonicalSourceAuthor and canonicalSourceStory in JSON when this mode is active.',
+  '- OPTIONAL TAGLINE (RARE): only when the narrative genuinely ends unresolved, you MAY end with the exact phrase "Story in development."',
+  '- Do NOT use that tagline by default. It should appear in a small minority of canonical stories, never in most outputs.',
+  '- If you use the tagline, spell it exactly as: "Story in development." (capital S, period).',
+].join('\n')
+
 const JSON_SCHEMA = [
   'JSON schema:',
   '{',
@@ -433,7 +467,9 @@ const JSON_SCHEMA = [
   '  "isHeadline": boolean,',
   '  "imageCaption": string|null,  // <= 160 chars',
   '  "imagePrompt": string|null,  // REQUIRED: prompt for an illustrative photorealistic image, no text overlays. (<= 600 chars)',
-  '  "sourceRssTopic": string|null  // If your article was inspired by a real news topic provided, copy the original news headline here verbatim. Otherwise null.',
+  '  "sourceRssTopic": string|null,  // If your article was inspired by a real news topic provided, copy the original news headline here verbatim. Otherwise null.',
+  '  "canonicalSourceAuthor": string|null,  // If canonical adaptation mode is active, author/tradition of the source (e.g. "Homer", "Shakespeare", "The Bible"). Otherwise null.',
+  '  "canonicalSourceStory": string|null  // If canonical adaptation mode is active, specific source work/story (e.g. "Odyssey", "Hamlet", "Book of Job", "Don Quixote"). Otherwise null.',
   '}',
 ].join('\n')
 
@@ -519,6 +555,8 @@ const IMAGE_PROMPT_INSTRUCTIONS = [
 const SURREALISM_AND_LOCAL_KNOWLEDGE = [
   'SURREALISM STYLE (CRITICAL - THIS DEFINES THE PAPER):',
   'The best articles have a TINY surrealist or absurdist twist grounded in REAL local knowledge. Think Yorgos Lanthimos, David Lynch, Monty Python, Boris Vian, Groucho Marx:',
+  '- DO NOT announce the surrealism. Never write meta lines like "then it got surreal", "now the surreal part", "it then became absurd", or similar framing.',
+  '- The article itself must simply be written as if events are being reported normally. Let readers FEEL the absurdity from the events, not from commentary about tone.',
   '- The premise is just ONE small step beyond reality — not 10 steps. One impossible thing happens; everything else reacts realistically.',
   '- The surreal element MUST be rooted in a REAL, SPECIFIC detail about the place. You need to KNOW the location to make the joke work.',
   '',
@@ -1537,7 +1575,10 @@ async function repairToSchema(args: {
     '  "isFeatured": boolean,',
     '  "isHeadline": boolean,',
     '  "imageCaption": string|null,  // <= 160 chars',
-    '  "imagePrompt": string|null  // <= 600 chars',
+    '  "imagePrompt": string|null,  // <= 600 chars',
+    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim when used; else null',
+    '  "canonicalSourceAuthor": string|null,  // REQUIRED when canonical adaptation mode is active; else null',
+    '  "canonicalSourceStory": string|null  // REQUIRED when canonical adaptation mode is active; else null',
     '}',
     '',
     'CRITICAL: If authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio. Generate them based on the slug and article context if missing.',
@@ -1629,7 +1670,10 @@ async function shortenToSchema(args: {
     '  "isFeatured": boolean,',
     '  "isHeadline": boolean,',
     '  "imageCaption": string|null,  // <= 160 chars',
-    '  "imagePrompt": string|null  // <= 600 chars',
+    '  "imagePrompt": string|null,  // <= 600 chars',
+    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim when used; else null',
+    '  "canonicalSourceAuthor": string|null,  // REQUIRED when canonical adaptation mode is active; else null',
+    '  "canonicalSourceStory": string|null  // REQUIRED when canonical adaptation mode is active; else null',
     '}',
     '',
     'CRITICAL: If authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio.',
@@ -1814,6 +1858,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
   // When forceRss or forceOpinion is true, skip feature story
   const useFeatureStoryPrompt = input.forceRss || input.forceOpinion ? false : Math.random() < 0.33
+  // 30% chance to force a canonical Western-story adaptation for non-opinion pieces
+  const useCanonicalWeddingStoryStructure = !input.forceOpinion && Math.random() < 0.3
 
   // Story types for the new prompt
   const storyTypes = [
@@ -2618,6 +2664,25 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           `TOPIC DIRECTION (use as inspiration, NOT as your headline): ${randomFocus}`,
           'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
         ].join('\n')
+  const canonicalStructureInstruction = useCanonicalWeddingStoryStructure
+    ? CANONICAL_WEDDING_STORY_STRUCTURE
+    : ''
+  const recentCanonicalReferencesSection =
+    useCanonicalWeddingStoryStructure &&
+    Array.isArray(input.recentCanonicalStoryReferences) &&
+    input.recentCanonicalStoryReferences.length > 0
+      ? [
+          'RECENT CANONICAL REFERENCES (LAST 20) — AVOID REPETITION:',
+          input.recentCanonicalStoryReferences
+            .slice(0, 20)
+            .map((ref, index) => `${index + 1}. ${ref.author} — ${ref.story}`)
+            .join('\n'),
+          '',
+          'Do NOT reuse the same author+story pair from the list above.',
+          'Prefer not to reuse the same source story at all.',
+          'Try to vary both author/tradition and story whenever possible.',
+        ].join('\n')
+      : ''
 
   const topicContext = useFeatureStoryPrompt
     ? selectedScenario
@@ -2708,6 +2773,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           INTELLECTUAL_EASTER_EGGS,
         ].join('\n'),
     topicInstruction,
+    canonicalStructureInstruction,
+    recentCanonicalReferencesSection,
     recentTitlesSection,
     latestArticleSection,
     headlinePatternsSection,
@@ -2822,6 +2889,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const userPrompt = [
     topicsSection,
+    canonicalStructureInstruction,
+    recentCanonicalReferencesSection,
     'Important: ALL text fields must be written in US English.',
     '',
     `Tone profile target: ${toneProfile.toUpperCase()} (${TONE_PROFILE_GUIDANCE[toneProfile]})`,

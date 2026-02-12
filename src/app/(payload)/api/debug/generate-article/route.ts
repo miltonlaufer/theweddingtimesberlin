@@ -186,6 +186,20 @@ export async function POST(req: Request) {
     })
     .filter((excerpt): excerpt is string => typeof excerpt === 'string' && excerpt.length > 0)
 
+  const recentCanonicalStoryReferences = recentArticlesRes.docs
+    .map((a) => {
+      const doc = a as unknown as {
+        canonicalSourceAuthor?: string
+        canonicalSourceStory?: string
+      }
+      return {
+        author: doc.canonicalSourceAuthor?.trim() ?? '',
+        story: doc.canonicalSourceStory?.trim() ?? '',
+      }
+    })
+    .filter((ref) => ref.author.length > 0 && ref.story.length > 0)
+    .slice(0, 20)
+
   // Extract headline patterns to avoid repetition (using the enhanced function from generateArticle)
   const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
   const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
@@ -213,6 +227,7 @@ export async function POST(req: Request) {
     includeTopics,
     recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
     recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
+    recentCanonicalStoryReferences,
     precomputedBlacklistSummary: blacklistCache.summary,
     recentHeadlinePatterns: uniquePatterns,
   })
@@ -397,6 +412,8 @@ export async function POST(req: Request) {
       isHeadline: generated.isHeadline,
       layout: generated.layout,
       sourceRssTopic: usedRssTopic ?? undefined, // Track if article was inspired by RSS news
+      canonicalSourceAuthor: generated.canonicalSourceAuthor ?? undefined,
+      canonicalSourceStory: generated.canonicalSourceStory ?? undefined,
     },
   })
 

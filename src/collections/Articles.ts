@@ -163,6 +163,22 @@ export const Articles: CollectionConfig = {
         description: 'The RSS news topic that inspired this article (if any)',
       },
     },
+    {
+      name: 'canonicalSourceAuthor',
+      type: 'text',
+      admin: {
+        position: 'sidebar',
+        description: 'Canonical source author/tradition used for adaptation (if any)',
+      },
+    },
+    {
+      name: 'canonicalSourceStory',
+      type: 'text',
+      admin: {
+        position: 'sidebar',
+        description: 'Canonical source story/work used for adaptation (if any)',
+      },
+    },
   ],
   hooks: {
     afterChange: [

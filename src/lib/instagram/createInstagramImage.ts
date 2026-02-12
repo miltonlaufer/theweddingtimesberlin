@@ -26,8 +26,9 @@ export interface CreateAndUploadInstagramImageResult {
 
 const HEADLINE_FONT_FAMILY = 'Libre Baskerville'
 const FALLBACK_FONT_FAMILY = 'Georgia'
+// Variable font (Regular weight); static LibreBaskerville-Regular.ttf was removed from google/fonts
 const LIBRE_BASKERVILLE_TTF_URL =
-  'https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville-Regular.ttf'
+  'https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville%5Bwght%5D.ttf'
 const OVERLAY_BG = 'rgba(18, 18, 18, 0.72)'
 const TEXT_COLOR = '#ffffff'
 const PADDING_RATIO = 0.06
@@ -63,7 +64,7 @@ function getChomskyFontPath(): string {
 
 async function downloadFontToTmp(): Promise<string | null> {
   const tmpDir = process.env.TMPDIR ?? '/tmp'
-  const dest = path.join(tmpDir, 'LibreBaskerville-Regular.ttf')
+  const dest = path.join(tmpDir, 'LibreBaskerville-wght.ttf')
   if (fs.existsSync(dest)) {
     return dest
   }

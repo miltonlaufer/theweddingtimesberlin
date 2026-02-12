@@ -4,6 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NytContainer } from './NytContainer'
+import { InstagramIcon, GitHubIcon } from './SocialIcons'
 
 /******************* ICONS ***********************/
 
@@ -48,26 +49,26 @@ export const NavigationClient: React.FC<NavigationClientProps> = React.memo(
                 <CaretDownIcon />
               </Link>
             ))}
-            <a
-              href="https://www.instagram.com/theweddingtimesberlin/"
-              className="flex items-center leading-none"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Instagram"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/instagram.svg" alt="Instagram" width={14} height={14} />
-            </a>
-            <a
-              href="https://github.com/miltonlaufer/theweddingtimesberlin"
-              className="flex items-center leading-none"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Source code on GitHub"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/github.svg" alt="GitHub" width={14} height={14} />
-            </a>
+            <span className="flex items-center gap-6" suppressHydrationWarning>
+              <a
+                href="https://www.instagram.com/theweddingtimesberlin/"
+                className="flex items-center leading-none text-[#121212]"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Instagram"
+              >
+                <InstagramIcon size={14} />
+              </a>
+              <a
+                href="https://github.com/miltonlaufer/theweddingtimesberlin"
+                className="flex items-center leading-none text-[#121212]"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Source code on GitHub"
+              >
+                <GitHubIcon size={14} />
+              </a>
+            </span>
           </div>
 
           {/* Double line - aligned with content columns */}

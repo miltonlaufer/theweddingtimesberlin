@@ -209,6 +209,7 @@ type GenerateOneContext = {
   topicSummary: string
   recentArticleTitles: string[]
   recentArticleExcerpts: string[]
+  recentCanonicalStoryReferences: Array<{ author: string; story: string }>
   /** Precomputed once per batch so we do not call the analysis model per article. */
   precomputedBlacklistSummary: string
   uniquePatterns: string[]
@@ -238,6 +239,7 @@ async function generateOneArticle(
     includeTopics: slot.includeTopics,
     recentArticleTitles: ctx.recentArticleTitles.slice(0, 40),
     recentArticleExcerpts: ctx.recentArticleExcerpts.slice(0, 40),
+    recentCanonicalStoryReferences: ctx.recentCanonicalStoryReferences.slice(0, 20),
     precomputedBlacklistSummary: ctx.precomputedBlacklistSummary,
     recentHeadlinePatterns: ctx.uniquePatterns,
     latestArticleContentSample: ctx.latestArticleContentSample,
@@ -372,6 +374,8 @@ async function generateOneArticle(
       isHeadline: slotIndex === 0 ? generated.isHeadline : false,
       layout: generated.layout,
       sourceRssTopic: usedRssTopic ?? undefined,
+      canonicalSourceAuthor: generated.canonicalSourceAuthor ?? undefined,
+      canonicalSourceStory: generated.canonicalSourceStory ?? undefined,
     },
   })
   console.log(
@@ -550,6 +554,20 @@ export async function GET(req: Request) {
       })
       .filter((excerpt): excerpt is string => typeof excerpt === 'string' && excerpt.length > 0)
 
+    const recentCanonicalStoryReferences = recentArticlesRes.docs
+      .map((a) => {
+        const doc = a as unknown as {
+          canonicalSourceAuthor?: string
+          canonicalSourceStory?: string
+        }
+        return {
+          author: doc.canonicalSourceAuthor?.trim() ?? '',
+          story: doc.canonicalSourceStory?.trim() ?? '',
+        }
+      })
+      .filter((ref) => ref.author.length > 0 && ref.story.length > 0)
+      .slice(0, 20)
+
     // Extract half of the latest article's content to ensure new articles are different
     let latestArticleContentSample: string | undefined
     if (recentArticlesRes.docs.length > 0) {
@@ -629,6 +647,7 @@ export async function GET(req: Request) {
       topicSummary,
       recentArticleTitles,
       recentArticleExcerpts,
+      recentCanonicalStoryReferences,
       precomputedBlacklistSummary,
       uniquePatterns,
       latestArticleContentSample,
