@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NytContainer } from './NytContainer'
@@ -26,8 +26,24 @@ interface NavigationClientProps {
 
 export const NavigationClient: React.FC<NavigationClientProps> = React.memo(
   function NavigationClient({ categories }) {
+    /******************* STATE ***********************/
+
+    const [mounted, setMounted] = useState(false)
+
+    /******************* COMPUTED ***********************/
+
     const pathname = usePathname()
     const isArticlePage = pathname.startsWith('/article/')
+
+    /******************* EFFECTS ***********************/
+
+    useEffect(() => {
+      // Intentional: trigger re-render after hydration to show client-only icons
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMounted(true)
+    }, [])
+
+    /******************* RENDER ***********************/
 
     if (isArticlePage) return null
 
@@ -49,26 +65,29 @@ export const NavigationClient: React.FC<NavigationClientProps> = React.memo(
                 <CaretDownIcon />
               </Link>
             ))}
-            <span className="flex items-center gap-6" suppressHydrationWarning>
-              <a
-                href="https://www.instagram.com/theweddingtimesberlin/"
-                className="flex items-center leading-none text-[#121212]"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Instagram"
-              >
-                <InstagramIcon size={14} />
-              </a>
-              <a
-                href="https://github.com/miltonlaufer/theweddingtimesberlin"
-                className="flex items-center leading-none text-[#121212]"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Source code on GitHub"
-              >
-                <GitHubIcon size={14} />
-              </a>
-            </span>
+            {/* Render social icons only after mount to avoid hydration mismatch */}
+            {mounted && (
+              <>
+                <a
+                  href="https://www.instagram.com/theweddingtimesberlin/"
+                  className="flex items-center leading-none text-[#121212]"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Instagram"
+                >
+                  <InstagramIcon size={14} />
+                </a>
+                <a
+                  href="https://github.com/miltonlaufer/theweddingtimesberlin"
+                  className="flex items-center leading-none text-[#121212]"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Source code on GitHub"
+                >
+                  <GitHubIcon size={14} />
+                </a>
+              </>
+            )}
           </div>
 
           {/* Double line - aligned with content columns */}
