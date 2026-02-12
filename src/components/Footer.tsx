@@ -112,6 +112,24 @@ export const Footer: React.FC<FooterProps> = React.memo(function Footer({ catego
               ))}
               <li className="mb-2">
                 <a
+                  href="https://www.instagram.com/theweddingtimesberlin/"
+                  className="font-sans text-[15px] text-[#121212] inline-flex items-center"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/instagram.svg"
+                    alt="Instagram"
+                    width={12}
+                    height={12}
+                    className="mr-2"
+                  />
+                  Instagram
+                </a>
+              </li>
+              <li className="mb-2">
+                <a
                   href="https://github.com/miltonlaufer/theweddingtimesberlin"
                   className="font-sans text-[15px] text-[#121212] inline-flex items-center"
                   target="_blank"
