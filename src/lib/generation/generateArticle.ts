@@ -443,7 +443,8 @@ const CANONICAL_WEDDING_STORY_STRUCTURE = [
   '- Include named characters and at least one quote tied to the event sequence.',
   '- Avoid abstract essay mode. This is a reported story about what happened, in order.',
   '- This assignment is NOT for opinion pieces. Do NOT output categorySlug "opinion" or layout "opinion" when this mode is active.',
-  '- In your article text, explicitly mention the source author/tradition and story title/work you adapted from at least once.',
+  '- Do NOT explicitly name or cite the source author/tradition/story in the article text.',
+  '- Keep the adaptation implicit for readers; only the editorial metadata should carry the canonical reference.',
   '- You MUST fill canonicalSourceAuthor and canonicalSourceStory in JSON when this mode is active.',
   '- OPTIONAL TAGLINE (RARE): only when the narrative genuinely ends unresolved, you MAY end with the exact phrase "Story in development."',
   '- Do NOT use that tagline by default. It should appear in a small minority of canonical stories, never in most outputs.',
@@ -467,7 +468,7 @@ const JSON_SCHEMA = [
   '  "isHeadline": boolean,',
   '  "imageCaption": string|null,  // <= 160 chars',
   '  "imagePrompt": string|null,  // REQUIRED: prompt for an illustrative photorealistic image, no text overlays. (<= 600 chars)',
-  '  "sourceRssTopic": string|null,  // If your article was inspired by a real news topic provided, copy the original news headline here verbatim. Otherwise null.',
+  '  "sourceRssTopic": string|null,  // If inspired by RSS, copy the news headline verbatim (headline only; no source labels). Otherwise null.',
   '  "canonicalSourceAuthor": string|null,  // If canonical adaptation mode is active, author/tradition of the source (e.g. "Homer", "Shakespeare", "The Bible"). Otherwise null.',
   '  "canonicalSourceStory": string|null  // If canonical adaptation mode is active, specific source work/story (e.g. "Odyssey", "Hamlet", "Book of Job", "Don Quixote"). Otherwise null.',
   '}',
@@ -591,6 +592,24 @@ const SURREALISM_AND_LOCAL_KNOWLEDGE = [
   '- Golden Gate: tiny club under a bridge, sunrise sessions, cramped dance floor',
   '- IMPORTANT: Berlin techno clubs use INK STAMPS on your hand/arm — NOT wristbands. Wristbands are for festivals.',
   "- If you don't know a real specific detail about the place, pick a different location you DO know about.",
+].join('\n')
+
+const SOURCE_ATTRIBUTION_RULES = [
+  'SOURCE ATTRIBUTION RULES (MANDATORY):',
+  '- Never mention external publisher names in the article text.',
+  '- Forbidden examples: "an article of the New York Times", "the Berliner-Zeitung", "NYTimes".',
+  '- Do NOT write "according to another newspaper" or "as reported by <publisher>".',
+  '- Use only the underlying topic and write as original local reporting/satire.',
+].join('\n')
+
+const AFR_RECURRING_STORY_RULES = [
+  'AFR RECURRING STORY MODE (MANDATORY WHEN ACTIVE):',
+  '- "Alternativ für Ratten (AfR)" is a fictional far-right rat party in Berlin.',
+  '- Party leader: Alice Rattenweidel.',
+  '- Cover AfR developments as satirical political reporting.',
+  '- Include recognizable far-right tropes: anti-immigrant posturing, racist dog whistles, pro-Russia talking points, anti-EU panic, culture-war theatrics.',
+  '- The tone must MOCK and CRITICIZE these positions; never endorse them.',
+  '- No slurs, explicit hate speech, or calls for harm.',
 ].join('\n')
 
 /******************* HELPERS ***********************/
@@ -794,6 +813,135 @@ function getSignificantWords(text: string): Set<string> {
   return out
 }
 
+function normalizeRssTopicLine(line: string): string {
+  const withoutBullet = line.trim().replace(/^-+\s*/, '')
+  const sourceTagged = withoutBullet.match(/^\[[^\]]+\]\s*(.+)$/)
+  if (sourceTagged && sourceTagged[1]) {
+    return sourceTagged[1].trim()
+  }
+  return withoutBullet
+}
+
+const AFD_TOPIC_PATTERN = /\bafd\b|alternative\s+f(?:u|ü)r\s+deutschland/i
+const AFR_TOPIC_PATTERN = /\bafr\b|alternativ\s+f(?:u|ü)r\s+ratten|alice\s+rattenweidel/i
+
+function isAfDTopic(text: string): boolean {
+  return AFD_TOPIC_PATTERN.test(text)
+}
+
+function isAfRTheme(text: string): boolean {
+  return AFR_TOPIC_PATTERN.test(text)
+}
+
+function sanitizeForbiddenSourceMentions(text: string): string {
+  return text
+    .replace(/\ban?\s+article\s+of\s+the\s+new york times\b/gi, 'a recent report')
+    .replace(/\ban?\s+article\s+from\s+the\s+new york times\b/gi, 'a recent report')
+    .replace(/\ban?\s+article\s+of\s+the\s+berliner[-\s]?zeitung\b/gi, 'a recent report')
+    .replace(/\ban?\s+article\s+from\s+the\s+berliner[-\s]?zeitung\b/gi, 'a recent report')
+    .replace(/\bthe\s+new york times\b/gi, 'a major outlet')
+    .replace(/\bnytimes\b/gi, 'a major outlet')
+    .replace(/\bberliner[-\s]?zeitung\b/gi, 'a local outlet')
+}
+
+function sanitizeArticleSourceMentions(article: GeneratedArticle): GeneratedArticle {
+  return {
+    ...article,
+    headline: sanitizeForbiddenSourceMentions(article.headline),
+    subheadline:
+      typeof article.subheadline === 'string'
+        ? sanitizeForbiddenSourceMentions(article.subheadline)
+        : article.subheadline,
+    excerpt:
+      typeof article.excerpt === 'string'
+        ? sanitizeForbiddenSourceMentions(article.excerpt)
+        : article.excerpt,
+    bodyMarkdown: sanitizeForbiddenSourceMentions(article.bodyMarkdown),
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function sanitizeCanonicalAttributionMentions(article: GeneratedArticle): GeneratedArticle {
+  const canonicalAuthor = article.canonicalSourceAuthor?.trim()
+  const canonicalStory = article.canonicalSourceStory?.trim()
+  if (!canonicalAuthor && !canonicalStory) return article
+
+  const scrub = (text: string): string => {
+    let out = text
+
+    // Remove explicit adaptation callouts in visible text while preserving the story itself.
+    out = out.replace(
+      /\b(?:a|an)?\s*(?:loose|modern|direct|free|wedding|berlin|satirical)?\s*adaptation of [^,.\n]+/gi,
+      'a local reinterpretation',
+    )
+    out = out.replace(/\bbased on [^,.\n]+/gi, 'inspired by a classic template')
+
+    if (canonicalAuthor) {
+      out = out.replace(new RegExp(escapeRegExp(canonicalAuthor), 'gi'), 'a canonical author')
+    }
+    if (canonicalStory) {
+      out = out.replace(new RegExp(escapeRegExp(canonicalStory), 'gi'), 'a canonical work')
+    }
+
+    return out
+  }
+
+  return {
+    ...article,
+    headline: scrub(article.headline),
+    subheadline:
+      typeof article.subheadline === 'string' ? scrub(article.subheadline) : article.subheadline,
+    excerpt: typeof article.excerpt === 'string' ? scrub(article.excerpt) : article.excerpt,
+    bodyMarkdown: scrub(article.bodyMarkdown),
+  }
+}
+
+const AFR_EXPLANATION = 'AfR (Alternativ für Ratten)'
+const AFR_EXPLANATION_PATTERN = /\bAfR\s*\(\s*Alternativ\s+f(?:u|ü)r\s+Ratten\s*\)/i
+const AFR_SHORT_PATTERN = /\bAfR\b/i
+
+function ensureAfRExplanationInNonHeadlineText(
+  article: GeneratedArticle,
+  opts?: { force?: boolean },
+): GeneratedArticle {
+  const force = opts?.force ?? false
+  const nonHeadlineFields: Array<keyof GeneratedArticle> = [
+    'subheadline',
+    'excerpt',
+    'bodyMarkdown',
+    'imageCaption',
+  ]
+
+  const getText = (key: keyof GeneratedArticle): string =>
+    typeof article[key] === 'string' ? (article[key] as string) : ''
+
+  const hasExpandedAfR = nonHeadlineFields.some((key) => AFR_EXPLANATION_PATTERN.test(getText(key)))
+  if (hasExpandedAfR) return article
+
+  const hasAfRReference = nonHeadlineFields.some((key) => AFR_SHORT_PATTERN.test(getText(key)))
+  if (hasAfRReference) {
+    // Expand the first non-headline AfR mention; never touch the headline.
+    for (const key of nonHeadlineFields) {
+      const value = getText(key)
+      if (!AFR_SHORT_PATTERN.test(value)) continue
+      return {
+        ...article,
+        [key]: value.replace(/\bAfR\b/, AFR_EXPLANATION),
+      }
+    }
+  }
+
+  if (!force) return article
+
+  return {
+    ...article,
+    bodyMarkdown: `${article.bodyMarkdown}\n\nThe ${AFR_EXPLANATION} remained central to the dispute.`,
+  }
+}
+
 /**
  * Returns true if the RSS topic line overlaps too much with recent article titles
  * or the blacklist summary (same story already covered). Used to avoid assigning
@@ -806,7 +954,7 @@ export function rssTopicOverlapsBlacklist(params: {
   minOverlapWords?: number
 }): boolean {
   const { rssTopicLine, recentArticleTitles, blacklistSummary, minOverlapWords = 2 } = params
-  const topicWords = getSignificantWords(rssTopicLine)
+  const topicWords = getSignificantWords(normalizeRssTopicLine(rssTopicLine))
   if (topicWords.size === 0) return false
 
   const blacklistText = [...recentArticleTitles, blacklistSummary].join(' ')
@@ -1576,7 +1724,7 @@ async function repairToSchema(args: {
     '  "isHeadline": boolean,',
     '  "imageCaption": string|null,  // <= 160 chars',
     '  "imagePrompt": string|null,  // <= 600 chars',
-    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim when used; else null',
+    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim (headline only, no source labels) when used; else null',
     '  "canonicalSourceAuthor": string|null,  // REQUIRED when canonical adaptation mode is active; else null',
     '  "canonicalSourceStory": string|null  // REQUIRED when canonical adaptation mode is active; else null',
     '}',
@@ -1671,7 +1819,7 @@ async function shortenToSchema(args: {
     '  "isHeadline": boolean,',
     '  "imageCaption": string|null,  // <= 160 chars',
     '  "imagePrompt": string|null,  // <= 600 chars',
-    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim when used; else null',
+    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim (headline only, no source labels) when used; else null',
     '  "canonicalSourceAuthor": string|null,  // REQUIRED when canonical adaptation mode is active; else null',
     '  "canonicalSourceStory": string|null  // REQUIRED when canonical adaptation mode is active; else null',
     '}',
@@ -1948,6 +2096,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Berlin announces all new buildings must include a "Berghain waiting area" in the lobby',
     'The great Berlin WiFi crisis: public networks now require a 3-hour orientation session',
     'Wedding district votes to make every day "Späti Appreciation Day"',
+    // AfR recurring political satire stories
+    'Alternativ für Ratten (AfR) opens a campaign office in Wedding sewers, promising "traditional tunnel values"',
+    'Alice Rattenweidel launches an anti-immigrant platform blaming all municipal failures on "new rats from outside the district"',
+    'AfR unveils a pro-Russia foreign policy paper printed on stolen Bürgeramt forms',
+    'AfR demands immediate exit from the EU while accepting every available EU neighborhood subsidy',
     // Drugs & Techno stories - Berlin's famous underground culture
     'A Berghain bouncer has started a side business rating peoples pupils before they even reach the door',
     'Görlitzer Park dealer introduces subscription model with loyalty points and a newsletter',
@@ -2098,6 +2251,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'the intersection of Berlin Clans and legitimate business empires',
     'Clan weddings that cost more than most Berlin apartments',
     'the bureaucratic efficiency of Berlin Clans vs the inefficiency of German bureaucracy',
+    // AfR recurring political satire
+    'Alternativ für Ratten (AfR), Alice Rattenweidel, and far-right rat politics in Berlin',
+    'AfR anti-immigrant rhetoric, racist dog whistles, and culture-war panic in Wedding',
+    'AfR pro-Russia messaging, anti-EU campaigns, and opportunistic nationalist theater',
+    'the latest AfR party developments: scandals, rallies, internal feuds, and fear-based campaigns',
     // Techno - Berlin's beating heart (literally, 130 BPM)
     'Berlin techno scene, DJ drama, or warehouse rave culture',
     'Berghain rejection stories, club outfit disasters, or bouncer psychology',
@@ -2437,11 +2595,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const rssTopicsRaw = input.topicSummary
     .trim()
     .split('\n')
+    .map((line) => normalizeRssTopicLine(line))
     .filter((line) => line.length > 0)
+  const uniqueRssTopics = Array.from(new Set(rssTopicsRaw))
   const rssTopics =
-    rssTopicsRaw.length > 0 && recentTitles.length > 0
-      ? rssTopicsRaw.filter(
+    uniqueRssTopics.length > 0 && recentTitles.length > 0
+      ? uniqueRssTopics.filter(
           (line) =>
+            isAfDTopic(line) ||
             !rssTopicOverlapsBlacklist({
               rssTopicLine: line,
               recentArticleTitles: recentTitles,
@@ -2449,24 +2610,26 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
               minOverlapWords: 2,
             }),
         )
-      : rssTopicsRaw
-  if (rssTopicsRaw.length > 0 && rssTopics.length < rssTopicsRaw.length) {
+      : uniqueRssTopics
+  if (uniqueRssTopics.length > 0 && rssTopics.length < uniqueRssTopics.length) {
     console.log(
-      `${LOG.prefix} Filtered ${rssTopicsRaw.length - rssTopics.length} RSS topic(s) that overlap blacklist`,
+      `${LOG.prefix} Filtered ${uniqueRssTopics.length - rssTopics.length} RSS topic(s) that overlap blacklist`,
     )
   }
   const hasRssTopics = input.includeTopics && rssTopics.length > 0
+  const afdTriggeredRssTopic = hasRssTopics ? rssTopics.find((topic) => isAfDTopic(topic)) : null
   const selectedRssTopic = hasRssTopics
-    ? rssTopics[Math.floor(Math.random() * rssTopics.length)]
+    ? (afdTriggeredRssTopic ?? rssTopics[Math.floor(Math.random() * rssTopics.length)])
     : null
 
   // Track whether RSS topic was ACTUALLY used in the prompt (not just selected)
   // RSS topics are only used when NOT a feature story AND RSS topics are available
   const actuallyUsedRssTopic =
     !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
+  const useAfRRssMode = Boolean(actuallyUsedRssTopic && isAfDTopic(actuallyUsedRssTopic))
 
   LOG.step(
-    `STEP 2: topic/scenario selected | featureStory=${useFeatureStoryPrompt} | rss=${!!actuallyUsedRssTopic} | drugsTechno=${useDrugsOrTechnoTopic || useDrugsOrTechnoScenario} | startup=${useStartupTopic || useStartupScenario}`,
+    `STEP 2: topic/scenario selected | featureStory=${useFeatureStoryPrompt} | rss=${!!actuallyUsedRssTopic} | afr=${useAfRRssMode} | drugsTechno=${useDrugsOrTechnoTopic || useDrugsOrTechnoScenario} | startup=${useStartupTopic || useStartupScenario}`,
   )
   if (actuallyUsedRssTopic) {
     console.log(`${LOG.prefix} RSS topic: ${actuallyUsedRssTopic.slice(0, 80)}...`)
@@ -2630,6 +2793,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ].join('\n')
       : ''
 
+  const useAfRTopicMode = useAfRRssMode || isAfRTheme(randomFocus) || isAfRTheme(selectedScenario)
+
   // Determine topic instruction based on article type
   const topicInstruction = useFeatureStoryPrompt
     ? [
@@ -2655,11 +2820,19 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         'This is NOT an opinion piece or abstract satire. This is a NEWS STORY about something absurd but specific.',
       ].join('\n')
     : hasRssTopics && selectedRssTopic
-      ? [
-          'PRIMARY TOPIC SOURCE: A real-world news headline will be provided. You MUST write a satirical Berlin angle on that news story.',
-          `SECONDARY/BACKUP THEME (use only if the news topic is too narrow): ${randomFocus}`,
-          'The real news topic takes PRIORITY - find a clever Berlin connection to it.',
-        ].join('\n')
+      ? useAfRRssMode
+        ? [
+            'PRIMARY TOPIC SOURCE: This real-world headline references AfD.',
+            'MANDATORY REFRAME: Write the story as a development about the fictional rat party "Alternativ für Ratten (AfR)", not AfD directly.',
+            'Use the real headline as inspiration only; transform it into AfR political satire in Berlin.',
+            `SECONDARY/BACKUP THEME (use only if the news topic is too narrow): ${randomFocus}`,
+            AFR_RECURRING_STORY_RULES,
+          ].join('\n')
+        : [
+            'PRIMARY TOPIC SOURCE: A real-world news headline will be provided. You MUST write a satirical Berlin angle on that news story.',
+            `SECONDARY/BACKUP THEME (use only if the news topic is too narrow): ${randomFocus}`,
+            'The real news topic takes PRIORITY - find a clever Berlin connection to it.',
+          ].join('\n')
       : [
           `TOPIC DIRECTION (use as inspiration, NOT as your headline): ${randomFocus}`,
           'CRITICAL: The topic direction above is just a THEME to inspire you. DO NOT copy it as your headline. Create your OWN original, clever headline that relates to the theme but is distinctly different wording.',
@@ -2743,6 +2916,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '- Instead of "the vibe was off", try "the atmosphere felt wrong", "something was different", "the energy had shifted", etc.',
     '- Do NOT use overly precise clock times like "at 3:47pm" or "at 6:42 a.m." — they sound forced and robotic.',
     '- Instead use APPROXIMATE times: "around 9:40 am", "reportedly around 10:30", "sometime before noon", "early that evening", "in the morning", "shortly after midnight".',
+    '',
+    SOURCE_ATTRIBUTION_RULES,
+    '',
+    useAfRTopicMode ? AFR_RECURRING_STORY_RULES : '',
     '',
     satireBriefSection,
     '',
@@ -2832,6 +3009,20 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'CURRENT NEWS TOPIC TO SATIRIZE:',
           selectedRssTopic,
           '',
+          useAfRRssMode
+            ? [
+                '═══════════════════════════════════════════════════════════════════',
+                'MANDATORY AfR MODE:',
+                '- This RSS topic references AfD.',
+                '- You MUST write about "Alternativ für Ratten (AfR)" instead.',
+                '- The leader is Alice Rattenweidel.',
+                '- Keep the piece focused on AfR developments in Berlin.',
+                '- Satirize anti-immigrant rhetoric, racist dog whistles, pro-Russia spin, anti-EU panic, and related far-right tropes.',
+                '- Mock and criticize these positions; do not endorse them.',
+                '═══════════════════════════════════════════════════════════════════',
+                '',
+              ].join('\n')
+            : '',
           // When drugs/techno is selected, add the required angle
           useDrugsOrTechnoTopic
             ? [
@@ -2849,6 +3040,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           'CRITICAL INSTRUCTION: You MUST write a satirical article that connects this real-world news topic to Berlin.',
           'Take the essence/theme of this news story and write about how it manifests in Berlin, the Wedding neighborhood, or the Berlin expat/local scene.',
           'REMINDER: "Wedding" refers to the Berlin neighborhood, NOT wedding ceremonies. Do NOT write about weddings, marriage, or wedding-related topics.',
+          SOURCE_ATTRIBUTION_RULES,
           'Examples of how to connect:',
           useDrugsOrTechnoTopic
             ? '- Connect to clubs, DJs, drug culture, after-parties, Berghain queues, dealer economics, ketamine therapy, etc.'
@@ -2877,6 +3069,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           'You MUST write an article about this specific topic. Do not ignore it.',
           'This is your PRIMARY directive - the article must be clearly about this topic.',
+          useAfRTopicMode ? AFR_RECURRING_STORY_RULES : '',
           '',
           'ARTICLE LENGTH: The article should be approximately 400 words. Do NOT exceed 500 words. Keep it tight, punchy, and concise.',
           input.forceOpinion
@@ -2892,6 +3085,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     canonicalStructureInstruction,
     recentCanonicalReferencesSection,
     'Important: ALL text fields must be written in US English.',
+    SOURCE_ATTRIBUTION_RULES,
     '',
     `Tone profile target: ${toneProfile.toUpperCase()} (${TONE_PROFILE_GUIDANCE[toneProfile]})`,
     '',
@@ -3080,6 +3274,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       console.warn(`${LOG.prefix} Critique/rewrite step failed; keeping current article`, err)
     }
 
+    validated = ensureAfRExplanationInNonHeadlineText(
+      sanitizeCanonicalAttributionMentions(sanitizeArticleSourceMentions(validated)),
+      { force: useAfRTopicMode },
+    )
+
     if (input.forceOpinion) {
       validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
     }
@@ -3094,11 +3293,18 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   } catch {
     console.log(`${LOG.prefix} Parse/validation error, repairing...`)
     // Fallback: deterministic repair using cheaper model
-    const repaired = await repairToSchema({
-      badOutput: text,
-      categories: input.categories,
-      authors: input.authors,
-    })
+    const repaired = ensureAfRExplanationInNonHeadlineText(
+      sanitizeCanonicalAttributionMentions(
+        sanitizeArticleSourceMentions(
+          await repairToSchema({
+            badOutput: text,
+            categories: input.categories,
+            authors: input.authors,
+          }),
+        ),
+      ),
+      { force: useAfRTopicMode },
+    )
     if (input.forceOpinion) {
       repaired.categorySlug = 'opinion'
       repaired.layout = 'opinion'
