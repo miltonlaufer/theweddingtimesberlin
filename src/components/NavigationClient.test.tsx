@@ -17,8 +17,18 @@ describe('NavigationClient', () => {
 
   it('renders category links for non-article pages', () => {
     mockedUsePathname.mockReturnValue('/')
-    const { getByText } = render(<NavigationClient categories={[{ name: 'News', slug: 'news' }]} />)
+    const { getByText, getByRole } = render(
+      <NavigationClient categories={[{ name: 'News', slug: 'news' }]} />,
+    )
     expect(getByText('News')).toBeInTheDocument()
     expect(getByText('News').closest('a')).toHaveAttribute('href', '/section/news')
+    expect(getByRole('link', { name: 'Instagram' })).toHaveAttribute(
+      'href',
+      'https://www.instagram.com/theweddingtimesberlin/',
+    )
+    expect(getByRole('link', { name: 'Source code on GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/miltonlaufer/theweddingtimesberlin',
+    )
   })
 })

@@ -1,6 +1,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { Masthead, NavigationServer, SatiricalRibbon, FooterServer } from '@/components'
+import { DevServiceWorkerReset } from '@/components/DevServiceWorkerReset'
 import { StoreProvider } from '@/stores'
 import '../styles/global.css'
 
@@ -9,6 +10,7 @@ import '../styles/global.css'
 export default function NotFound() {
   return (
     <div className="frontend-app">
+      <DevServiceWorkerReset />
       <StoreProvider>
         <div className="min-h-screen flex flex-col">
           <SatiricalRibbon />
@@ -23,7 +25,8 @@ export default function NotFound() {
                 This page has been relocated to a better neighborhood. Probably gentrified.
               </p>
               <p className="mt-4 font-serif text-lg text-[#333] leading-relaxed">
-                If this is Germany&apos;s internet, we apologize on its behalf. The page might still be waiting for its Anmeldung appointment.
+                If this is Germany&apos;s internet, we apologize on its behalf. The page might still
+                be waiting for its Anmeldung appointment.
               </p>
 
               <div className="mt-8 flex items-center gap-4">

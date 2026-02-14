@@ -2,6 +2,7 @@ import React from 'react'
 import { Masthead, NavigationServer, SatiricalRibbon, FooterServer } from '@/components'
 import { UpdateModalClient } from '@/components/UpdateModalClient'
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt'
+import { DevServiceWorkerReset } from '@/components/DevServiceWorkerReset'
 import { StoreProvider } from '@/stores'
 import '../../styles/global.css'
 import { GoogleAnalyticsClient } from '@/components/GoogleAnalyticsClient'
@@ -18,6 +19,7 @@ export default function FrontendLayout({ children }: FrontendLayoutProps) {
   return (
     <div className="frontend-app">
       <GoogleAnalyticsClient />
+      <DevServiceWorkerReset />
       <StoreProvider>
         <div className="min-h-screen flex flex-col">
           <UpdateModalClient />
