@@ -2291,6 +2291,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     // Kiez News
     'local neighborhood drama, kiez gossip, or community board meetings',
     'BVG transit delays, U-Bahn drama, or S-Bahn chaos',
+    'BVG strikes, sudden cancellations, and "service disruption" as a permanent state',
+    'endless BVG construction projects that move platforms but solve nothing',
     'new hipster café openings, shop closures, or rent hikes on your block',
     'passive-aggressive notes in apartment buildings, or neighbor feuds',
     // Gentrification - expanded
@@ -2345,11 +2347,21 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'climate protests, Last Generation activists, or environmental drama',
     'art galleries, street art, or Berlin creative scene',
     'German workplace culture, sick days, or office politics',
+    'Germanys sacred sick note culture: one mild symptom, one full week off',
+    'the national productivity theater: everyone is busy, nothing gets done',
+    'colleagues who are "out sick" all week and return with fresh brunch recommendations',
     'dating in Berlin, Tinder culture, or relationship chaos',
     'Berlin drug culture, club bathroom discoveries, or ketamine brunch',
     'Berlin decadence, after-parties that last days, or hedonistic lifestyle',
     'Berlin filth, lack of street cleaning, overflowing trash, or rat sightings',
     'Görlitzer Park shenanigans, dealer diplomacy, or park culture',
+    // Health system & family infrastructure
+    'the German health system: impossible appointments, paper forms, and digitalization cosplay',
+    'waiting 3 hours with an appointment while the Praxis pretends time is a suggestion',
+    'doctors who are rude, dismissive, and somehow still behind schedule by noon',
+    'treatments that feel stuck between bureaucracy, folklore, and borderline non-science',
+    'Kita chaos: staff shortages, constant sick leave, and parents in permanent emergency mode',
+    'Kitas that close early, cancel often, and call it reliable childcare',
     // Edgier topics
     'polyamory as an excuse for commitment issues in Berlin',
     'vegans who still do cocaine on weekends',
