@@ -639,6 +639,33 @@ const SOURCE_ATTRIBUTION_RULES = [
   '- Use only the underlying topic and write as original local reporting/satire.',
 ].join('\n')
 
+const NEWSPAPER_STRUCTURE_RULES = [
+  'NEWSPAPER STRUCTURE (MANDATORY FOR NON-OPINION PIECES):',
+  '- Write as a publishable newspaper article, not a sketch, list, or abstract rant.',
+  '- OPENING LEAD must answer who/what/where quickly (first paragraph).',
+  '- Include chronological movement (what happened first, then what followed).',
+  '- Include at least one attributed quote from a named person/source.',
+  '- Include at least one institutional or official reaction when relevant (BVG, district office, police, landlord association, club spokesperson, etc.).',
+  '- End with a concrete consequence, unresolved development, or immediate next step.',
+  '- If categorySlug="opinion" and layout="opinion", follow OPINION_PIECE_FORMAT instead of this rule.',
+].join('\n')
+
+const NEWSPAPER_VARIANT_GUIDE = [
+  'ARTICLE FORMAT VARIANTS (PICK THE ONE THAT FITS THE STORY):',
+  '- News Report: hard-news lead, evidence/details, quotes, consequence.',
+  '- Police Chronicle: incident timeline, witnesses, authority statement, status update.',
+  '- Civic/Bureaucracy Dispatch: procedural friction, affected residents, office response, practical fallout.',
+  '- Nightlife/Scene Chronicle: event timeline, participants, venue details, morning-after consequences.',
+  '- Opinion Editorial (only when opinion mode): first-person argument and personal thesis.',
+].join('\n')
+
+const ANTI_META_SURREAL_RULES = [
+  'ANTI-META SURREAL RULES (MANDATORY):',
+  '- Never narrate tone using phrases like "the surreal part", "then it got surreal", "in a surreal/absurd twist".',
+  '- Never explain that the story is absurd. Report events plainly; let absurdity emerge from facts and reactions.',
+  '- Replace meta framing with concrete observable detail (actions, quotes, consequences).',
+].join('\n')
+
 const AFR_RECURRING_STORY_RULES = [
   'AFR RECURRING STORY MODE (MANDATORY WHEN ACTIVE):',
   '- "Alternativ für Ratten (AfR)" is a fictional far-right rat party in Berlin.',
@@ -1143,6 +1170,40 @@ function sanitizeArticleSourceMentions(article: GeneratedArticle): GeneratedArti
         ? sanitizeForbiddenSourceMentions(article.excerpt)
         : article.excerpt,
     bodyMarkdown: sanitizeForbiddenSourceMentions(article.bodyMarkdown),
+  }
+}
+
+const META_SURREAL_PATTERNS: RegExp[] = [
+  /\b(?:now|here(?:'s| is)?)\s+the\s+surreal\s+part\b[:,-]*/gi,
+  /\b(?:the|this)\s+(?:surreal|absurd)\s+part\b[:,-]*/gi,
+  /\b(?:then|and then|at that point)\s+it\s+(?:got|became|turned)\s+(?:surreal|absurd)\b[,:;-]*/gi,
+  /\bin an?\s+(?:surreal|absurd)\s+twist\b[,:;-]*/gi,
+  /\bas if things?\s+(?:weren't|were not)\s+weird enough\b[,:;-]*/gi,
+]
+
+function sanitizeMetaSurrealText(text: string): string {
+  let out = text
+  for (const pattern of META_SURREAL_PATTERNS) {
+    out = out.replace(pattern, '')
+  }
+  out = out.replace(/[ \t]{2,}/g, ' ')
+  out = out.replace(/\n{3,}/g, '\n\n')
+  return out.trim()
+}
+
+function sanitizeMetaSurrealFraming(article: GeneratedArticle): GeneratedArticle {
+  return {
+    ...article,
+    headline: sanitizeMetaSurrealText(article.headline),
+    subheadline:
+      typeof article.subheadline === 'string'
+        ? sanitizeMetaSurrealText(article.subheadline)
+        : article.subheadline,
+    excerpt:
+      typeof article.excerpt === 'string'
+        ? sanitizeMetaSurrealText(article.excerpt)
+        : article.excerpt,
+    bodyMarkdown: sanitizeMetaSurrealText(article.bodyMarkdown),
   }
 }
 
@@ -3376,6 +3437,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     SURREALISM_AND_LOCAL_KNOWLEDGE,
     '',
+    NEWSPAPER_STRUCTURE_RULES,
+    '',
+    NEWSPAPER_VARIANT_GUIDE,
+    '',
+    ANTI_META_SURREAL_RULES,
+    '',
     useFeatureStoryPrompt
       ? [
           'Tone: Deadpan, serious journalism about absurd situations rooted in REAL social truths. Write with the straight-faced seriousness of a real news reporter, but the humor comes from brutal honesty about how people actually behave—the hypocrisy, the self-deception, the contradictions nobody wants to acknowledge. Think Louis CK doing journalism: the comedy is in naming what everyone sees but nobody says.',
@@ -3601,6 +3668,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     TURKISH_REMINDER_SHORT,
     '',
+    NEWSPAPER_STRUCTURE_RULES,
+    '',
+    NEWSPAPER_VARIANT_GUIDE,
+    '',
+    ANTI_META_SURREAL_RULES,
+    '',
     !useFeatureStoryPrompt
       ? [EDGE_SHORT, '', SPICE_IT_UP, '', INTELLECTUAL_EASTER_EGGS, ''].join('\n')
       : '',
@@ -3781,7 +3854,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     }
 
     validated = ensureAfRExplanationInNonHeadlineText(
-      sanitizeCanonicalAttributionMentions(sanitizeArticleSourceMentions(validated)),
+      sanitizeMetaSurrealFraming(
+        sanitizeCanonicalAttributionMentions(sanitizeArticleSourceMentions(validated)),
+      ),
       { force: useAfRTopicMode },
     )
 
@@ -3812,16 +3887,18 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     console.log(`${LOG.prefix} Parse/validation error, repairing...`)
     // Fallback: deterministic repair using cheaper model
     const repaired = ensureAfRExplanationInNonHeadlineText(
-      sanitizeCanonicalAttributionMentions(
-        sanitizeArticleSourceMentions(
-          await repairToSchema({
-            badOutput: text,
-            categories: input.categories,
-            authors: input.authors,
-            outputSchemaMode,
-            seedDraft: input.seedDraft,
-            usedRssTopic: actuallyUsedRssTopic,
-          }),
+      sanitizeMetaSurrealFraming(
+        sanitizeCanonicalAttributionMentions(
+          sanitizeArticleSourceMentions(
+            await repairToSchema({
+              badOutput: text,
+              categories: input.categories,
+              authors: input.authors,
+              outputSchemaMode,
+              seedDraft: input.seedDraft,
+              usedRssTopic: actuallyUsedRssTopic,
+            }),
+          ),
         ),
       ),
       { force: useAfRTopicMode },
