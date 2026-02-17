@@ -16,6 +16,7 @@ function shouldPostToInstagram(
   previousDoc: ArticleDoc | null,
   operation: 'create' | 'update' | 'delete',
 ): boolean {
+  if (process.env.INSTAGRAM_AUTO_POST_ON_ARTICLE_CREATE !== 'true') return false
   if (operation === 'delete') return false
   if (doc.status !== 'published') return false
   const hadImage = Boolean(doc.featuredImageUrl?.trim())

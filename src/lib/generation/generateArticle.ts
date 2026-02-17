@@ -37,6 +37,14 @@ export interface GenerateArticleInput {
   forceOpinion?: boolean // Force opinion/editorial piece (categorySlug "opinion", layout "opinion")
   /** When set, pre-analysis is skipped and this summary is used for the blacklist. Cron runs analysis once per batch. */
   precomputedBlacklistSummary?: string
+  /** Optional draft lock: when set, headline/subheadline/excerpt are forced to these values. */
+  seedDraft?: {
+    headline: string
+    subheadline?: string | null
+    excerpt?: string | null
+    /** Optional topic/news hook selected during draft stage to preserve continuity. */
+    topicHint?: string | null
+  }
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -67,6 +75,8 @@ export const GeneratedArticleSchema = z.object({
 })
 
 export type GeneratedArticle = z.infer<typeof GeneratedArticleSchema>
+
+type OutputSchemaMode = 'full' | 'body-only-locked-draft'
 
 export interface GenerateArticleResult {
   article: GeneratedArticle
@@ -117,6 +127,13 @@ const LOG = {
     const trimmed = value.length <= maxLen ? value : value.slice(0, maxLen) + '...'
     console.log(`${LOG.prefix} ${label} (${value.length} chars):\n${trimmed}`)
   },
+}
+
+const REPETITION_GUARD_PREFIX = 'REPETITION_GUARD'
+
+export function isRetryableGenerationError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.message.includes(REPETITION_GUARD_PREFIX)
 }
 
 /**
@@ -474,11 +491,31 @@ const JSON_SCHEMA = [
   '}',
 ].join('\n')
 
+const JSON_SCHEMA_BODY_ONLY = [
+  'JSON schema (LOCKED DRAFT MODE):',
+  '{',
+  '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
+  '  "categorySlug": string,  // existing slug OR new slug if creating category',
+  '  "authorSlug": string,  // existing slug OR new slug if creating author',
+  '  "newAuthorName": string|null,  // REQUIRED if creating new author (<= 60 chars)',
+  '  "newAuthorTitle": string|null,  // REQUIRED if creating new author (their beat/role, <= 100 chars)',
+  '  "newAuthorBio": string|null,  // REQUIRED if creating new author (2-3 funny sentences, <= 500 chars)',
+  '  "layout": "standard"|"wide"|"opinion",',
+  '  "isFeatured": boolean,',
+  '  "isHeadline": boolean,',
+  '  "imageCaption": string|null,  // <= 160 chars',
+  '  "imagePrompt": string|null,  // <= 600 chars',
+  '  "canonicalSourceAuthor": string|null,  // If canonical adaptation mode is active, author/tradition of the source. Otherwise null.',
+  '  "canonicalSourceStory": string|null  // If canonical adaptation mode is active, specific source work/story. Otherwise null.',
+  '}',
+].join('\n')
+
 const AUTHOR_SELECTION = [
   'AUTHOR SELECTION:',
   'You have two options for the author:',
   '1. Pick an existing author from the list below (use their slug as authorSlug)',
-  '2. CREATE A NEW AUTHOR (strongly encouraged ~50% of the time!) - invent a fictional journalist with a unique personality',
+  '2. Create a new author ONLY when none of the existing authors fit the story voice.',
+  'Default behavior: reuse an existing author. New authors should be rare.',
   '',
   'If creating a NEW author:',
   '- Set authorSlug to a new unique slug (lowercase, hyphens, e.g. "klaus-bierstein")',
@@ -796,21 +833,270 @@ const OVERLAP_STOPWORDS = new Set([
   'own',
 ])
 
+function parseEnvInt(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.trunc(parsed)
+}
+
+function parseEnvFloat(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return fallback
+  return parsed
+}
+
+const REPETITION_BIGRAM_MIN = Math.max(1, parseEnvInt('REPETITION_GUARD_BIGRAM_MIN', 3))
+const REPETITION_WORDS_WITH_JACCARD_MIN = Math.max(
+  1,
+  parseEnvInt('REPETITION_GUARD_WORDS_WITH_JACCARD_MIN', 4),
+)
+const REPETITION_JACCARD_MIN = Math.max(0, parseEnvFloat('REPETITION_GUARD_JACCARD_MIN', 0.34))
+const REPETITION_WORDS_WITH_BIGRAM_MIN = Math.max(
+  1,
+  parseEnvInt('REPETITION_GUARD_WORDS_WITH_BIGRAM_MIN', 3),
+)
+const REPETITION_CO_BIGRAM_MIN = Math.max(1, parseEnvInt('REPETITION_GUARD_CO_BIGRAM_MIN', 2))
+const REPETITION_WORD_ONLY_MIN = Math.max(1, parseEnvInt('REPETITION_GUARD_WORD_ONLY_MIN', 11))
+const REPETITION_WORD_ONLY_JACCARD_MIN = Math.max(
+  0,
+  parseEnvFloat('REPETITION_GUARD_WORD_ONLY_JACCARD_MIN', 0.11),
+)
+
 /**
- * Extract significant (non-stopword, length >= 3) words from text, lowercase.
- * Used to detect overlap between an RSS topic and blacklisted content.
+ * Extract significant (non-stopword, length >= 3) tokens from text, lowercase.
+ * Keeps token order for n-gram similarity checks.
  */
-function getSignificantWords(text: string): Set<string> {
+function getSignificantTokenSequence(text: string): string[] {
   const words = text
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-  const out = new Set<string>()
+
+  const out: string[] = []
   for (const w of words) {
     const cleaned = w.replace(/[^a-z]/g, '')
-    if (cleaned.length >= 3 && !OVERLAP_STOPWORDS.has(cleaned)) out.add(cleaned)
+    if (cleaned.length >= 3 && !OVERLAP_STOPWORDS.has(cleaned)) out.push(cleaned)
   }
   return out
+}
+
+/**
+ * Extract significant words as a set (deduplicated).
+ * Used to detect overlap between an RSS topic and blacklisted content.
+ */
+function getSignificantWords(text: string): Set<string> {
+  return new Set(getSignificantTokenSequence(text))
+}
+
+function buildTokenBigrams(tokens: string[]): Set<string> {
+  const out = new Set<string>()
+  for (let i = 0; i < tokens.length - 1; i++) {
+    out.add(`${tokens[i]} ${tokens[i + 1]}`)
+  }
+  return out
+}
+
+function countSetOverlap(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0
+  const [small, large] = left.size <= right.size ? [left, right] : [right, left]
+  let count = 0
+  for (const item of small) {
+    if (large.has(item)) count += 1
+  }
+  return count
+}
+
+type SimilarityAssessment = {
+  overlaps: boolean
+  score: number
+  reason: string
+}
+
+function assessPairSimilarity(candidate: string, reference: string): SimilarityAssessment {
+  const candidateTokens = getSignificantTokenSequence(candidate)
+  const referenceTokens = getSignificantTokenSequence(reference)
+  if (candidateTokens.length === 0 || referenceTokens.length === 0) {
+    return { overlaps: false, score: 0, reason: 'insufficient tokens' }
+  }
+
+  const candidateWords = new Set(candidateTokens)
+  const referenceWords = new Set(referenceTokens)
+  const overlapWords = countSetOverlap(candidateWords, referenceWords)
+  const unionSize = candidateWords.size + referenceWords.size - overlapWords
+  const jaccard = unionSize > 0 ? overlapWords / unionSize : 0
+
+  const candidateBigrams = buildTokenBigrams(candidateTokens)
+  const referenceBigrams = buildTokenBigrams(referenceTokens)
+  const overlapBigrams = countSetOverlap(candidateBigrams, referenceBigrams)
+
+  const overlaps =
+    overlapBigrams >= REPETITION_BIGRAM_MIN ||
+    (overlapWords >= REPETITION_WORDS_WITH_JACCARD_MIN && jaccard >= REPETITION_JACCARD_MIN) ||
+    (overlapWords >= REPETITION_WORDS_WITH_BIGRAM_MIN &&
+      overlapBigrams >= REPETITION_CO_BIGRAM_MIN) ||
+    (overlapWords >= REPETITION_WORD_ONLY_MIN && jaccard >= REPETITION_WORD_ONLY_JACCARD_MIN)
+
+  return {
+    overlaps,
+    score: overlapWords * 2 + overlapBigrams * 3 + jaccard * 10,
+    reason: `wordOverlap=${overlapWords}, bigramOverlap=${overlapBigrams}, jaccard=${jaccard.toFixed(2)}`,
+  }
+}
+
+export function assessRecentCoverageOverlap(params: { candidate: string; references: string[] }): {
+  overlaps: boolean
+  score: number
+  reason: string
+  matchedReference: string | null
+} {
+  const { candidate, references } = params
+  if (!candidate.trim() || references.length === 0) {
+    return { overlaps: false, score: 0, reason: 'no references', matchedReference: null }
+  }
+
+  let bestScore = 0
+  let bestReason = 'no overlap'
+  let bestReference: string | null = null
+  let overlapScore = -1
+  let overlapReason = ''
+  let overlapReference: string | null = null
+
+  for (const reference of references) {
+    const assessment = assessPairSimilarity(candidate, reference)
+    if (assessment.score > bestScore) {
+      bestScore = assessment.score
+      bestReason = assessment.reason
+      bestReference = reference
+    }
+    if (assessment.overlaps && assessment.score > overlapScore) {
+      overlapScore = assessment.score
+      overlapReason = assessment.reason
+      overlapReference = reference
+    }
+  }
+
+  if (overlapScore >= 0) {
+    return {
+      overlaps: true,
+      score: overlapScore,
+      reason: overlapReason,
+      matchedReference: overlapReference,
+    }
+  }
+
+  return {
+    overlaps: false,
+    score: bestScore,
+    reason: bestReason,
+    matchedReference: bestReference,
+  }
+}
+
+function buildRecentCoverageReferences(params: {
+  titles: string[]
+  excerpts?: string[]
+  blacklistSummary?: string
+  latestArticleContentSample?: string
+  maxItems?: number
+}): string[] {
+  const {
+    titles,
+    excerpts = [],
+    blacklistSummary,
+    latestArticleContentSample,
+    maxItems = 30,
+  } = params
+  const references = new Set<string>()
+
+  const titleLimit = Math.min(maxItems, titles.length)
+  for (let i = 0; i < titleLimit; i++) {
+    const title = titles[i]?.trim() ?? ''
+    if (!title) continue
+    const excerpt = excerpts[i]?.trim() ?? ''
+    references.add(excerpt ? `${title} ${excerpt}` : title)
+  }
+
+  if (blacklistSummary && blacklistSummary.trim().length > 0) {
+    references.add(blacklistSummary.trim())
+  }
+
+  if (latestArticleContentSample && latestArticleContentSample.trim().length > 0) {
+    references.add(latestArticleContentSample.trim())
+  }
+
+  return Array.from(references)
+}
+
+function pickCandidateAvoidingRecentCoverage(params: {
+  candidates: string[]
+  references: string[]
+  fallback: string
+  label: string
+}): string {
+  const { candidates, references, fallback, label } = params
+  if (candidates.length === 0) return fallback
+  if (references.length === 0) {
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? fallback
+  }
+
+  const scored = candidates.map((candidate) => ({
+    candidate,
+    ...assessRecentCoverageOverlap({ candidate, references }),
+  }))
+  const nonOverlapping = scored.filter((entry) => !entry.overlaps)
+  if (nonOverlapping.length > 0) {
+    const selected = nonOverlapping[Math.floor(Math.random() * nonOverlapping.length)]
+    return selected?.candidate ?? fallback
+  }
+
+  const bestScore = Math.min(...scored.map((entry) => entry.score))
+  const leastOverlapping = scored.filter((entry) => entry.score === bestScore)
+  const selected = leastOverlapping[Math.floor(Math.random() * leastOverlapping.length)]
+  console.warn(
+    `${LOG.prefix} All ${label} candidates overlapped recent coverage; using least-overlapping fallback`,
+  )
+  return selected?.candidate ?? fallback
+}
+
+function buildArticleRepetitionFingerprint(article: GeneratedArticle): string {
+  return [
+    article.headline,
+    article.subheadline ?? '',
+    article.excerpt ?? '',
+    article.bodyMarkdown.slice(0, 420),
+  ].join(' ')
+}
+
+function assertArticleNotTooSimilarToRecentCoverage(params: {
+  article: GeneratedArticle
+  recentTitles: string[]
+  recentExcerpts: string[]
+  latestArticleContentSample?: string
+}): void {
+  const references = buildRecentCoverageReferences({
+    titles: params.recentTitles,
+    excerpts: params.recentExcerpts,
+    latestArticleContentSample: params.latestArticleContentSample,
+    maxItems: 30,
+  })
+  if (references.length === 0) return
+
+  const assessment = assessRecentCoverageOverlap({
+    candidate: buildArticleRepetitionFingerprint(params.article),
+    references,
+  })
+  if (!assessment.overlaps) return
+
+  const matched = assessment.matchedReference
+    ? assessment.matchedReference.replace(/\s+/g, ' ').slice(0, 140)
+    : 'unknown'
+  throw new Error(
+    `${REPETITION_GUARD_PREFIX}: Generated article overlaps recent coverage (${assessment.reason}); matched="${matched}"`,
+  )
 }
 
 function normalizeRssTopicLine(line: string): string {
@@ -1292,6 +1578,13 @@ function clampScore(value: number, min = 1, max = 10): number {
   return Math.max(min, Math.min(max, Math.round(value)))
 }
 
+function isFlagEnabled(raw: string | undefined, defaultValue = false): boolean {
+  if (raw == null) return defaultValue
+  const normalized = raw.trim().toLowerCase()
+  if (!normalized) return defaultValue
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
+}
+
 function buildSatireBriefSection(brief: SatireBrief | null): string {
   if (!brief) {
     return [
@@ -1462,9 +1755,18 @@ async function critiqueSatireArticle(args: {
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
     const validation = SatireCritiqueSchema.safeParse(parsed)
-    if (!validation.success) return null
+    if (!validation.success) {
+      const issues = validation.error.issues
+        .slice(0, 3)
+        .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+        .join(' | ')
+      console.warn(`${LOG.prefix} Critique output schema mismatch: ${issues}`)
+      return null
+    }
     return validation.data
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`${LOG.prefix} Critique model request failed: ${message}`)
     return null
   }
 }
@@ -1656,6 +1958,9 @@ async function repairToSchema(args: {
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
   validationErrors?: z.ZodIssue[]
+  outputSchemaMode?: OutputSchemaMode
+  seedDraft?: GenerateArticleInput['seedDraft']
+  usedRssTopic?: string | null
 }): Promise<GeneratedArticle> {
   // Hypotheses:
   // A: primary model returns non-JSON or partial JSON
@@ -1700,6 +2005,9 @@ async function repairToSchema(args: {
     args.validationErrors && args.validationErrors.length > 0
       ? ['Validation errors to fix:', formatZodIssues(args.validationErrors), ''].join('\n')
       : ''
+  const outputSchemaMode = args.outputSchemaMode ?? 'full'
+  const schemaBlock =
+    outputSchemaMode === 'body-only-locked-draft' ? JSON_SCHEMA_BODY_ONLY : JSON_SCHEMA
 
   const userPrompt = [
     'Existing categorySlug options (or create new):',
@@ -1708,26 +2016,12 @@ async function repairToSchema(args: {
     'Existing authorSlug options (or create new with required fields):',
     authorsList,
     '',
+    outputSchemaMode === 'body-only-locked-draft'
+      ? 'LOCKED DRAFT MODE: headline/subheadline/excerpt/sourceRssTopic are server-locked; DO NOT return them.'
+      : '',
+    '',
     'Required JSON schema:',
-    '{',
-    '  "headline": string,  // <= 140 chars',
-    '  "subheadline": string|null,  // <= 220 chars',
-    '  "excerpt": string|null,  // <= 300 chars',
-    '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
-    '  "categorySlug": string,  // existing OR new slug',
-    '  "authorSlug": string,  // existing OR new slug (if new, provide newAuthorName/Title/Bio)',
-    '  "newAuthorName": string|null,  // REQUIRED if authorSlug is new (<= 60 chars)',
-    '  "newAuthorTitle": string|null,  // REQUIRED if authorSlug is new (<= 100 chars)',
-    '  "newAuthorBio": string|null,  // REQUIRED if authorSlug is new (<= 500 chars)',
-    '  "layout": "standard"|"wide"|"opinion",',
-    '  "isFeatured": boolean,',
-    '  "isHeadline": boolean,',
-    '  "imageCaption": string|null,  // <= 160 chars',
-    '  "imagePrompt": string|null,  // <= 600 chars',
-    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim (headline only, no source labels) when used; else null',
-    '  "canonicalSourceAuthor": string|null,  // REQUIRED when canonical adaptation mode is active; else null',
-    '  "canonicalSourceStory": string|null  // REQUIRED when canonical adaptation mode is active; else null',
-    '}',
+    schemaBlock,
     '',
     'CRITICAL: If authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio. Generate them based on the slug and article context if missing.',
     '',
@@ -1744,7 +2038,15 @@ async function repairToSchema(args: {
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
-  const validation = GeneratedArticleSchema.safeParse(parsed)
+  const hydratedForValidation =
+    outputSchemaMode === 'body-only-locked-draft'
+      ? hydrateLockedDraftFields({
+          output: parsed,
+          seedDraft: args.seedDraft,
+          usedRssTopic: args.usedRssTopic ?? null,
+        })
+      : parsed
+  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
   if (validation.success) {
     return validation.data
   }
@@ -1755,6 +2057,9 @@ async function repairToSchema(args: {
       categories: args.categories,
       authors: args.authors,
       issues: validation.error.issues,
+      outputSchemaMode,
+      seedDraft: args.seedDraft,
+      usedRssTopic: args.usedRssTopic ?? null,
     })
   }
 
@@ -1766,6 +2071,9 @@ async function shortenToSchema(args: {
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
   issues: z.ZodIssue[]
+  outputSchemaMode?: OutputSchemaMode
+  seedDraft?: GenerateArticleInput['seedDraft']
+  usedRssTopic?: string | null
 }): Promise<GeneratedArticle> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
@@ -1782,6 +2090,9 @@ async function shortenToSchema(args: {
 
   const categoriesList = safeStringList(args.categories)
   const authorsList = safeStringList(args.authors)
+  const outputSchemaMode = args.outputSchemaMode ?? 'full'
+  const schemaBlock =
+    outputSchemaMode === 'body-only-locked-draft' ? JSON_SCHEMA_BODY_ONLY : JSON_SCHEMA
 
   const systemPrompt = [
     'You are a copy editor for JSON outputs.',
@@ -1803,26 +2114,12 @@ async function shortenToSchema(args: {
     'Fields that exceed max length:',
     describeTooBigIssues(args.issues),
     '',
+    outputSchemaMode === 'body-only-locked-draft'
+      ? 'LOCKED DRAFT MODE: headline/subheadline/excerpt/sourceRssTopic are server-locked; DO NOT return them.'
+      : '',
+    '',
     'JSON schema:',
-    '{',
-    '  "headline": string,  // <= 140 chars',
-    '  "subheadline": string|null,  // <= 220 chars',
-    '  "excerpt": string|null,  // <= 300 chars',
-    '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
-    '  "categorySlug": string,  // existing OR new',
-    '  "authorSlug": string,  // existing OR new (if new, provide newAuthorName/Title/Bio)',
-    '  "newAuthorName": string|null,  // REQUIRED if authorSlug is new (<= 60 chars)',
-    '  "newAuthorTitle": string|null,  // REQUIRED if authorSlug is new (<= 100 chars)',
-    '  "newAuthorBio": string|null,  // REQUIRED if authorSlug is new (<= 500 chars)',
-    '  "layout": "standard"|"wide"|"opinion",',
-    '  "isFeatured": boolean,',
-    '  "isHeadline": boolean,',
-    '  "imageCaption": string|null,  // <= 160 chars',
-    '  "imagePrompt": string|null,  // <= 600 chars',
-    '  "sourceRssTopic": string|null,  // copy RSS headline verbatim (headline only, no source labels) when used; else null',
-    '  "canonicalSourceAuthor": string|null,  // REQUIRED when canonical adaptation mode is active; else null',
-    '  "canonicalSourceStory": string|null  // REQUIRED when canonical adaptation mode is active; else null',
-    '}',
+    schemaBlock,
     '',
     'CRITICAL: If authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio.',
     '',
@@ -1838,7 +2135,15 @@ async function shortenToSchema(args: {
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
-  const validation = GeneratedArticleSchema.safeParse(parsed)
+  const hydratedForValidation =
+    outputSchemaMode === 'body-only-locked-draft'
+      ? hydrateLockedDraftFields({
+          output: parsed,
+          seedDraft: args.seedDraft,
+          usedRssTopic: args.usedRssTopic ?? null,
+        })
+      : parsed
+  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
 
   if (!validation.success) {
     throw validation.error
@@ -1980,6 +2285,62 @@ function headlineViolatesBannedWords(headline: string, bannedOpeningWords: strin
   return bannedLower.includes(firstWord)
 }
 
+function applySeedDraft(
+  article: GeneratedArticle,
+  seed: GenerateArticleInput['seedDraft'] | undefined,
+): GeneratedArticle {
+  if (!seed) return article
+
+  const next = {
+    ...article,
+    headline: seed.headline.trim().slice(0, 140),
+  }
+
+  if (typeof seed.subheadline === 'string') {
+    next.subheadline = seed.subheadline.trim().slice(0, 220) || null
+  }
+  if (typeof seed.excerpt === 'string') {
+    next.excerpt = seed.excerpt.trim().slice(0, 300) || null
+  }
+
+  return next
+}
+
+function resolveOutputSchemaMode(input: GenerateArticleInput): OutputSchemaMode {
+  if (input.seedDraft?.headline?.trim()) {
+    return 'body-only-locked-draft'
+  }
+  return 'full'
+}
+
+function hydrateLockedDraftFields(args: {
+  output: unknown
+  seedDraft: GenerateArticleInput['seedDraft'] | undefined
+  usedRssTopic: string | null
+}): unknown {
+  if (!args.seedDraft?.headline?.trim()) return args.output
+  if (!args.output || typeof args.output !== 'object' || Array.isArray(args.output)) {
+    return args.output
+  }
+
+  const hydrated: Record<string, unknown> = {
+    ...(args.output as Record<string, unknown>),
+    headline: args.seedDraft.headline.trim().slice(0, 140),
+  }
+
+  hydrated.subheadline =
+    typeof args.seedDraft.subheadline === 'string'
+      ? args.seedDraft.subheadline.trim().slice(0, 220) || null
+      : null
+  hydrated.excerpt =
+    typeof args.seedDraft.excerpt === 'string'
+      ? args.seedDraft.excerpt.trim().slice(0, 300) || null
+      : null
+  hydrated.sourceRssTopic = args.usedRssTopic ?? null
+
+  return hydrated
+}
+
 /******************* MAIN ***********************/
 
 export async function generateArticle(input: GenerateArticleInput): Promise<GenerateArticleResult> {
@@ -1992,10 +2353,19 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const modelName = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
   const toneProfile = resolveToneProfile(process.env.OPENAI_TONE_PROFILE)
   const minCritiqueScore = clampScore(Number(process.env.SATIRE_MIN_CRITIQUE_SCORE ?? '7'))
+  const briefEnabled = isFlagEnabled(process.env.SATIRE_BRIEF_ENABLED, false)
+  const critiqueEnabled = isFlagEnabled(process.env.SATIRE_CRITIQUE_ENABLED, false)
+  const outputSchemaMode = resolveOutputSchemaMode(input)
+  const seedDraftTopicHint = input.seedDraft?.topicHint?.trim() || null
   console.log(`${LOG.prefix} Model: ${modelName}`)
   console.log(
     `${LOG.prefix} Tone profile: ${toneProfile} | min critique score: ${minCritiqueScore}`,
   )
+  if (outputSchemaMode === 'body-only-locked-draft') {
+    console.log(
+      `${LOG.prefix} Locked-draft mode active: headline/subheadline/excerpt are server-owned`,
+    )
+  }
 
   const llm = new ChatOpenAI({
     apiKey,
@@ -2005,9 +2375,15 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
   // When forceRss or forceOpinion is true, skip feature story
-  const useFeatureStoryPrompt = input.forceRss || input.forceOpinion ? false : Math.random() < 0.33
+  let useFeatureStoryPrompt = input.forceRss || input.forceOpinion ? false : Math.random() < 0.33
   // 30% chance to force a canonical Western-story adaptation for non-opinion pieces
-  const useCanonicalWeddingStoryStructure = !input.forceOpinion && Math.random() < 0.3
+  let useCanonicalWeddingStoryStructure = !input.forceOpinion && Math.random() < 0.3
+
+  if (input.seedDraft?.headline?.trim()) {
+    // Keep continuity with accepted draft by disabling style pivots that can change premise.
+    useFeatureStoryPrompt = false
+    useCanonicalWeddingStoryStructure = false
+  }
 
   // Story types for the new prompt
   const storyTypes = [
@@ -2069,7 +2445,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Police investigate a string of döner thefts where only the vegetables are taken, meat left behind',
     'The great Späti heist: someone stole 200 euros worth of energy drinks but left the cash register untouched',
     'A Wedding man arrested for "aggressive passive-aggressive note writing" after neighbors complain',
-    'The mysterious case of the disappearing U-Bahn seats: 12 seats vanished overnight, replaced with yoga mats',
     'Police called to Leopoldplatz after someone reports "suspiciously organized" trash',
     'The great bike lock conspiracy: someone has been adding extra locks to random bikes across Wedding',
     'A Neukölln man charged with "excessive politeness" after holding up a U-Bahn for 15 minutes',
@@ -2202,7 +2577,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       !startupAndGentrificationScenarios.includes(scenario),
   )
 
-  const selectedScenario = useDrugsOrTechnoScenario
+  let selectedScenario = useDrugsOrTechnoScenario
     ? drugsAndTechnoScenarios[Math.floor(Math.random() * drugsAndTechnoScenarios.length)]
     : useStartupScenario
       ? startupAndGentrificationScenarios[
@@ -2569,6 +2944,17 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     randomFocus = generalTopics[Math.floor(Math.random() * generalTopics.length)]
   }
 
+  if (input.seedDraft?.headline?.trim()) {
+    const lockedPremise = [input.seedDraft.headline, input.seedDraft.excerpt ?? '']
+      .filter((part) => typeof part === 'string' && part.trim().length > 0)
+      .join(' — ')
+      .slice(0, 320)
+    if (lockedPremise.length > 0) {
+      randomFocus = lockedPremise
+      selectedScenario = lockedPremise
+    }
+  }
+
   // Build blacklist (recent titles + summary) BEFORE selecting RSS topic so we can exclude
   // RSS topics that overlap with already-covered stories (e.g. same bikes/scooters story).
   const maxRecentArticles = 20
@@ -2601,6 +2987,51 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     recentArticlesSummary = ''
   }
 
+  // Deterministically avoid seed scenarios/topics that overlap with already-covered stories.
+  // This prevents hardcoded seed ideas from overriding blacklist instructions.
+  const recentCoverageReferences = buildRecentCoverageReferences({
+    titles: recentTitles,
+    excerpts: recentExcerpts,
+    blacklistSummary: recentArticlesSummary,
+    maxItems: 30,
+  })
+  if (recentCoverageReferences.length > 0) {
+    const scenarioPool = useDrugsOrTechnoScenario
+      ? drugsAndTechnoScenarios
+      : useStartupScenario
+        ? startupAndGentrificationScenarios
+        : generalScenarios
+    const filteredScenario = pickCandidateAvoidingRecentCoverage({
+      candidates: scenarioPool,
+      references: recentCoverageReferences,
+      fallback: selectedScenario,
+      label: 'scenario',
+    })
+    if (filteredScenario !== selectedScenario) {
+      console.log(`${LOG.prefix} Replaced overlapping scenario seed with a fresher one`)
+      selectedScenario = filteredScenario
+    }
+
+    const topicPool =
+      input.forceOpinion && opinionOnlyTopics.length > 0
+        ? opinionOnlyTopics
+        : useDrugsOrTechnoTopic
+          ? drugsAndTechnoTopics
+          : useStartupTopic
+            ? startupAndGentrificationTopics
+            : generalTopics
+    const filteredTopic = pickCandidateAvoidingRecentCoverage({
+      candidates: topicPool,
+      references: recentCoverageReferences,
+      fallback: randomFocus,
+      label: 'topic',
+    })
+    if (filteredTopic !== randomFocus) {
+      console.log(`${LOG.prefix} Replaced overlapping topic seed with a fresher one`)
+      randomFocus = filteredTopic
+    }
+  }
+
   // When RSS topics are available, pick one that does NOT overlap with the blacklist.
   // Otherwise we keep assigning the same real-world story (e.g. bikes/scooters) and the LLM
   // produces yet another variation of an article we told it to avoid.
@@ -2628,11 +3059,13 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       `${LOG.prefix} Filtered ${uniqueRssTopics.length - rssTopics.length} RSS topic(s) that overlap blacklist`,
     )
   }
-  const hasRssTopics = input.includeTopics && rssTopics.length > 0
+  const hasRssTopics = (input.includeTopics && rssTopics.length > 0) || Boolean(seedDraftTopicHint)
   const afdTriggeredRssTopic = hasRssTopics ? rssTopics.find((topic) => isAfDTopic(topic)) : null
-  const selectedRssTopic = hasRssTopics
-    ? (afdTriggeredRssTopic ?? rssTopics[Math.floor(Math.random() * rssTopics.length)])
-    : null
+  const selectedRssTopic = seedDraftTopicHint
+    ? seedDraftTopicHint
+    : hasRssTopics
+      ? (afdTriggeredRssTopic ?? rssTopics[Math.floor(Math.random() * rssTopics.length)])
+      : null
 
   // Track whether RSS topic was ACTUALLY used in the prompt (not just selected)
   // RSS topics are only used when NOT a feature story AND RSS topics are available
@@ -2874,19 +3307,23 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     : hasRssTopics && selectedRssTopic
       ? selectedRssTopic
       : randomFocus
-  const satireBrief = await generateSatireBrief({
-    apiKey,
-    modelName,
-    toneProfile,
-    topicContext,
-    recentTitles,
-    blacklistSummary: recentArticlesSummary,
-    useFeatureStoryPrompt,
-    selectedRssTopic,
-    randomFocus,
-  })
+  const satireBrief = briefEnabled
+    ? await generateSatireBrief({
+        apiKey,
+        modelName,
+        toneProfile,
+        topicContext,
+        recentTitles,
+        blacklistSummary: recentArticlesSummary,
+        useFeatureStoryPrompt,
+        selectedRssTopic,
+        randomFocus,
+      })
+    : null
   const satireBriefSection = buildSatireBriefSection(satireBrief)
-  if (satireBrief) {
+  if (!briefEnabled) {
+    console.log(`${LOG.prefix} Satire brief disabled by SATIRE_BRIEF_ENABLED`)
+  } else if (satireBrief) {
     console.log(
       `${LOG.prefix} Satire brief generated | institution target: ${satireBrief.institutionTarget}`,
     )
@@ -3071,8 +3508,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           'ARTICLE LENGTH: The article should be approximately 400 words. Do NOT exceed 500 words. Keep it tight, punchy, and concise.',
           '',
-          'IMPORTANT: Since you are using this news topic, you MUST set "sourceRssTopic" in your JSON output to the EXACT news headline above.',
-          `Copy this verbatim: "${selectedRssTopic}"`,
+          outputSchemaMode === 'body-only-locked-draft'
+            ? 'IMPORTANT: sourceRssTopic is server-locked in LOCKED DRAFT mode. Do not output this field.'
+            : 'IMPORTANT: Since you are using this news topic, you MUST set "sourceRssTopic" in your JSON output to the EXACT news headline above.',
+          outputSchemaMode === 'body-only-locked-draft'
+            ? ''
+            : `Copy this verbatim: "${selectedRssTopic}"`,
           '',
         ].join('\n')
       : [
@@ -3092,10 +3533,36 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
             : '',
         ].join('\n')
 
+  const seedDraftSection = input.seedDraft
+    ? [
+        'LOCKED DRAFT (MANDATORY):',
+        `- Use this EXACT headline: "${input.seedDraft.headline.trim().slice(0, 140)}"`,
+        typeof input.seedDraft.subheadline === 'string'
+          ? `- Use this EXACT subheadline: "${input.seedDraft.subheadline.trim().slice(0, 220)}"`
+          : '- Subheadline may be null if needed.',
+        typeof input.seedDraft.excerpt === 'string'
+          ? `- Use this EXACT excerpt: "${input.seedDraft.excerpt.trim().slice(0, 300)}"`
+          : '- Excerpt may be null if needed.',
+        typeof input.seedDraft.topicHint === 'string' && input.seedDraft.topicHint.trim().length > 0
+          ? `- Keep this SAME topic/news hook continuity: "${input.seedDraft.topicHint.trim().slice(0, 300)}"`
+          : '',
+        '- Build a full body that matches this pitch and keeps the same core premise.',
+        '- In LOCKED DRAFT mode, headline/subheadline/excerpt are server-owned and must not be rewritten.',
+      ].join('\n')
+    : ''
+
   const userPrompt = [
     topicsSection,
     canonicalStructureInstruction,
     recentCanonicalReferencesSection,
+    seedDraftSection,
+    outputSchemaMode === 'body-only-locked-draft'
+      ? [
+          'LOCKED DRAFT RESPONSE MODE:',
+          '- Do NOT return headline, subheadline, excerpt, or sourceRssTopic in JSON.',
+          '- Return only body/content + metadata fields from the schema below.',
+        ].join('\n')
+      : '',
     'Important: ALL text fields must be written in US English.',
     SOURCE_ATTRIBUTION_RULES,
     '',
@@ -3137,28 +3604,32 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     !useFeatureStoryPrompt
       ? [EDGE_SHORT, '', SPICE_IT_UP, '', INTELLECTUAL_EASTER_EGGS, ''].join('\n')
       : '',
-    // Use strong headline guidance when drugs/techno is selected, mild otherwise
-    useDrugsOrTechnoTopic || useDrugsOrTechnoScenario
-      ? DRUGS_TECHNO_HEADLINES_STRONG
-      : DRUGS_TECHNO_HEADLINES_MILD,
-    '',
-    'HEADLINE VARIETY IS CRITICAL:',
-    useFeatureStoryPrompt
-      ? [
-          'For feature/news stories, use traditional news headline formats:',
-          '- Direct, factual-sounding headlines that match your assigned topic',
-          '- Question format: "Why Did [Subject] Do [Action]?"',
-          '- Descriptive: "The Great [Event]: [Consequence]"',
-          '- Keep it news-like but absurd, matching your specific topic',
-        ].join('\n')
+    outputSchemaMode === 'body-only-locked-draft'
+      ? 'HEADLINE/SUBHEADLINE/EXCERPT are locked by server. Focus only on body quality and metadata.'
       : [
-          'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
-          'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
-          'Think like a real newspaper: headlines should grab attention with wit, not formula.',
-          'Match your headline to your assigned topic—do not force unrelated themes into it.',
+          // Use strong headline guidance when drugs/techno is selected, mild otherwise
+          useDrugsOrTechnoTopic || useDrugsOrTechnoScenario
+            ? DRUGS_TECHNO_HEADLINES_STRONG
+            : DRUGS_TECHNO_HEADLINES_MILD,
+          '',
+          'HEADLINE VARIETY IS CRITICAL:',
+          useFeatureStoryPrompt
+            ? [
+                'For feature/news stories, use traditional news headline formats:',
+                '- Direct, factual-sounding headlines that match your assigned topic',
+                '- Question format: "Why Did [Subject] Do [Action]?"',
+                '- Descriptive: "The Great [Event]: [Consequence]"',
+                '- Keep it news-like but absurd, matching your specific topic',
+              ].join('\n')
+            : [
+                'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
+                'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
+                'Think like a real newspaper: headlines should grab attention with wit, not formula.',
+                'Match your headline to your assigned topic—do not force unrelated themes into it.',
+              ].join('\n'),
+          '',
+          INTELLECTUAL_HEADLINE_REFERENCES,
         ].join('\n'),
-    '',
-    INTELLECTUAL_HEADLINE_REFERENCES,
     '',
     'CATEGORY SELECTION:',
     'You have two options for the category:',
@@ -3171,7 +3642,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Existing authorSlug options (or create new):',
     authorsList,
     '',
-    JSON_SCHEMA,
+    outputSchemaMode === 'body-only-locked-draft' ? JSON_SCHEMA_BODY_ONLY : JSON_SCHEMA,
     '',
     IMAGE_PROMPT_INSTRUCTIONS,
   ].join('\n')
@@ -3191,7 +3662,15 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   try {
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
-    const validation = GeneratedArticleSchema.safeParse(parsed)
+    const hydratedForValidation =
+      outputSchemaMode === 'body-only-locked-draft'
+        ? hydrateLockedDraftFields({
+            output: parsed,
+            seedDraft: input.seedDraft,
+            usedRssTopic: actuallyUsedRssTopic,
+          })
+        : parsed
+    const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
     let validated: GeneratedArticle
     if (!validation.success) {
       console.log(`${LOG.prefix} Schema validation failed, repairing...`)
@@ -3200,6 +3679,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         categories: input.categories,
         authors: input.authors,
         validationErrors: validation.error.issues,
+        outputSchemaMode,
+        seedDraft: input.seedDraft,
+        usedRssTopic: actuallyUsedRssTopic,
       })
     } else {
       validated = validation.data
@@ -3224,7 +3706,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     }
 
     // Check if headline violates banned opening words and regenerate if needed
-    if (headlineViolatesBannedWords(validated.headline, bannedOpeningWords)) {
+    if (
+      !input.seedDraft?.headline &&
+      headlineViolatesBannedWords(validated.headline, bannedOpeningWords)
+    ) {
       validated = await regenerateHeadline({
         article: validated,
         bannedOpeningWords,
@@ -3233,54 +3718,63 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     }
 
     try {
-      const critique = await critiqueSatireArticle({
-        apiKey,
-        modelName,
-        toneProfile,
-        article: validated,
-        brief: satireBrief,
-      })
+      if (critiqueEnabled) {
+        const critique = await critiqueSatireArticle({
+          apiKey,
+          modelName,
+          toneProfile,
+          article: validated,
+          brief: satireBrief,
+        })
 
-      if (critique) {
-        console.log(
-          `${LOG.prefix} Critique scores | dark=${critique.darknessScore} political=${critique.politicalCriticismScore} discomfort=${critique.discomfortScore} specificity=${critique.specificityScore}`,
-        )
-        if (shouldRewriteFromCritique(critique, minCritiqueScore)) {
-          console.log(`${LOG.prefix} Critique below threshold; rewriting article for stronger bite`)
-          validated = await rewriteArticleFromCritique({
-            apiKey,
-            modelName,
-            article: validated,
-            critique,
-            brief: satireBrief,
-            toneProfile,
-            categories: input.categories,
-            authors: input.authors,
-          })
-
-          const rewrittenLangSample =
-            `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
-              0,
-              1200,
+        if (critique) {
+          console.log(
+            `${LOG.prefix} Critique scores | dark=${critique.darknessScore} political=${critique.politicalCriticismScore} discomfort=${critique.discomfortScore} specificity=${critique.specificityScore}`,
+          )
+          if (shouldRewriteFromCritique(critique, minCritiqueScore)) {
+            console.log(
+              `${LOG.prefix} Critique below threshold; rewriting article for stronger bite`,
             )
-          if (looksNonEnglish(rewrittenLangSample)) {
-            validated = await translateToEnglish({
-              bad: validated,
+            validated = await rewriteArticleFromCritique({
+              apiKey,
+              modelName,
+              article: validated,
+              critique,
+              brief: satireBrief,
+              toneProfile,
               categories: input.categories,
               authors: input.authors,
             })
-          }
 
-          if (headlineViolatesBannedWords(validated.headline, bannedOpeningWords)) {
-            validated = await regenerateHeadline({
-              article: validated,
-              bannedOpeningWords,
-              recentTitles: input.recentArticleTitles,
-            })
+            const rewrittenLangSample =
+              `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
+                0,
+                1200,
+              )
+            if (looksNonEnglish(rewrittenLangSample)) {
+              validated = await translateToEnglish({
+                bad: validated,
+                categories: input.categories,
+                authors: input.authors,
+              })
+            }
+
+            if (
+              !input.seedDraft?.headline &&
+              headlineViolatesBannedWords(validated.headline, bannedOpeningWords)
+            ) {
+              validated = await regenerateHeadline({
+                article: validated,
+                bannedOpeningWords,
+                recentTitles: input.recentArticleTitles,
+              })
+            }
           }
+        } else {
+          console.log(`${LOG.prefix} Critique unavailable; keeping first-pass article`)
         }
       } else {
-        console.log(`${LOG.prefix} Critique unavailable; keeping first-pass article`)
+        console.log(`${LOG.prefix} Critique disabled by SATIRE_CRITIQUE_ENABLED`)
       }
     } catch (err) {
       console.warn(`${LOG.prefix} Critique/rewrite step failed; keeping current article`, err)
@@ -3295,6 +3789,15 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
     }
 
+    validated = applySeedDraft(validated, input.seedDraft)
+
+    assertArticleNotTooSimilarToRecentCoverage({
+      article: validated,
+      recentTitles,
+      recentExcerpts,
+      latestArticleContentSample: input.latestArticleContentSample,
+    })
+
     LOG.step('STEP 6: generateArticle finished (valid output)')
     return {
       article: validated,
@@ -3302,7 +3805,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
       usedStartup: useStartupTopic || useStartupScenario,
     }
-  } catch {
+  } catch (err) {
+    if (isRetryableGenerationError(err)) {
+      throw err
+    }
     console.log(`${LOG.prefix} Parse/validation error, repairing...`)
     // Fallback: deterministic repair using cheaper model
     const repaired = ensureAfRExplanationInNonHeadlineText(
@@ -3312,6 +3818,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
             badOutput: text,
             categories: input.categories,
             authors: input.authors,
+            outputSchemaMode,
+            seedDraft: input.seedDraft,
+            usedRssTopic: actuallyUsedRssTopic,
           }),
         ),
       ),
@@ -3321,9 +3830,19 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       repaired.categorySlug = 'opinion'
       repaired.layout = 'opinion'
     }
+
+    const repairedWithSeed = applySeedDraft(repaired, input.seedDraft)
+
+    assertArticleNotTooSimilarToRecentCoverage({
+      article: repairedWithSeed,
+      recentTitles,
+      recentExcerpts,
+      latestArticleContentSample: input.latestArticleContentSample,
+    })
+
     LOG.step('STEP 6: generateArticle finished (repaired after parse error)')
     return {
-      article: repaired,
+      article: repairedWithSeed,
       usedRssTopic: actuallyUsedRssTopic, // Track server-side which RSS topic was actually used in the prompt
       usedDrugsTechno: useDrugsOrTechnoTopic || useDrugsOrTechnoScenario,
       usedStartup: useStartupTopic || useStartupScenario,

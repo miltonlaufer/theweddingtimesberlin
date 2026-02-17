@@ -14,18 +14,33 @@ import { Media } from './collections/Media'
 import { Users } from './collections/Users'
 import { PushSubscriptions } from './collections/PushSubscriptions'
 import { GenerationCache } from './collections/GenerationCache'
+import { GenerationJobs } from './collections/GenerationJobs'
+import { GenerationJobItems } from './collections/GenerationJobItems'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+const payloadImportMapAutoGenerate =
+  (process.env.PAYLOAD_IMPORT_MAP_AUTOGENERATE ?? 'false') === 'true'
 
 export default buildConfig({
   admin: {
     user: Users.slug,
     importMap: {
       baseDir: path.resolve(dirname),
+      autoGenerate: payloadImportMapAutoGenerate,
     },
   },
-  collections: [Users, Articles, Categories, Authors, Media, PushSubscriptions, GenerationCache],
+  collections: [
+    Users,
+    Articles,
+    Categories,
+    Authors,
+    Media,
+    PushSubscriptions,
+    GenerationCache,
+    GenerationJobs,
+    GenerationJobItems,
+  ],
   editor: lexicalEditor(),
   email: resendAdapter({
     apiKey: process.env.RESEND_API_KEY!,

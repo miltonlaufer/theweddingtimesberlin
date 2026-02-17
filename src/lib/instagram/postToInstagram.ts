@@ -8,6 +8,8 @@ const INSTAGRAM_API_VERSION = 'v21.0'
 const INSTAGRAM_GRAPH_BASE = 'https://graph.instagram.com'
 const CONTAINER_POLL_INTERVAL_MS = 2500
 const CONTAINER_POLL_TIMEOUT_MS = 120000
+const PUBLISH_RETRY_INTERVAL_MS = 2000
+const PUBLISH_RETRY_ATTEMPTS = 4
 
 export interface PostToInstagramParams {
   imageUrl: string
@@ -21,6 +23,23 @@ export interface PostToInstagramResult {
   ok: boolean
   mediaId?: string
   error?: string
+}
+
+export interface PostToInstagramOptions {
+  /**
+   * Only use in explicit/manual flows (e.g. dev tools). All automated flows
+   * should keep honoring INSTAGRAM_ENABLED.
+   */
+  bypassEnabledFlag?: boolean
+}
+
+function shouldRetryPublish(errorMessage?: string): boolean {
+  const normalized = (errorMessage ?? '').toLowerCase()
+  return normalized.includes('media id is not available')
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -54,18 +73,45 @@ async function waitForContainerReady(
   return { ok: false, error: 'Container did not finish processing in time' }
 }
 
+async function publishContainer(
+  igUserId: string,
+  accessToken: string,
+  containerId: string,
+): Promise<PostToInstagramResult> {
+  const publishRes = await fetch(
+    `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${igUserId}/media_publish`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ creation_id: containerId }),
+    },
+  )
+
+  const publishData = (await publishRes.json()) as { id?: string; error?: { message: string } }
+  if (!publishRes.ok || !publishData.id) {
+    const msg = publishData.error?.message ?? publishRes.statusText ?? 'Publish failed'
+    return { ok: false, error: msg }
+  }
+
+  return { ok: true, mediaId: publishData.id }
+}
+
 /**
  * Create a media container and publish it to Instagram.
  * No-op if INSTAGRAM_ENABLED is not set or credentials are missing.
  */
 export async function postToInstagram(
   params: PostToInstagramParams,
+  options?: PostToInstagramOptions,
 ): Promise<PostToInstagramResult> {
   const enabled = process.env.INSTAGRAM_ENABLED === 'true'
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN
   const igUserId = process.env.INSTAGRAM_IG_USER_ID
 
-  if (!enabled || !accessToken || !igUserId) {
+  if ((!enabled && options?.bypassEnabledFlag !== true) || !accessToken || !igUserId) {
     return { ok: false, error: 'Instagram posting is not configured' }
   }
 
@@ -107,25 +153,21 @@ export async function postToInstagram(
       return { ok: false, error: ready.error }
     }
 
-    const publishRes = await fetch(
-      `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${igUserId}/media_publish`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ creation_id: containerId }),
-      },
-    )
+    let lastError: string | undefined
+    for (let attempt = 0; attempt <= PUBLISH_RETRY_ATTEMPTS; attempt += 1) {
+      const published = await publishContainer(igUserId, accessToken, containerId)
+      if (published.ok) {
+        return published
+      }
 
-    const publishData = (await publishRes.json()) as { id?: string; error?: { message: string } }
-    if (!publishRes.ok || !publishData.id) {
-      const msg = publishData.error?.message ?? publishRes.statusText ?? 'Publish failed'
-      return { ok: false, error: msg }
+      lastError = published.error
+      if (!shouldRetryPublish(lastError) || attempt === PUBLISH_RETRY_ATTEMPTS) {
+        return { ok: false, error: lastError }
+      }
+
+      await sleep(PUBLISH_RETRY_INTERVAL_MS)
     }
-
-    return { ok: true, mediaId: publishData.id }
+    return { ok: false, error: lastError ?? 'Publish failed' }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return { ok: false, error: message }

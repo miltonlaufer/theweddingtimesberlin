@@ -30,14 +30,6 @@ export async function GET(
     return NextResponse.json({ error: 'Missing slug' }, { status: 400 })
   }
 
-  if (process.env.INSTAGRAM_ENABLED !== 'true') {
-    return NextResponse.json({
-      ok: true,
-      skipped: true,
-      reason: 'Instagram posting is disabled (INSTAGRAM_ENABLED is not true)',
-    })
-  }
-
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN?.trim()
   const igUserId = process.env.INSTAGRAM_IG_USER_ID?.trim()
   if (!accessToken || !igUserId) {
@@ -90,11 +82,14 @@ export async function GET(
       ? `${headline}\n\n${excerpt}\n\n${articleUrl}`
       : `${headline}\n\n${articleUrl}`
 
-    const result = await postToInstagram({
-      imageUrl: publicUrl,
-      caption,
-      altText: headline,
-    })
+    const result = await postToInstagram(
+      {
+        imageUrl: publicUrl,
+        caption,
+        altText: headline,
+      },
+      { bypassEnabledFlag: true },
+    )
 
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error }, { status: 502 })

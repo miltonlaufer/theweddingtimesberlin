@@ -4,6 +4,7 @@ import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import {
   generateArticle,
   extractHeadlinePatterns,
+  isRetryableGenerationError,
   summarizeRecentArticlesForBlacklist,
 } from '@/lib/generation/generateArticle'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
@@ -39,6 +40,8 @@ function slugToCategoryName(slug: string): string {
 function pickTwoThirds(): boolean {
   return Math.random() < 2 / 3
 }
+
+const MAX_GENERATION_ATTEMPTS = Math.max(1, Number(process.env.GENERATION_MAX_ATTEMPTS ?? 3))
 
 /******************* ROUTE ***********************/
 
@@ -172,19 +175,21 @@ export async function POST(req: Request) {
   const { topicSummary } = await fetchRssTopics()
 
   // Use the recent articles we already fetched in the parallel query above
-  const recentArticleTitles = recentArticlesRes.docs
+  const recentArticlesForOverlap = recentArticlesRes.docs
     .map((a) => {
-      const doc = a as unknown as { headline?: string }
-      return doc.headline
+      const doc = a as unknown as { headline?: string; excerpt?: string }
+      const headline = typeof doc.headline === 'string' ? doc.headline.trim() : ''
+      if (!headline) return null
+      const excerpt = typeof doc.excerpt === 'string' ? doc.excerpt.trim() : ''
+      return { headline, excerpt }
     })
-    .filter((title): title is string => typeof title === 'string')
+    .filter(
+      (entry): entry is { headline: string; excerpt: string } =>
+        entry !== null && entry.headline.length > 0,
+    )
 
-  const recentArticleExcerpts = recentArticlesRes.docs
-    .map((a) => {
-      const doc = a as unknown as { excerpt?: string }
-      return doc.excerpt
-    })
-    .filter((excerpt): excerpt is string => typeof excerpt === 'string' && excerpt.length > 0)
+  const recentArticleTitles = recentArticlesForOverlap.map((entry) => entry.headline)
+  const recentArticleExcerpts = recentArticlesForOverlap.map((entry) => entry.excerpt)
 
   const recentCanonicalStoryReferences = recentArticlesRes.docs
     .map((a) => {
@@ -220,17 +225,42 @@ export async function POST(req: Request) {
     `[DEBUG-GENERATE] Pre-analysis cache: ${blacklistCache.cacheHit ? 'HIT' : 'MISS'} | signature=${blacklistCache.signature.slice(0, 12)}...`,
   )
 
-  const { article: generated, usedRssTopic } = await generateArticle({
-    categories,
-    authors,
-    topicSummary,
-    includeTopics,
-    recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
-    recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
-    recentCanonicalStoryReferences,
-    precomputedBlacklistSummary: blacklistCache.summary,
-    recentHeadlinePatterns: uniquePatterns,
-  })
+  let generated: Awaited<ReturnType<typeof generateArticle>>['article'] | undefined
+  let usedRssTopic: string | null = null
+  let lastGenerationError: unknown
+
+  for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+    try {
+      const result = await generateArticle({
+        categories,
+        authors,
+        topicSummary,
+        includeTopics,
+        recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
+        recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles
+        recentCanonicalStoryReferences,
+        precomputedBlacklistSummary: blacklistCache.summary,
+        recentHeadlinePatterns: uniquePatterns,
+      })
+      generated = result.article
+      usedRssTopic = result.usedRssTopic
+      break
+    } catch (error) {
+      lastGenerationError = error
+      if (!isRetryableGenerationError(error) || attempt >= MAX_GENERATION_ATTEMPTS) {
+        throw error
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(
+        `[DEBUG-GENERATE] repetition guard triggered on attempt ${attempt}/${MAX_GENERATION_ATTEMPTS}; retrying (${message})`,
+      )
+    }
+  }
+
+  if (!generated) {
+    if (lastGenerationError instanceof Error) throw lastGenerationError
+    throw new Error('Article generation failed without a result')
+  }
 
   // Check if category exists, or if we need to create a new one
   let categoryDoc: { id: string | number; slug: string } | undefined = (
