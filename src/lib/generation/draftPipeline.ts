@@ -1,6 +1,9 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
-import { assessRecentCoverageOverlap } from '@/lib/generation/generateArticle'
+import {
+  assessRecentCoverageOverlap,
+  WEDDING_REMINDER_SHORT,
+} from '@/lib/generation/generateArticle'
 import type {
   DraftCandidate,
   DraftEvaluation,
@@ -125,6 +128,8 @@ export async function generateDraftCandidate(params: {
     'You are writing one satirical NEWSPAPER PITCH for The Wedding Times (Berlin satire).',
     'Output strict JSON only.',
     'Be original, topical, and mercilessly funny.',
+    '',
+    WEDDING_REMINDER_SHORT,
   ].join('\n')
 
   const userPrompt = [

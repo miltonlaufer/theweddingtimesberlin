@@ -131,9 +131,36 @@ const LOG = {
 
 const REPETITION_GUARD_PREFIX = 'REPETITION_GUARD'
 
+/**
+ * Error thrown when an article is about wedding ceremonies instead of the Wedding neighborhood.
+ * This triggers a full regeneration with explicit instructions.
+ */
+class WeddingCeremonyContentError extends Error {
+  constructor(
+    public readonly matchCount: number,
+    public readonly matches: string[],
+  ) {
+    super(
+      `Article contains wedding ceremony content (${matchCount} matches: ${matches.slice(0, 5).join(', ')}). The Wedding Times is about the Wedding NEIGHBORHOOD in Berlin, not wedding ceremonies.`,
+    )
+    this.name = 'WeddingCeremonyContentError'
+  }
+}
+
+/**
+ * Checks if an error is a WeddingCeremonyContentError (should trigger regeneration).
+ */
+function isWeddingCeremonyError(err: unknown): err is WeddingCeremonyContentError {
+  return err instanceof WeddingCeremonyContentError
+}
+
 export function isRetryableGenerationError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
-  return error.message.includes(REPETITION_GUARD_PREFIX)
+  // Retry on repetition guard errors
+  if (error.message.includes(REPETITION_GUARD_PREFIX)) return true
+  // Retry on wedding ceremony content errors (article was about weddings instead of Wedding neighborhood)
+  if (isWeddingCeremonyError(error)) return true
+  return false
 }
 
 /**
@@ -282,6 +309,7 @@ const AVOID_OVERUSED_THEMES = [
   'AVOID OVERUSING THESE THEMES (they matter, but we run them into the ground):',
   '- "Authenticity" / "real Berlin" / "keeping it real" / "the old Berlin" — do NOT make this the central joke again unless the blacklist shows it has not been used recently.',
   '- Rent / rent prices / "daddy pays the rent" / "cheap rent" / rent protests — do NOT make rent the main punchline again unless the blacklist shows it has not been used recently.',
+  '- Wellness/calm/silence/quiet as a commodity or "serenity-as-a-service" that gets monetized or converted into rent — this premise has been overused; do NOT write another "wellness startup converts calm/silence into rent" story.',
   '- Prefer other angles: bureaucracy, nightlife specifics, food, neighborhood politics, expat hypocrisy, tech/startups, local characters, crime, absurd local events. Use authenticity and rent sparingly.',
 ].join('\n')
 
@@ -320,7 +348,7 @@ const WEDDING_NEIGHBORHOOD_CONTEXT = [
   'This tension between old Wedding and new Wedding is a rich source of satire.',
 ].join('\n')
 
-const WEDDING_REMINDER_SHORT = [
+export const WEDDING_REMINDER_SHORT = [
   'CRITICAL REMINDER: "Wedding" (capitalized) refers to Wedding, the Berlin neighborhood, NOT a wedding ceremony.',
   'DO NOT write about wedding ceremonies, marriage, brides, grooms, wedding planning, or wedding-related topics.',
   'Write about life in the Wedding neighborhood, not about weddings as events.',
@@ -1144,6 +1172,106 @@ function isAfDTopic(text: string): boolean {
 
 function isAfRTheme(text: string): boolean {
   return AFR_TOPIC_PATTERN.test(text)
+}
+
+/******************* WEDDING CEREMONY DETECTION ***********************/
+// CRITICAL: "Wedding" is a neighborhood in Berlin, NOT a wedding ceremony.
+// This detector catches articles that are mistakenly about marriage/wedding ceremonies.
+
+// Patterns that indicate wedding CEREMONY content (not the neighborhood)
+const WEDDING_CEREMONY_PATTERNS: RegExp[] = [
+  // Lowercase "wedding" or "weddings" (the neighborhood is always capitalized as "Wedding")
+  /\bwedding(?:s)?\b/g, // lowercase wedding/weddings
+  // Marriage ceremony phrases (specific contexts only - avoid overly broad patterns like standalone "I do")
+  /\bwalk(?:ing|ed)?\s+down\s+the\s+aisle\b/gi,
+  /\bdown\s+the\s+aisle\b/gi,
+  /\bbride(?:s|'s)?\b/gi,
+  /\bgroom(?:s|'s)?\b/gi,
+  /\bbridal\b/gi,
+  /\bmarriage\s+ceremon(?:y|ies)\b/gi,
+  /\bwedding\s+(?:dress|gown|cake|ring|vow|venue|planner|reception|ceremony|party|day|band|photographer|invitation|guest|registry|toast|bouquet|chapel|officiant)/gi,
+  /\bmarry(?:ing)?\s+(?:me|you|him|her|them)\b/gi,
+  /\btie\s+the\s+knot\b/gi,
+  /\bsay(?:ing)?\s+["']?i do["']?\b/gi, // Only "saying I do" - not standalone "I do" which is too broad
+  /\bexchange(?:d|ing)?\s+(?:vows|rings)\b/gi,
+  /\bmatrimon(?:y|ial)\b/gi,
+  /\bnewlywed(?:s)?\b/gi,
+  /\bhoneymoon(?:s|ing|ed)?\b/gi,
+  /\bengagement\s+(?:ring|party|photo)\b/gi,
+  /\bbest\s+man\b/gi,
+  /\bmaid\s+of\s+honor\b/gi,
+  /\bflower\s+girl\b/gi,
+  /\bring\s+bearer\b/gi,
+  /\bwedded\s+bliss\b/gi,
+  /\bmarital\b/gi,
+  /\bspous(?:e|al)\b/gi,
+  /\bbetrothed\b/gi,
+]
+
+// Whitelist patterns: these contain "wedding" but are about the NEIGHBORHOOD or legitimate Berlin topics
+const WEDDING_NEIGHBORHOOD_WHITELIST: RegExp[] = [
+  /\bWedding\s+(?:neighborhood|district|area|resident|local|street|café|bar|Späti|U-Bahn|S-Bahn|station|scene|gentrification)\b/i,
+  /\bin\s+Wedding\b/i, // "in Wedding" (the neighborhood)
+  /\bWedding,?\s+Berlin\b/i,
+  /\bthe\s+Wedding\s+Times\b/i,
+  /\bClan\s+wedding\b/i, // Clan weddings are a Berlin crime story topic
+  /\bwedding\s+hall\b/i, // Turkish community centers as wedding halls - legitimate
+]
+
+/**
+ * Detects if an article is mistakenly about wedding ceremonies instead of the Wedding neighborhood.
+ * Returns the number of ceremony-related matches found.
+ */
+function detectWeddingCeremonyContent(article: GeneratedArticle): {
+  hasCeremonyContent: boolean
+  matchCount: number
+  matches: string[]
+} {
+  const fullText = [
+    article.headline,
+    article.subheadline ?? '',
+    article.excerpt ?? '',
+    article.bodyMarkdown,
+  ].join(' ')
+
+  // First check whitelist - if the article clearly mentions the neighborhood, be more lenient
+  const hasNeighborhoodContext = WEDDING_NEIGHBORHOOD_WHITELIST.some((pattern) =>
+    pattern.test(fullText),
+  )
+
+  const matches: string[] = []
+
+  for (const pattern of WEDDING_CEREMONY_PATTERNS) {
+    // Reset regex state
+    pattern.lastIndex = 0
+    const patternMatches = fullText.match(pattern)
+    if (patternMatches) {
+      matches.push(...patternMatches)
+    }
+  }
+
+  // If we have clear neighborhood context, require more matches to trigger
+  const threshold = hasNeighborhoodContext ? 5 : 2
+
+  return {
+    hasCeremonyContent: matches.length >= threshold,
+    matchCount: matches.length,
+    matches: [...new Set(matches)].slice(0, 10), // Dedupe and limit
+  }
+}
+
+/**
+ * Checks article for wedding ceremony content and throws if detected.
+ * This forces a regeneration with the correct context.
+ */
+function assertNotAboutWeddingCeremonies(article: GeneratedArticle): void {
+  const detection = detectWeddingCeremonyContent(article)
+  if (detection.hasCeremonyContent) {
+    console.warn(
+      `${LOG.prefix} WEDDING CEREMONY CONTENT DETECTED: ${detection.matchCount} matches found: ${detection.matches.join(', ')}`,
+    )
+    throw new WeddingCeremonyContentError(detection.matchCount, detection.matches)
+  }
 }
 
 function sanitizeForbiddenSourceMentions(text: string): string {
@@ -3884,6 +4012,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
     validated = applySeedDraft(validated, input.seedDraft)
 
+    // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
+    assertNotAboutWeddingCeremonies(validated)
+
     assertArticleNotTooSimilarToRecentCoverage({
       article: validated,
       recentTitles,
@@ -3927,6 +4058,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     }
 
     const repairedWithSeed = applySeedDraft(repaired, input.seedDraft)
+
+    // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
+    assertNotAboutWeddingCeremonies(repairedWithSeed)
 
     assertArticleNotTooSimilarToRecentCoverage({
       article: repairedWithSeed,
