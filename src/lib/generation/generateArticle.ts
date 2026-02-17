@@ -1699,6 +1699,8 @@ async function generateSatireBrief(args: {
     'Focus on dark humor and political criticism grounded in social observation.',
     'Critique institutions, ideologies, and behaviors; avoid slurs, hate speech, and calls for harm.',
     `Tone profile guidance: ${TONE_PROFILE_GUIDANCE[args.toneProfile]}`,
+    '',
+    WEDDING_REMINDER_SHORT,
   ].join('\n')
 
   const userPrompt = [
@@ -1774,6 +1776,9 @@ async function critiqueSatireArticle(args: {
     'Do not sanitize. Judge based on writing quality and satirical sharpness.',
     'Penalize vagueness and generic absurdism. Reward specificity and social observation.',
     'No score inflation.',
+    '',
+    WEDDING_REMINDER_SHORT,
+    'CRITICAL: If this article is about wedding ceremonies instead of the Wedding neighborhood, flag it harshly in the critique.',
   ].join('\n')
 
   const userPrompt = [
@@ -1870,6 +1875,9 @@ async function rewriteArticleFromCritique(args: {
     'Target institutions and ideology performance, not identity-based attacks.',
     'No slurs, hate speech, or calls for harm.',
     'Output MUST be strict JSON only.',
+    '',
+    WEDDING_REMINDER_SHORT,
+    'If the article is about wedding ceremonies, you MUST rewrite it to be about the Wedding neighborhood instead.',
   ].join('\n')
 
   const userPrompt = [
@@ -1978,6 +1986,8 @@ async function translateToEnglish(args: {
     '- Ensure bodyMarkdown is English markdown (no code blocks).',
     '- Preserve and translate newAuthorName, newAuthorTitle, newAuthorBio if present.',
     '- Keep controversial satire if policy-safe; do not sanitize by default.',
+    '',
+    WEDDING_REMINDER_SHORT,
   ].join('\n')
 
   const userPrompt = [
@@ -2060,6 +2070,8 @@ async function repairToSchema(args: {
     '- Ensure bodyMarkdown is a single markdown string (no code blocks).',
     '- Respect ALL max-length limits; rewrite text to fit without truncating mid-word.',
     '- Do not sanitize edgy political satire unless required to remove explicit policy violations.',
+    '',
+    WEDDING_REMINDER_SHORT,
   ].join('\n')
 
   const validationErrorsSection =
@@ -2163,6 +2175,8 @@ async function shortenToSchema(args: {
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
     'categorySlug can be existing OR new. authorSlug can be existing OR new (if new, ensure newAuthorName/Title/Bio are provided).',
     'If the input has a new authorSlug but is missing newAuthorName/Title/Bio, GENERATE them based on the slug.',
+    '',
+    WEDDING_REMINDER_SHORT,
   ].join('\n')
 
   const userPrompt = [
@@ -2245,9 +2259,13 @@ async function regenerateHeadline(args: {
       .replace(/[^a-z]/g, '') ?? ''
 
   const systemPrompt = [
-    'You are a headline editor for a satirical newspaper.',
+    'You are a headline editor for a satirical newspaper called "The Wedding Times".',
     'Your ONLY job is to rewrite a headline that violates structural rules.',
     'You must preserve the meaning and tone but change the STRUCTURE (especially the opening word).',
+    '',
+    'CRITICAL: "Wedding" refers to the Wedding neighborhood in Berlin, NOT wedding ceremonies.',
+    'The headline must NEVER be about wedding ceremonies, marriage, brides, grooms, or wedding planning.',
+    'If the headline is about wedding ceremonies, rewrite it to be about the Wedding neighborhood instead.',
     '',
     'Output ONLY the new headline as plain text. No JSON, no quotes, no explanation.',
     'The headline must be <= 140 characters.',
