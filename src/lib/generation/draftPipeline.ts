@@ -17,6 +17,12 @@ const DraftCandidateSchema = z.object({
   excerpt: z.string().max(300).optional().nullable(),
 })
 
+const RawDraftCandidateSchema = z.object({
+  headline: z.coerce.string(),
+  subheadline: z.coerce.string().optional().nullable(),
+  excerpt: z.coerce.string().optional().nullable(),
+})
+
 const DraftToneSchema = z.object({
   funScore: z.number().int().min(1).max(10),
   mercilessScore: z.number().int().min(1).max(10),
@@ -163,14 +169,20 @@ export async function generateDraftCandidate(params: {
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
-  const validated = DraftCandidateSchema.parse(parsed)
+  const rawCandidate = RawDraftCandidateSchema.parse(parsed)
+  const normalized = normalizeDraft({
+    headline: rawCandidate.headline,
+    subheadline: rawCandidate.subheadline ?? null,
+    excerpt: rawCandidate.excerpt ?? null,
+  })
+  const validated = DraftCandidateSchema.parse(normalized)
 
   return {
-    draft: normalizeDraft({
+    draft: {
       headline: validated.headline,
       subheadline: validated.subheadline ?? null,
       excerpt: validated.excerpt ?? null,
-    }),
+    },
     sourceRssTopic: topic,
   }
 }
