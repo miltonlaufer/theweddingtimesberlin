@@ -153,6 +153,14 @@ function toRecentCoverageItems(docs: unknown[]): RecentCoverageItem[] {
     .filter((item): item is RecentCoverageItem => item !== null && item.headline.length > 0)
 }
 
+function normalizeTopicIdentity(topic: string): string {
+  return topic
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '')
+    .trim()
+}
+
 async function callInternalJson<T>(params: {
   baseUrl: string
   path: string
@@ -315,17 +323,18 @@ export async function runGenerationPipeline(params: {
           return doc.sourceRssTopic
         })
         .filter((t): t is string => typeof t === 'string' && t.length > 0)
-        .map((t) => t.toLowerCase()),
+        .map((t) => normalizeTopicIdentity(t))
+        .filter((t) => t.length > 0),
     )
 
     const freshTopics = rssTopicsResult.topics.filter(
-      (t) => !recentlyUsedRssTopics.has(t.title.toLowerCase()),
+      (t) => !recentlyUsedRssTopics.has(normalizeTopicIdentity(t.title)),
     )
 
-    const topicSummary =
-      freshTopics.length > 0
-        ? freshTopics.map((t) => `- [${t.source}] ${t.title}`).join('\n')
-        : rssTopicsResult.topicSummary
+    const topicSummary = freshTopics.map((t) => `- [${t.source}] ${t.title}`).join('\n')
+    CRON_LOG.info(
+      `JOB ${String(jobId)}: rss topic filtering | fetched=${rssTopicsResult.topics.length} fresh=${freshTopics.length} lockedFromRecent=${recentlyUsedRssTopics.size}`,
+    )
 
     const recentCoverage = toRecentCoverageItems(recentArticlesRes.docs)
     const recentArticleTitles = recentCoverage.map((x) => x.headline)
@@ -442,6 +451,7 @@ export async function runGenerationPipeline(params: {
     CRON_LOG.step(`JOB ${String(jobId)}: Draft generation + evaluation`)
 
     const acceptedDraftsForBatch: DraftCandidate[] = []
+    const lockedSourceTopicsForJob = new Set<string>(recentlyUsedRssTopics)
     const acceptedItems: Array<{
       id: string | number
       slotIndex: number
@@ -454,6 +464,7 @@ export async function runGenerationPipeline(params: {
     for (const item of jobItems) {
       let accepted = false
       let attemptsUsed = 0
+      const attemptedSourceTopicsForSlot = new Set<string>(lockedSourceTopicsForJob)
 
       for (let attempt = 1; attempt <= MAX_DRAFT_RETRIES + 1; attempt++) {
         CRON_LOG.info(
@@ -464,6 +475,7 @@ export async function runGenerationPipeline(params: {
           accepted?: boolean
           exhausted?: boolean
           draft?: DraftCandidate
+          sourceRssTopic?: string | null
           error?: string
           evaluation?: { reason?: string }
         }>({
@@ -478,6 +490,7 @@ export async function runGenerationPipeline(params: {
             topicSummary,
             recentCoverage,
             acceptedDrafts: acceptedDraftsForBatch,
+            forbiddenSourceTopics: Array.from(attemptedSourceTopicsForSlot),
             blacklistSummary: precomputedBlacklistSummary,
           },
         })
@@ -497,7 +510,16 @@ export async function runGenerationPipeline(params: {
           accepted?: boolean
           exhausted?: boolean
           draft?: DraftCandidate
+          sourceRssTopic?: string | null
           evaluation?: { reason?: string }
+        }
+        const usedSourceTopic =
+          typeof payloadData.sourceRssTopic === 'string' &&
+          payloadData.sourceRssTopic.trim().length > 0
+            ? payloadData.sourceRssTopic.trim()
+            : null
+        if (usedSourceTopic) {
+          attemptedSourceTopicsForSlot.add(normalizeTopicIdentity(usedSourceTopic))
         }
 
         if (payloadData.accepted && payloadData.draft) {
@@ -512,6 +534,12 @@ export async function runGenerationPipeline(params: {
             draft: payloadData.draft,
           })
           acceptedDraftsForBatch.push(payloadData.draft)
+          if (usedSourceTopic) {
+            lockedSourceTopicsForJob.add(normalizeTopicIdentity(usedSourceTopic))
+            CRON_LOG.info(
+              `JOB ${String(jobId)}: draft slot ${item.slotIndex + 1} locked RSS topic | "${usedSourceTopic.slice(0, 120)}"`,
+            )
+          }
           break
         }
 

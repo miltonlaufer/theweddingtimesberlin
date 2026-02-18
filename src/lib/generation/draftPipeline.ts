@@ -55,14 +55,45 @@ function stripTopicSource(line: string): string {
   return withoutBullet.trim()
 }
 
-function pickTopicForSlot(slot: SlotConfig, topicSummary: string): string | null {
-  const topicLines = toTopicLines(topicSummary).map(stripTopicSource)
+function normalizeTopicIdentity(topic: string): string {
+  return topic
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '')
+    .trim()
+}
+
+function pickTopicForSlot(
+  slot: SlotConfig,
+  topicSummary: string,
+  forbiddenSourceTopics: string[],
+): string | null {
+  const topicLines = toTopicLines(topicSummary)
+    .map(stripTopicSource)
+    .filter((line) => line.length > 0)
+  const forbidden = new Set(
+    forbiddenSourceTopics.map(normalizeTopicIdentity).filter((line) => line.length > 0),
+  )
+  const allowedTopics = topicLines.filter((line) => !forbidden.has(normalizeTopicIdentity(line)))
+  const allowReuseWhenExhausted =
+    (process.env.DRAFT_ALLOW_RSS_TOPIC_REUSE_WHEN_EXHAUSTED ?? 'false') === 'true'
+
   if (topicLines.length === 0) return null
   if (slot.forceRss) {
-    return topicLines[Math.floor(Math.random() * topicLines.length)] ?? null
+    if (allowedTopics.length > 0) {
+      return allowedTopics[Math.floor(Math.random() * allowedTopics.length)] ?? null
+    }
+    return allowReuseWhenExhausted
+      ? (topicLines[Math.floor(Math.random() * topicLines.length)] ?? null)
+      : null
   }
   if (!slot.includeTopics) return null
-  return topicLines[Math.floor(Math.random() * topicLines.length)] ?? null
+  if (allowedTopics.length > 0) {
+    return allowedTopics[Math.floor(Math.random() * allowedTopics.length)] ?? null
+  }
+  return allowReuseWhenExhausted
+    ? (topicLines[Math.floor(Math.random() * topicLines.length)] ?? null)
+    : null
 }
 
 function buildModeInstruction(slot: SlotConfig): string {
@@ -107,6 +138,7 @@ export async function generateDraftCandidate(params: {
   recentCoverage: RecentCoverageItem[]
   blacklistSummary: string
   acceptedDrafts: DraftCandidate[]
+  forbiddenSourceTopics?: string[]
 }): Promise<{ draft: DraftCandidate; sourceRssTopic: string | null }> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY')
@@ -117,7 +149,11 @@ export async function generateDraftCandidate(params: {
     process.env.OPENAI_MODEL ??
     'gpt-4o-mini'
 
-  const topic = pickTopicForSlot(params.slot, params.topicSummary)
+  const topic = pickTopicForSlot(
+    params.slot,
+    params.topicSummary,
+    params.forbiddenSourceTopics ?? [],
+  )
   const llm = new ChatOpenAI({
     apiKey,
     model: modelName,

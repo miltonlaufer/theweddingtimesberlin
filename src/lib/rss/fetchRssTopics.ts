@@ -24,20 +24,16 @@ const DEFAULT_MAX_ITEMS_PER_SOURCE = 12
 const DEFAULT_FEEDS: Record<RssSource, string[]> = {
   // Berliner Zeitung: provide via env (RSS_BERLINER_ZEITUNG_FEED).
   'berliner-zeitung': [],
-  'nytimes': ['https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml'],
+  nytimes: ['https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml'],
 }
 
 /******************* HELPERS ***********************/
 
-function normalizeRssItems(args: {
-  source: RssSource
-  xml: string
-  maxItems: number
-}): RssTopic[] {
+function normalizeRssItems(args: { source: RssSource; xml: string; maxItems: number }): RssTopic[] {
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && Array.isArray(value) === false
 
-  const asArray = <T,>(value: T | T[] | undefined | null): T[] => {
+  const asArray = <T>(value: T | T[] | undefined | null): T[] => {
     if (Array.isArray(value)) return value
     if (value === undefined || value === null) return []
     return [value]
@@ -141,6 +137,61 @@ function buildTopicSummary(topics: RssTopic[]): string {
   return lines.join('\n')
 }
 
+function normalizeTopicIdentity(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '')
+    .trim()
+}
+
+function normalizeTopicUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return ''
+
+  try {
+    const parsed = new URL(trimmed)
+    parsed.hash = ''
+    const trackingParams = [
+      'utm_source',
+      'utm_medium',
+      'utm_campaign',
+      'utm_term',
+      'utm_content',
+      'fbclid',
+      'gclid',
+    ]
+    for (const param of trackingParams) {
+      parsed.searchParams.delete(param)
+    }
+    parsed.searchParams.sort()
+    return parsed.toString().toLowerCase()
+  } catch {
+    return trimmed.toLowerCase()
+  }
+}
+
+function dedupeTopics(topics: RssTopic[]): RssTopic[] {
+  const byUrl = new Set<string>()
+  const byTitle = new Set<string>()
+  const deduped: RssTopic[] = []
+
+  for (const topic of topics) {
+    const urlKey = normalizeTopicUrl(topic.url)
+    const titleKey = normalizeTopicIdentity(topic.title)
+
+    const isDuplicateByUrl = urlKey.length > 0 && byUrl.has(urlKey)
+    const isDuplicateByTitle = titleKey.length > 0 && byTitle.has(titleKey)
+    if (isDuplicateByUrl || isDuplicateByTitle) continue
+
+    if (urlKey.length > 0) byUrl.add(urlKey)
+    if (titleKey.length > 0) byTitle.add(titleKey)
+    deduped.push(topic)
+  }
+
+  return deduped
+}
+
 /******************* MAIN ***********************/
 
 export async function fetchRssTopics(args?: {
@@ -187,9 +238,9 @@ export async function fetchRssTopics(args?: {
     topics.push(...parsed)
   }
 
+  const dedupedTopics = dedupeTopics(topics)
   return {
-    topics,
-    topicSummary: buildTopicSummary(topics),
+    topics: dedupedTopics,
+    topicSummary: buildTopicSummary(dedupedTopics),
   }
 }
-

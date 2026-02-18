@@ -36,6 +36,7 @@ const RequestSchema = z.object({
       }),
     )
     .default([]),
+  forbiddenSourceTopics: z.array(z.string()).default([]),
   blacklistSummary: z.string().default(''),
 })
 
@@ -96,7 +97,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const currentAttempt = Number(item.draftAttempt ?? 0)
   const nextAttempt = currentAttempt + 1
   console.log(
-    `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} draft attempt ${nextAttempt}/${maxAttempts}`,
+    `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} draft attempt ${nextAttempt}/${maxAttempts} | forbiddenSourceTopics=${body.forbiddenSourceTopics.length}`,
   )
   if (currentAttempt >= maxAttempts) {
     console.warn(
@@ -136,6 +137,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       recentCoverage,
       blacklistSummary: body.blacklistSummary,
       acceptedDrafts,
+      forbiddenSourceTopics: body.forbiddenSourceTopics,
     })
 
     const evaluation = await evaluateDraftCandidate({

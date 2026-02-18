@@ -348,6 +348,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       excerpt: item.excerpt?.trim() || null,
     }
     let seedTopicHint = item.sourceRssTopic ?? null
+    const triedSourceTopicsForItem = new Set<string>()
+    if (typeof seedTopicHint === 'string' && seedTopicHint.trim().length > 0) {
+      triedSourceTopicsForItem.add(seedTopicHint.trim())
+    }
     const recentCoverage = normalizeRecentCoverage(
       body.recentArticleTitles,
       body.recentArticleExcerpts,
@@ -430,7 +434,14 @@ export async function POST(request: Request): Promise<NextResponse> {
               recentCoverage: dynamicCoverage,
               blacklistSummary: body.precomputedBlacklistSummary,
               acceptedDrafts,
+              forbiddenSourceTopics: Array.from(triedSourceTopicsForItem),
             })
+            if (
+              typeof regeneratedDraft.sourceRssTopic === 'string' &&
+              regeneratedDraft.sourceRssTopic.trim().length > 0
+            ) {
+              triedSourceTopicsForItem.add(regeneratedDraft.sourceRssTopic.trim())
+            }
 
             const evaluation = await evaluateDraftCandidate({
               candidate: regeneratedDraft.draft,
