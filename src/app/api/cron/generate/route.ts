@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getPayload, resetPayload } from '@/lib/payload'
-import { buildInternalAuthHeaders } from '@/lib/generation/internalAuth'
+import {
+  buildInternalAuthHeaders,
+  getInternalCronSecret,
+  getProvidedInternalCronToken,
+} from '@/lib/generation/internalAuth'
 import { ARTICLES_PER_RUN } from '@/lib/generation/runGenerationPipeline'
 
 const CRON_LOG = {
@@ -43,10 +47,7 @@ async function kickoffRunJob(params: {
 }
 
 function extractProvidedSecret(request: Request): string | undefined {
-  const authHeader = request.headers.get('authorization') ?? ''
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  const xCronSecret = request.headers.get('x-cron-secret')?.trim() ?? ''
-  return bearer || xCronSecret || undefined
+  return getProvidedInternalCronToken(request)
 }
 
 function isStalePayloadCreateError(error: unknown): boolean {
@@ -58,6 +59,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   CRON_LOG.step('STEP 1: Cron enqueue request received')
 
   const cronSecret = process.env.CRON_SECRET?.trim() ?? ''
+  const internalSecret = getInternalCronSecret()
   const providedSecret = extractProvidedSecret(req)
   const isProd = process.env.NODE_ENV === 'production'
 
@@ -65,12 +67,23 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
+  if (isProd && !internalSecret) {
+    console.error(`${CRON_LOG.prefix} Missing internal auth secret. Set CRON_SECRET in production.`)
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'Internal auth secret missing in production',
+      },
+      { status: 500 },
+    )
+  }
+
   let payload = await getPayload()
   if (!payload) {
     return NextResponse.json({ ok: false, error: 'Database unavailable' }, { status: 503 })
   }
 
-  const tokenForInternalCalls = providedSecret ?? (cronSecret || undefined)
+  const tokenForInternalCalls = providedSecret ?? (internalSecret || undefined)
   const jobKey = `cron-${new Date().toISOString().replace(/[:.]/g, '-')}-${Math.random()
     .toString(36)
     .slice(2, 8)}`

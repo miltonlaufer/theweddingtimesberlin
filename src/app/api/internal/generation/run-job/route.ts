@@ -1,6 +1,9 @@
 import { NextResponse, after } from 'next/server'
 import { z } from 'zod'
-import { isInternalCronAuthorized } from '@/lib/generation/internalAuth'
+import {
+  getInternalCronTokenForCalls,
+  isInternalCronAuthorized,
+} from '@/lib/generation/internalAuth'
 import { runGenerationPipeline } from '@/lib/generation/runGenerationPipeline'
 
 export const maxDuration = 300
@@ -9,18 +12,6 @@ const LOG_PREFIX = '[INTERNAL-RUN-JOB]'
 const RequestSchema = z.object({
   jobId: z.union([z.string(), z.number()]),
 })
-
-function extractInternalToken(request: Request): string | undefined {
-  const authHeader = request.headers.get('authorization') ?? ''
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  const xCronSecret = request.headers.get('x-cron-secret')?.trim() ?? ''
-  const envSecret = process.env.CRON_SECRET?.trim() ?? ''
-
-  if (bearer) return bearer
-  if (xCronSecret) return xCronSecret
-  if (envSecret) return envSecret
-  return undefined
-}
 
 export async function POST(request: Request): Promise<NextResponse> {
   if (!isInternalCronAuthorized(request)) {
@@ -39,7 +30,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     )
   }
 
-  const tokenForInternalCalls = extractInternalToken(request)
+  const tokenForInternalCalls = getInternalCronTokenForCalls(request)
   const baseUrl = request.url
   const jobId = body.jobId
   console.log(`${LOG_PREFIX} Accepted job ${String(body.jobId)}; scheduling background pipeline`)
