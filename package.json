@@ -6,6 +6,7 @@
     "dev": "next dev -p 3050",
     "build": "next build",
     "postbuild": "next-sitemap",
+    "postinstall": "node scripts/patch-web-push-dep0169.mjs",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

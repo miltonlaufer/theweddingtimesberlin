@@ -8,9 +8,13 @@ import {
   type GeneratorAuthorOption,
   type GeneratorCategoryOption,
 } from '@/lib/generation/generateArticle'
-import { isInternalCronAuthorized } from '@/lib/generation/internalAuth'
+import {
+  getInternalCronTokenForCalls,
+  isInternalCronAuthorized,
+} from '@/lib/generation/internalAuth'
 import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
+import { tryFinalizeGenerationJob } from '@/lib/generation/runGenerationPipeline'
 import {
   convertMarkdownToLexical,
   defaultEditorConfig,
@@ -202,6 +206,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     console.warn(`${LOG_PREFIX} Unauthorized request`)
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
+  const tokenForInternalCalls = getInternalCronTokenForCalls(request)
+  const baseUrl = request.url
 
   let body: z.infer<typeof RequestSchema>
   try {
@@ -690,6 +696,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} completed | slug=${slug} category=${finalGenerated.categorySlug} rss=${usedRssTopic ?? seedTopicHint ?? 'none'}`,
     )
 
+    try {
+      await tryFinalizeGenerationJob({
+        baseUrl,
+        tokenForInternalCalls,
+        jobId: body.jobId,
+      })
+    } catch (finalizeError) {
+      console.error(
+        `${LOG_PREFIX} Finalization attempt failed after item completion for job ${String(body.jobId)}`,
+        finalizeError,
+      )
+    }
+
     return NextResponse.json({
       ok: true,
       created: {
@@ -714,6 +733,18 @@ export async function POST(request: Request): Promise<NextResponse> {
         completedAt: new Date().toISOString(),
       },
     })
+    try {
+      await tryFinalizeGenerationJob({
+        baseUrl,
+        tokenForInternalCalls,
+        jobId: body.jobId,
+      })
+    } catch (finalizeError) {
+      console.error(
+        `${LOG_PREFIX} Finalization attempt failed after item failure for job ${String(body.jobId)}`,
+        finalizeError,
+      )
+    }
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }

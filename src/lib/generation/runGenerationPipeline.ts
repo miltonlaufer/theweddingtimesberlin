@@ -274,6 +274,9 @@ export async function tryFinalizeGenerationJob(params: {
     )
     return { finalized: false, pending: true }
   }
+  CRON_LOG.info(
+    `JOB ${String(jobId)}: finalization ready | completed=${completedItems.length} failed=${failedItems.length}`,
+  )
 
   const lockToken = `lock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
   const lockMetadata = toRecord(job.metadata)
