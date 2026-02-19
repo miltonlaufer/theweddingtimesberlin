@@ -1,5 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
+import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
 import {
   assessRecentCoverageOverlap,
   WEDDING_REMINDER_SHORT,
@@ -128,7 +129,10 @@ function normalizeDraft(candidate: DraftCandidate): DraftCandidate {
   return {
     headline: candidate.headline.trim().slice(0, 140),
     subheadline: candidate.subheadline?.trim().slice(0, 220) || null,
-    excerpt: candidate.excerpt?.trim().slice(0, 300) || null,
+    excerpt:
+      typeof candidate.excerpt === 'string'
+        ? trimToReadableLength(candidate.excerpt, 300) || null
+        : null,
   }
 }
 

@@ -1,5 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
+import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
 
 /******************* TYPES ***********************/
 
@@ -2507,7 +2508,7 @@ function applySeedDraft(
     next.subheadline = seed.subheadline.trim().slice(0, 220) || null
   }
   if (typeof seed.excerpt === 'string') {
-    next.excerpt = seed.excerpt.trim().slice(0, 300) || null
+    next.excerpt = trimToReadableLength(seed.excerpt, 300) || null
   }
 
   return next
@@ -2541,7 +2542,7 @@ function hydrateLockedDraftFields(args: {
       : null
   hydrated.excerpt =
     typeof args.seedDraft.excerpt === 'string'
-      ? args.seedDraft.excerpt.trim().slice(0, 300) || null
+      ? trimToReadableLength(args.seedDraft.excerpt, 300) || null
       : null
   hydrated.sourceRssTopic = args.usedRssTopic ?? null
 
@@ -3754,7 +3755,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           ? `- Use this EXACT subheadline: "${input.seedDraft.subheadline.trim().slice(0, 220)}"`
           : '- Subheadline may be null if needed.',
         typeof input.seedDraft.excerpt === 'string'
-          ? `- Use this EXACT excerpt: "${input.seedDraft.excerpt.trim().slice(0, 300)}"`
+          ? `- Use this EXACT excerpt: "${trimToReadableLength(input.seedDraft.excerpt, 300)}"`
           : '- Excerpt may be null if needed.',
         typeof input.seedDraft.topicHint === 'string' && input.seedDraft.topicHint.trim().length > 0
           ? `- Keep this SAME topic/news hook continuity: "${input.seedDraft.topicHint.trim().slice(0, 300)}"`
