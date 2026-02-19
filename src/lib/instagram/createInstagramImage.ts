@@ -104,6 +104,23 @@ async function ensureFontRegisteredAsync(): Promise<void> {
 
 /******************* TEXT LAYOUT ***********************/
 
+/**
+ * Normalize punctuation/spacing that commonly renders as missing glyphs in IG overlays.
+ */
+export function sanitizeInstagramOverlayText(text: string): string {
+  return text
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-')
+    .replace(/[\u00a0\u2007\u202f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function sanitizeOptionalInstagramOverlayText(text: string | null): string | null {
+  if (!text) return null
+  const sanitized = sanitizeInstagramOverlayText(text)
+  return sanitized.length > 0 ? sanitized : null
+}
+
 function wrapLines(
   ctx: ReturnType<ReturnType<typeof createCanvas>['getContext']>,
   text: string,
@@ -277,12 +294,14 @@ export async function createInstagramImageBuffer(
   params: CreateInstagramImageParams,
 ): Promise<Buffer> {
   const { imageUrl, headline, excerpt } = params
+  const safeHeadline = sanitizeInstagramOverlayText(headline)
+  const safeExcerpt = sanitizeOptionalInstagramOverlayText(excerpt)
   await ensureFontRegisteredAsync()
   const imageBuffer = await imageUrlToBuffer(imageUrl)
   const meta = await sharp(imageBuffer).metadata()
   const width = meta.width ?? 1080
   const height = meta.height ?? 1080
-  const overlayBuffer = createTextOverlayBuffer(width, height, headline, excerpt)
+  const overlayBuffer = createTextOverlayBuffer(width, height, safeHeadline, safeExcerpt)
   const composite = await sharp(imageBuffer)
     .composite([{ input: overlayBuffer, top: 0, left: 0 }])
     .png()
