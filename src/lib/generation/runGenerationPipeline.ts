@@ -9,7 +9,7 @@ import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryC
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { sendPushNotifications } from '@/lib/push/sendNotifications'
 import { buildInternalAuthHeaders } from '@/lib/generation/internalAuth'
-import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
+import type { RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
 
 /******************* LOGGING ***********************/
 
@@ -189,6 +189,263 @@ async function callInternalJson<T>(params: {
     status: response.status,
     data,
   }
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return { ...(value as Record<string, unknown>) }
+}
+
+type JobItemStatusDoc = {
+  id?: string | number
+  status?: string
+  draftAttempt?: number
+  articleSlug?: string
+  categorySlug?: string
+  article?: string | number
+  error?: string
+}
+
+function isTerminalItemStatus(status: string | undefined): boolean {
+  return status === 'completed' || status === 'failed' || status === 'draft-rejected'
+}
+
+export async function tryFinalizeGenerationJob(params: {
+  baseUrl: string
+  tokenForInternalCalls: string | undefined
+  jobId: string | number
+}): Promise<{ finalized: boolean; pending: boolean; status?: 'completed' | 'failed' }> {
+  const { baseUrl, tokenForInternalCalls, jobId } = params
+  const payload = await getPayload()
+  if (!payload) {
+    throw new Error('Database unavailable')
+  }
+
+  const job = (await payload.findByID({
+    collection: 'generation-jobs',
+    id: jobId,
+    depth: 0,
+  })) as { id?: string | number; status?: string; metadata?: unknown }
+
+  if (!job?.id) {
+    throw new Error(`Generation job ${String(jobId)} not found`)
+  }
+
+  if (job.status === 'completed' || job.status === 'failed') {
+    return { finalized: true, pending: false, status: job.status }
+  }
+
+  const refreshedItems = await payload.find({
+    collection: 'generation-job-items',
+    where: { job: { equals: jobId } },
+    limit: 200,
+    sort: 'slotIndex',
+    depth: 0,
+  })
+  const refreshedDocs = normalizeArray<JobItemStatusDoc>(refreshedItems.docs)
+  const completedItems = refreshedDocs.filter((doc) => doc.status === 'completed')
+  const failedItems = refreshedDocs.filter(
+    (doc) => doc.status === 'failed' || doc.status === 'draft-rejected',
+  )
+  const inProgressItems = refreshedDocs.filter((doc) => !isTerminalItemStatus(doc.status))
+  const acceptedCount = refreshedDocs.filter(
+    (doc) =>
+      doc.status === 'draft-accepted' || doc.status === 'processing' || doc.status === 'completed',
+  ).length
+  const draftRetriesUsed = refreshedDocs.reduce((sum, doc) => {
+    const attempts = Number(doc.draftAttempt ?? 0)
+    return sum + Math.max(0, attempts - 1)
+  }, 0)
+
+  await payload.update({
+    collection: 'generation-jobs',
+    id: jobId,
+    data: {
+      acceptedCount,
+      createdCount: completedItems.length,
+      failedCount: failedItems.length,
+      draftRetriesUsed,
+    },
+  })
+
+  if (inProgressItems.length > 0) {
+    CRON_LOG.info(
+      `JOB ${String(jobId)}: finalization pending | inProgress=${inProgressItems.length} completed=${completedItems.length} failed=${failedItems.length}`,
+    )
+    return { finalized: false, pending: true }
+  }
+
+  const lockToken = `lock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const lockMetadata = toRecord(job.metadata)
+  await payload.update({
+    collection: 'generation-jobs',
+    id: jobId,
+    data: {
+      status: 'finalizing',
+      metadata: {
+        ...lockMetadata,
+        finalizationLock: lockToken,
+        finalizationLockAt: new Date().toISOString(),
+      },
+    },
+  })
+
+  const lockCheck = (await payload.findByID({
+    collection: 'generation-jobs',
+    id: jobId,
+    depth: 0,
+  })) as { status?: string; metadata?: unknown }
+  const lockCheckMetadata = toRecord(lockCheck?.metadata)
+  if (lockCheckMetadata.finalizationLock !== lockToken) {
+    CRON_LOG.info(`JOB ${String(jobId)}: finalization lock already owned by another worker`)
+    return { finalized: false, pending: true }
+  }
+
+  const createdArticles = completedItems
+    .map((doc) => {
+      if (!doc.articleSlug) return null
+      return {
+        id: String(doc.article ?? ''),
+        slug: doc.articleSlug,
+        categorySlug: doc.categorySlug ?? '',
+      }
+    })
+    .filter((entry): entry is { id: string; slug: string; categorySlug: string } => entry !== null)
+
+  const usedCategories = new Set(
+    createdArticles.map((article) => article.categorySlug).filter(Boolean),
+  )
+
+  let notificationResult: { sent: number; failed: number; errors: string[] } | null = null
+  if (createdArticles.length > 0) {
+    try {
+      const headlineArticle = createdArticles[0]
+      const articleCount = createdArticles.length
+      const notificationTitle =
+        articleCount === 1 ? 'New Article Published' : `${articleCount} New Articles Published`
+
+      notificationResult = await sendPushNotifications(notificationTitle, {
+        body:
+          articleCount === 1
+            ? 'Check out the latest story!'
+            : `Check out ${articleCount} new stories!`,
+        icon: '/logo-200x200.png',
+        badge: '/logo-200x200.png',
+        url: headlineArticle.slug ? `/article/${headlineArticle.slug}` : '/',
+        tag: 'new-articles',
+      })
+      CRON_LOG.info(
+        `JOB ${String(jobId)}: push notifications sent | sent=${notificationResult?.sent ?? 0} failed=${notificationResult?.failed ?? 0}`,
+      )
+    } catch (error) {
+      console.error('Failed to send push notifications:', error)
+    }
+  }
+
+  const revalidatedPaths: string[] = []
+  if (createdArticles.length > 0) {
+    try {
+      revalidatePath('/')
+      revalidatedPaths.push('/')
+      revalidatePath('/archive')
+      revalidatedPaths.push('/archive')
+      for (const categorySlug of usedCategories) {
+        revalidatePath(`/section/${categorySlug}`)
+        revalidatedPaths.push(`/section/${categorySlug}`)
+      }
+      CRON_LOG.info(
+        `JOB ${String(jobId)}: revalidated ${revalidatedPaths.length} path(s) | ${revalidatedPaths.join(', ')}`,
+      )
+    } catch (error) {
+      console.error(`${CRON_LOG.prefix} Failed to revalidate cache:`, error)
+    }
+  }
+
+  let instagramResult: {
+    sent?: number
+    failed?: number
+    skipped?: boolean
+    reason?: string
+  } | null = null
+  if (createdArticles.length > 0 && process.env.CRON_AUTO_PUBLISH_INSTAGRAM === 'true') {
+    const ig = await callInternalJson<{
+      ok?: boolean
+      sent?: number
+      failed?: number
+      skipped?: boolean
+      reason?: string
+      error?: string
+    }>({
+      baseUrl,
+      path: '/api/internal/generation/publish-instagram',
+      token: tokenForInternalCalls,
+      body: { slugs: createdArticles.map((article) => article.slug) },
+    })
+
+    if (ig.ok) {
+      instagramResult = ig.data as {
+        sent?: number
+        failed?: number
+        skipped?: boolean
+        reason?: string
+      }
+      CRON_LOG.info(
+        `JOB ${String(jobId)}: instagram publish completed | sent=${instagramResult.sent ?? 0} failed=${instagramResult.failed ?? 0} skipped=${instagramResult.skipped === true}`,
+      )
+    } else {
+      instagramResult = {
+        failed: createdArticles.length,
+        reason: (ig.data as { error?: string }).error ?? `HTTP ${ig.status}`,
+      }
+      CRON_LOG.warn(
+        `JOB ${String(jobId)}: instagram publish failed (${instagramResult.reason ?? 'unknown'})`,
+      )
+    }
+  }
+
+  const finalStatus: 'completed' | 'failed' = createdArticles.length > 0 ? 'completed' : 'failed'
+  const finalErrors = failedItems
+    .map((doc, index) => {
+      const trimmed = (doc.error ?? '').trim()
+      if (!trimmed) return null
+      return `item ${index + 1}: ${trimmed}`
+    })
+    .filter((entry): entry is string => entry !== null)
+
+  const latestJob = (await payload.findByID({
+    collection: 'generation-jobs',
+    id: jobId,
+    depth: 0,
+  })) as { metadata?: unknown }
+  const latestMetadata = toRecord(latestJob?.metadata)
+  delete latestMetadata.finalizationLock
+  delete latestMetadata.finalizationLockAt
+
+  await payload.update({
+    collection: 'generation-jobs',
+    id: jobId,
+    data: {
+      status: finalStatus,
+      acceptedCount,
+      createdCount: createdArticles.length,
+      failedCount: failedItems.length,
+      draftRetriesUsed,
+      errorSummary: finalErrors.slice(0, 12).join('\n') || undefined,
+      completedAt: new Date().toISOString(),
+      metadata: {
+        ...latestMetadata,
+        notificationResult,
+        revalidatedPaths,
+        instagramResult,
+        finalizedAt: new Date().toISOString(),
+      },
+    },
+  })
+
+  CRON_LOG.step(
+    `JOB ${String(jobId)}: finished | created=${createdArticles.length} failed=${failedItems.length}`,
+  )
+  return { finalized: true, pending: false, status: finalStatus }
 }
 
 export async function runGenerationPipeline(params: {
@@ -446,395 +703,136 @@ export async function runGenerationPipeline(params: {
     )
     CRON_LOG.info(`JOB ${String(jobId)}: created ${jobItems.length} generation-job-items`)
 
-    currentStage = 'draft-loop'
-    CRON_LOG.info(`JOB ${String(jobId)}: stage=${currentStage}`)
-    CRON_LOG.step(`JOB ${String(jobId)}: Draft generation + evaluation`)
-
-    const acceptedDraftsForBatch: DraftCandidate[] = []
-    const lockedSourceTopicsForJob = new Set<string>(recentlyUsedRssTopics)
-    const acceptedItems: Array<{
-      id: string | number
-      slotIndex: number
-      slot: SlotConfig
-      draft: DraftCandidate
-    }> = []
-    const draftErrors: string[] = []
-    let totalDraftRetriesUsed = 0
-
-    for (const item of jobItems) {
-      let accepted = false
-      let attemptsUsed = 0
-      const attemptedSourceTopicsForSlot = new Set<string>(lockedSourceTopicsForJob)
-
-      for (let attempt = 1; attempt <= MAX_DRAFT_RETRIES + 1; attempt++) {
-        CRON_LOG.info(
-          `JOB ${String(jobId)}: draft slot ${item.slotIndex + 1}/${jobItems.length} attempt ${attempt}/${MAX_DRAFT_RETRIES + 1}`,
-        )
-        attemptsUsed = attempt
-        const result = await callInternalJson<{
-          accepted?: boolean
-          exhausted?: boolean
-          draft?: DraftCandidate
-          sourceRssTopic?: string | null
-          error?: string
-          evaluation?: { reason?: string }
-        }>({
-          baseUrl,
-          path: '/api/internal/generation/retry-draft',
-          token: tokenForInternalCalls,
-          body: {
-            jobId,
-            itemId: item.id,
-            maxAttempts: MAX_DRAFT_RETRIES + 1,
-            slot: item.slot,
-            topicSummary,
-            recentCoverage,
-            acceptedDrafts: acceptedDraftsForBatch,
-            forbiddenSourceTopics: Array.from(attemptedSourceTopicsForSlot),
-            blacklistSummary: precomputedBlacklistSummary,
-          },
-        })
-
-        if (!result.ok) {
-          const err = (result.data as { error?: string }).error ?? `HTTP ${result.status}`
-          CRON_LOG.warn(
-            `JOB ${String(jobId)}: draft slot ${item.slotIndex + 1} attempt ${attempt} failed (${err})`,
-          )
-          if (attempt > MAX_DRAFT_RETRIES) {
-            draftErrors.push(`slot ${item.slotIndex + 1}: ${err}`)
-          }
-          continue
-        }
-
-        const payloadData = result.data as {
-          accepted?: boolean
-          exhausted?: boolean
-          draft?: DraftCandidate
-          sourceRssTopic?: string | null
-          evaluation?: { reason?: string }
-        }
-        const usedSourceTopic =
-          typeof payloadData.sourceRssTopic === 'string' &&
-          payloadData.sourceRssTopic.trim().length > 0
-            ? payloadData.sourceRssTopic.trim()
-            : null
-        if (usedSourceTopic) {
-          attemptedSourceTopicsForSlot.add(normalizeTopicIdentity(usedSourceTopic))
-        }
-
-        if (payloadData.accepted && payloadData.draft) {
-          CRON_LOG.info(
-            `JOB ${String(jobId)}: draft slot ${item.slotIndex + 1} accepted on attempt ${attempt} | "${payloadData.draft.headline.slice(0, 120)}"`,
-          )
-          accepted = true
-          acceptedItems.push({
-            id: item.id,
-            slotIndex: item.slotIndex,
-            slot: item.slot,
-            draft: payloadData.draft,
-          })
-          acceptedDraftsForBatch.push(payloadData.draft)
-          if (usedSourceTopic) {
-            lockedSourceTopicsForJob.add(normalizeTopicIdentity(usedSourceTopic))
-            CRON_LOG.info(
-              `JOB ${String(jobId)}: draft slot ${item.slotIndex + 1} locked RSS topic | "${usedSourceTopic.slice(0, 120)}"`,
-            )
-          }
-          break
-        }
-
-        if (payloadData.exhausted) {
-          CRON_LOG.warn(
-            `JOB ${String(jobId)}: draft slot ${item.slotIndex + 1} exhausted | ${payloadData.evaluation?.reason ?? 'draft rejected'}`,
-          )
-          draftErrors.push(
-            `slot ${item.slotIndex + 1}: ${payloadData.evaluation?.reason ?? 'draft rejected'}`,
-          )
-          break
-        }
-      }
-
-      totalDraftRetriesUsed += Math.max(0, attemptsUsed - 1)
-      if (!accepted && attemptsUsed === 0) {
-        draftErrors.push(`slot ${item.slotIndex + 1}: draft attempts failed`)
-      }
-    }
-    CRON_LOG.info(
-      `JOB ${String(jobId)}: draft stage complete | accepted=${acceptedItems.length}/${jobItems.length} retriesUsed=${totalDraftRetriesUsed} errors=${draftErrors.length}`,
-    )
-
     await payload.update({
       collection: 'generation-jobs',
       id: jobId,
       data: {
-        acceptedCount: acceptedItems.length,
-        draftRetriesUsed: totalDraftRetriesUsed,
+        status: 'generating',
       },
     })
 
-    if (acceptedItems.length === 0) {
-      CRON_LOG.warn(`JOB ${String(jobId)}: no acceptable drafts generated; failing job`)
-      await payload.update({
-        collection: 'generation-jobs',
-        id: jobId,
-        data: {
-          status: 'failed',
-          createdCount: 0,
-          failedCount: ARTICLES_PER_RUN,
-          errorSummary: draftErrors.slice(0, 8).join('\n') || 'No acceptable drafts generated',
-          completedAt: new Date().toISOString(),
-        },
-      })
-      return
-    }
-
-    await payload.update({
-      collection: 'generation-jobs',
-      id: jobId,
-      data: { status: 'generating' },
-    })
-
-    currentStage = 'parallel-workers'
+    currentStage = 'dispatch-slot-workers'
     CRON_LOG.info(`JOB ${String(jobId)}: stage=${currentStage}`)
-    CRON_LOG.step(`JOB ${String(jobId)}: Parallel full-article generation`)
+    CRON_LOG.step(`JOB ${String(jobId)}: Dispatch slot workers`)
 
-    const sortedAccepted = [...acceptedItems].sort((a, b) => a.slotIndex - b.slotIndex)
-
-    const workerResults = await Promise.allSettled(
-      sortedAccepted.map((item, idx) =>
-        callInternalJson<{
-          ok?: boolean
-          created?: {
-            id: string | number
-            slug: string
-            featuredImageUrl: string | null
-            categorySlug: string
-          }
-          error?: string
-        }>({
+    const dispatchResults = await Promise.allSettled(
+      jobItems.map((item) =>
+        callInternalJson<{ ok?: boolean; queued?: boolean; error?: string }>({
           baseUrl,
-          path: '/api/internal/generation/process-item',
+          path: '/api/internal/generation/slot-worker',
           token: tokenForInternalCalls,
           body: {
             jobId,
             itemId: item.id,
             slot: item.slot,
             topicSummary,
+            recentCoverage,
             recentArticleTitles,
             recentArticleExcerpts,
             recentCanonicalStoryReferences,
             precomputedBlacklistSummary,
             recentHeadlinePatterns: uniquePatterns,
             latestArticleContentSample,
+            maxDraftAttempts: MAX_DRAFT_RETRIES + 1,
+            forbiddenSourceTopics: Array.from(recentlyUsedRssTopics),
             publish: true,
-            setAsHeadline: idx === 0,
+            setAsHeadline: item.slotIndex === 0,
           },
         }),
       ),
     )
 
-    const workerErrors: string[] = []
-    CRON_LOG.info(
-      `JOB ${String(jobId)}: full-article workers settled | workers=${sortedAccepted.length}`,
-    )
-    workerResults.forEach((outcome, idx) => {
-      if (outcome.status === 'rejected') {
-        workerErrors.push(`worker ${idx + 1}: ${String(outcome.reason)}`)
+    const dispatchFailures: Array<{ itemId: string | number; slotIndex: number; message: string }> =
+      []
+    let queuedCount = 0
+
+    dispatchResults.forEach((result, index) => {
+      const item = jobItems[index]
+      if (result.status === 'rejected') {
+        const message = String(result.reason)
+        dispatchFailures.push({
+          itemId: item.id,
+          slotIndex: item.slotIndex,
+          message,
+        })
         CRON_LOG.warn(
-          `JOB ${String(jobId)}: worker ${idx + 1}/${sortedAccepted.length} rejected (${String(outcome.reason)})`,
+          `JOB ${String(jobId)}: slot worker dispatch failed for slot ${item.slotIndex + 1} (${message})`,
         )
         return
       }
-      if (!outcome.value.ok) {
-        const errorMessage = (outcome.value.data as { error?: string }).error ?? 'worker failed'
-        workerErrors.push(`worker ${idx + 1}: ${errorMessage}`)
-        CRON_LOG.warn(
-          `JOB ${String(jobId)}: worker ${idx + 1}/${sortedAccepted.length} failed (${errorMessage})`,
-        )
-      } else {
-        const created = (outcome.value.data as { created?: { slug?: string } }).created
-        CRON_LOG.info(
-          `JOB ${String(jobId)}: worker ${idx + 1}/${sortedAccepted.length} completed${created?.slug ? ` | slug=${created.slug}` : ''}`,
-        )
-      }
-    })
 
-    currentStage = 'finalize'
-    CRON_LOG.info(`JOB ${String(jobId)}: stage=${currentStage}`)
-    const refreshedItems = await payload.find({
-      collection: 'generation-job-items',
-      where: { job: { equals: jobId } },
-      limit: 200,
-      sort: 'slotIndex',
-      depth: 0,
-    })
-
-    const refreshedDocs = normalizeArray<{
-      status?: string
-      articleSlug?: string
-      categorySlug?: string
-      article?: string | number
-    }>(refreshedItems.docs)
-    const completedItems = refreshedDocs.filter((d) => {
-      const doc = d as { status?: string }
-      return doc.status === 'completed'
-    })
-
-    const failedItems = refreshedDocs.filter((d) => {
-      const doc = d as { status?: string }
-      return doc.status === 'failed' || doc.status === 'draft-rejected'
-    })
-
-    const createdArticles = completedItems
-      .map((d) => {
-        const doc = d as {
-          articleSlug?: string
-          categorySlug?: string
-          article?: string | number
-        }
-        if (!doc.articleSlug) return null
-        return {
-          id: String(doc.article ?? ''),
-          slug: doc.articleSlug,
-          categorySlug: doc.categorySlug ?? '',
-        }
-      })
-      .filter((x): x is { id: string; slug: string; categorySlug: string } => x !== null)
-    CRON_LOG.info(
-      `JOB ${String(jobId)}: item status after workers | completed=${completedItems.length} failed=${failedItems.length}`,
-    )
-
-    const usedCategories = new Set(createdArticles.map((a) => a.categorySlug).filter(Boolean))
-
-    await payload.update({
-      collection: 'generation-jobs',
-      id: jobId,
-      data: {
-        status: 'finalizing',
-        createdCount: createdArticles.length,
-        failedCount: failedItems.length,
-      },
-    })
-
-    let notificationResult: { sent: number; failed: number; errors: string[] } | null = null
-    if (createdArticles.length > 0) {
-      try {
-        const headlineArticle = createdArticles[0]
-        const articleCount = createdArticles.length
-        const notificationTitle =
-          articleCount === 1 ? 'New Article Published' : `${articleCount} New Articles Published`
-
-        notificationResult = await sendPushNotifications(notificationTitle, {
-          body:
-            articleCount === 1
-              ? 'Check out the latest story!'
-              : `Check out ${articleCount} new stories!`,
-          icon: '/logo-200x200.png',
-          badge: '/logo-200x200.png',
-          url: headlineArticle.slug ? `/article/${headlineArticle.slug}` : '/',
-          tag: 'new-articles',
+      if (!result.value.ok) {
+        const message =
+          (result.value.data as { error?: string }).error ?? `HTTP ${result.value.status}`
+        dispatchFailures.push({
+          itemId: item.id,
+          slotIndex: item.slotIndex,
+          message,
         })
-        CRON_LOG.info(
-          `JOB ${String(jobId)}: push notifications sent | sent=${notificationResult?.sent ?? 0} failed=${notificationResult?.failed ?? 0}`,
-        )
-      } catch (error) {
-        console.error('Failed to send push notifications:', error)
-      }
-    }
-
-    const revalidatedPaths: string[] = []
-    if (createdArticles.length > 0) {
-      try {
-        revalidatePath('/')
-        revalidatedPaths.push('/')
-        revalidatePath('/archive')
-        revalidatedPaths.push('/archive')
-        for (const categorySlug of usedCategories) {
-          revalidatePath(`/section/${categorySlug}`)
-          revalidatedPaths.push(`/section/${categorySlug}`)
-        }
-        CRON_LOG.info(
-          `JOB ${String(jobId)}: revalidated ${revalidatedPaths.length} path(s) | ${revalidatedPaths.join(', ')}`,
-        )
-      } catch (error) {
-        console.error(`${CRON_LOG.prefix} Failed to revalidate cache:`, error)
-      }
-    }
-
-    let instagramResult: {
-      sent?: number
-      failed?: number
-      skipped?: boolean
-      reason?: string
-    } | null = null
-    if (createdArticles.length > 0 && process.env.CRON_AUTO_PUBLISH_INSTAGRAM === 'true') {
-      const ig = await callInternalJson<{
-        ok?: boolean
-        sent?: number
-        failed?: number
-        skipped?: boolean
-        reason?: string
-        error?: string
-      }>({
-        baseUrl,
-        path: '/api/internal/generation/publish-instagram',
-        token: tokenForInternalCalls,
-        body: { slugs: createdArticles.map((a) => a.slug) },
-      })
-
-      if (ig.ok) {
-        instagramResult = ig.data as {
-          sent?: number
-          failed?: number
-          skipped?: boolean
-          reason?: string
-        }
-        CRON_LOG.info(
-          `JOB ${String(jobId)}: instagram publish completed | sent=${instagramResult.sent ?? 0} failed=${instagramResult.failed ?? 0} skipped=${instagramResult.skipped === true}`,
-        )
-      } else {
-        instagramResult = {
-          failed: createdArticles.length,
-          reason: (ig.data as { error?: string }).error ?? `HTTP ${ig.status}`,
-        }
         CRON_LOG.warn(
-          `JOB ${String(jobId)}: instagram publish failed (${instagramResult.reason ?? 'unknown'})`,
+          `JOB ${String(jobId)}: slot worker dispatch rejected for slot ${item.slotIndex + 1} (${message})`,
         )
+        return
       }
+
+      queuedCount += 1
+      CRON_LOG.info(
+        `JOB ${String(jobId)}: slot worker queued for slot ${item.slotIndex + 1}/${jobItems.length}`,
+      )
+    })
+
+    if (dispatchFailures.length > 0) {
+      const now = new Date().toISOString()
+      await Promise.all(
+        dispatchFailures.map((failure) =>
+          payload.update({
+            collection: 'generation-job-items',
+            id: failure.itemId,
+            data: {
+              status: 'failed',
+              error: `Slot worker dispatch failed: ${failure.message}`,
+              completedAt: now,
+            },
+          }),
+        ),
+      )
     }
 
-    const finalErrors = [...draftErrors, ...workerErrors]
-    const finalStatus = createdArticles.length > 0 ? 'completed' : 'failed'
+    const dispatchErrorSummary =
+      dispatchFailures
+        .map((failure) => `slot ${failure.slotIndex + 1}: ${failure.message}`)
+        .slice(0, 12)
+        .join('\n') || undefined
+    const allDispatchesFailed = queuedCount === 0
 
     await payload.update({
       collection: 'generation-jobs',
       id: jobId,
       data: {
-        status: finalStatus,
-        acceptedCount: acceptedItems.length,
-        createdCount: createdArticles.length,
-        failedCount: failedItems.length,
-        draftRetriesUsed: totalDraftRetriesUsed,
-        errorSummary: finalErrors.slice(0, 12).join('\n') || undefined,
-        completedAt: new Date().toISOString(),
+        status: allDispatchesFailed ? 'failed' : 'generating',
+        failedCount: dispatchFailures.length,
+        errorSummary: dispatchErrorSummary,
+        completedAt: allDispatchesFailed ? new Date().toISOString() : undefined,
         metadata: {
-          ...(typeof (await payload.findByID({
-            collection: 'generation-jobs',
-            id: jobId,
-            depth: 0,
-          })) === 'object'
-            ? {}
-            : {}),
-          notificationResult,
-          revalidatedPaths,
-          instagramResult,
+          hasRssTopics,
+          forceOpinionThisRun,
+          slotConfigs,
+          blacklistCacheHit: blacklistCache.cacheHit,
+          blacklistSignature: blacklistCache.signature,
+          dispatchQueuedAt: new Date().toISOString(),
+          dispatchQueuedCount: queuedCount,
+          dispatchFailedCount: dispatchFailures.length,
         },
       },
     })
 
-    CRON_LOG.step(
-      `JOB ${String(jobId)}: finished | created=${createdArticles.length} failed=${failedItems.length}`,
+    CRON_LOG.info(
+      `JOB ${String(jobId)}: slot worker dispatch complete | queued=${queuedCount}/${jobItems.length} failedDispatches=${dispatchFailures.length}`,
     )
+
+    if (!allDispatchesFailed) {
+      await tryFinalizeGenerationJob({ baseUrl, tokenForInternalCalls, jobId })
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`Pipeline job ${String(jobId)} failed at stage=${currentStage}:`, error)
