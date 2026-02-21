@@ -1,6 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
+import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
 
 /******************* TYPES ***********************/
 
@@ -2508,7 +2509,7 @@ function applySeedDraft(
     next.subheadline = seed.subheadline.trim().slice(0, 220) || null
   }
   if (typeof seed.excerpt === 'string') {
-    next.excerpt = trimToReadableLength(seed.excerpt, 300) || null
+    next.excerpt = normalizeExcerptForStorage(seed.excerpt, 300) || null
   }
 
   return next
@@ -2542,11 +2543,19 @@ function hydrateLockedDraftFields(args: {
       : null
   hydrated.excerpt =
     typeof args.seedDraft.excerpt === 'string'
-      ? trimToReadableLength(args.seedDraft.excerpt, 300) || null
+      ? normalizeExcerptForStorage(args.seedDraft.excerpt, 300) || null
       : null
   hydrated.sourceRssTopic = args.usedRssTopic ?? null
 
   return hydrated
+}
+
+function finalizeGeneratedExcerpt(article: GeneratedArticle): GeneratedArticle {
+  if (typeof article.excerpt !== 'string') return article
+  return {
+    ...article,
+    excerpt: normalizeExcerptForStorage(article.excerpt, 300) || null,
+  }
 }
 
 /******************* MAIN ***********************/
@@ -4011,7 +4020,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
     }
 
-    validated = applySeedDraft(validated, input.seedDraft)
+    validated = finalizeGeneratedExcerpt(applySeedDraft(validated, input.seedDraft))
 
     // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
     assertNotAboutWeddingCeremonies(validated)
@@ -4058,7 +4067,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       repaired.layout = 'opinion'
     }
 
-    const repairedWithSeed = applySeedDraft(repaired, input.seedDraft)
+    const repairedWithSeed = finalizeGeneratedExcerpt(applySeedDraft(repaired, input.seedDraft))
 
     // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
     assertNotAboutWeddingCeremonies(repairedWithSeed)

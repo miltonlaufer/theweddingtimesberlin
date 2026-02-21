@@ -15,6 +15,7 @@ import {
 import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
 import { tryFinalizeGenerationJob } from '@/lib/generation/runGenerationPipeline'
+import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
 import {
   convertMarkdownToLexical,
   defaultEditorConfig,
@@ -638,7 +639,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         featuredImageUrl: undefined,
         imageCaption: finalGenerated.imageCaption ?? undefined,
         content: lexical,
-        excerpt: finalGenerated.excerpt ?? undefined,
+        excerpt:
+          typeof finalGenerated.excerpt === 'string'
+            ? normalizeExcerptForStorage(finalGenerated.excerpt, 300)
+            : undefined,
         category: categoryDoc.id,
         author: resolvedAuthorDoc.id,
         publishedAt: body.publish ? new Date().toISOString() : undefined,
