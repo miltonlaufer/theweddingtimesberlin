@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
 import {
   assessRecentCoverageOverlap,
+  HUMOR_PERSPECTIVE_METHOD,
   WEDDING_REMINDER_SHORT,
 } from '@/lib/generation/generateArticle'
 import type {
@@ -175,6 +176,8 @@ export async function generateDraftCandidate(params: {
     'Output strict JSON only.',
     'Be original, topical, and mercilessly funny.',
     '',
+    HUMOR_PERSPECTIVE_METHOD,
+    '',
     WEDDING_REMINDER_SHORT,
   ].join('\n')
 
@@ -196,6 +199,7 @@ export async function generateDraftCandidate(params: {
       ? ['Already accepted in this same batch (must differ):', acceptedBatchLines, ''].join('\n')
       : '',
     'Rules:',
+    '- Use the humor engine above: find an overlooked detail and make the contradiction the comedic core.',
     '- Headline must be sharp and specific (not generic).',
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',

@@ -298,6 +298,17 @@ const EDGE_SHORT = [
   '- The best satire makes the reader recognize themselves and feel personally attacked.',
 ].join('\n')
 
+export const HUMOR_PERSPECTIVE_METHOD = [
+  'HUMOR ENGINE (MANDATORY):',
+  '- Humor must come from a perspective shift, not random absurdity.',
+  '- Start with the expected narrative around the topic (what people claim this is about).',
+  '- Zoom into overlooked concrete details: logistics, wording, incentives, side effects, rituals, status signals, tiny behaviors.',
+  '- Find one detail that implies the opposite of the official narrative.',
+  '- Build the core joke around that contradiction (stated intention vs observed behavior).',
+  '- Avoid obvious takes and generic mockery; choose the less-noticed detail most people ignore.',
+  '- Prefer specific observable facts and consequences over abstract opinion.',
+].join('\n')
+
 const TONE_PROFILE_GUIDANCE: Record<ToneProfile, string> = {
   balanced:
     'Write biting satire with controlled aggression. Criticize institutions and hypocrisy hard, but keep punchlines measured.',
@@ -3589,6 +3600,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     satireBriefSection,
     '',
+    HUMOR_PERSPECTIVE_METHOD,
+    '',
     AVOID_OVERUSED_THEMES,
     '',
     SURREALISM_AND_LOCAL_KNOWLEDGE,
@@ -3792,6 +3805,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     `Tone profile target: ${toneProfile.toUpperCase()} (${TONE_PROFILE_GUIDANCE[toneProfile]})`,
     '',
     satireBriefSection,
+    '',
+    HUMOR_PERSPECTIVE_METHOD,
     '',
     useFeatureStoryPrompt
       ? [
