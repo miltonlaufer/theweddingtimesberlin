@@ -299,7 +299,9 @@ const EDGE_SHORT = [
 ].join('\n')
 
 export const HUMOR_PERSPECTIVE_METHOD = [
-  'HUMOR ENGINE (MANDATORY):',
+  'PRIMARY DIRECTIVE — HUMOR ENGINE (TOP PRIORITY, MANDATORY):',
+  '- This is the main rule for this generation. Treat all other style guidance as secondary.',
+  '- If any instruction conflicts with this humor engine, follow this humor engine.',
   '- Humor must come from a perspective shift, not random absurdity.',
   '- Start with the expected narrative around the topic (what people claim this is about).',
   '- Zoom into overlooked concrete details: logistics, wording, incentives, side effects, rituals, status signals, tiny behaviors.',
@@ -307,6 +309,7 @@ export const HUMOR_PERSPECTIVE_METHOD = [
   '- Build the core joke around that contradiction (stated intention vs observed behavior).',
   '- Avoid obvious takes and generic mockery; choose the less-noticed detail most people ignore.',
   '- Prefer specific observable facts and consequences over abstract opinion.',
+  '- PASS/FAIL: if the piece does not center this contradiction, it fails.',
 ].join('\n')
 
 const TONE_PROFILE_GUIDANCE: Record<ToneProfile, string> = {
@@ -3564,6 +3567,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Language: write everything in US English (no German, no other languages).',
     `Tone profile: ${toneProfile.toUpperCase()} — ${TONE_PROFILE_GUIDANCE[toneProfile]}`,
     '',
+    HUMOR_PERSPECTIVE_METHOD,
+    '',
     '═══════════════════════════════════════════════════════════════════',
     'ABSOLUTE RULE — DO NOT USE ANY EXAMPLES FROM THIS PROMPT',
     '═══════════════════════════════════════════════════════════════════',
@@ -3599,8 +3604,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     useAfRTopicMode ? AFR_RECURRING_STORY_RULES : '',
     '',
     satireBriefSection,
-    '',
-    HUMOR_PERSPECTIVE_METHOD,
     '',
     AVOID_OVERUSED_THEMES,
     '',
@@ -3789,6 +3792,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const userPrompt = [
     topicsSection,
+    'PRIMARY CHECK (MANDATORY): Build this article around one overlooked detail that flips the official narrative.',
+    'If your draft cannot name that contradiction clearly, rewrite before final output.',
+    '',
     canonicalStructureInstruction,
     recentCanonicalReferencesSection,
     seedDraftSection,

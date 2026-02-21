@@ -10,6 +10,8 @@ import {
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
+import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
+import type { DraftCandidate, DraftEvaluation, SlotConfig } from '@/lib/generation/pipelineTypes'
 import {
   convertMarkdownToLexical,
   defaultEditorConfig,
@@ -66,6 +68,12 @@ export async function POST(req: Request) {
   const publish = url.searchParams.get('publish') !== '0'
   // Presence-based flag: /api/debug/generate-article?draft
   const saveAsDraft = url.searchParams.has('draft')
+  const useDraftPipeline =
+    url.searchParams.has('draftPath') ||
+    url.searchParams.get('pipeline') === 'draft' ||
+    ['1', 'true', 'yes', 'on'].includes(
+      (url.searchParams.get('useDraftPipeline') ?? '').trim().toLowerCase(),
+    )
   const articleStatus: 'published' | 'draft' = saveAsDraft ? 'draft' : 'published'
 
   const payload = await getPayload()
@@ -228,6 +236,100 @@ export async function POST(req: Request) {
   let generated: Awaited<ReturnType<typeof generateArticle>>['article'] | undefined
   let usedRssTopic: string | null = null
   let lastGenerationError: unknown
+  let seedDraftForGeneration:
+    | {
+        headline: string
+        subheadline: string | null
+        excerpt: string | null
+        topicHint: string | null
+      }
+    | undefined
+  let draftPathDebug:
+    | {
+        enabled: true
+        accepted: boolean
+        attempts: number
+        selectedDraft: DraftCandidate
+        selectedEvaluation: DraftEvaluation
+      }
+    | undefined
+
+  if (useDraftPipeline) {
+    const slot: SlotConfig = {
+      forceDrugsTechno: false,
+      forceStartup: false,
+      forceRss: false,
+      forceOpinion: false,
+      includeTopics,
+    }
+
+    const recentCoverage = recentArticlesForOverlap
+      .slice(0, 40)
+      .map((entry) => ({ headline: entry.headline, excerpt: entry.excerpt }))
+
+    const draftAttempts = Math.max(1, Number(process.env.DEBUG_DRAFT_ATTEMPTS ?? 3))
+    const attemptedDrafts: DraftCandidate[] = []
+    const triedSourceTopics = new Set<string>()
+
+    let selectedDraft: DraftCandidate | null = null
+    let selectedEvaluation: DraftEvaluation | null = null
+    let selectedTopicHint: string | null = null
+
+    for (let attempt = 1; attempt <= draftAttempts; attempt++) {
+      const generatedDraft = await generateDraftCandidate({
+        slot,
+        topicSummary,
+        recentCoverage,
+        blacklistSummary: blacklistCache.summary,
+        acceptedDrafts: attemptedDrafts,
+        forbiddenSourceTopics: Array.from(triedSourceTopics),
+      })
+
+      if (
+        typeof generatedDraft.sourceRssTopic === 'string' &&
+        generatedDraft.sourceRssTopic.trim().length > 0
+      ) {
+        triedSourceTopics.add(generatedDraft.sourceRssTopic.trim())
+      }
+
+      const evaluation = await evaluateDraftCandidate({
+        candidate: generatedDraft.draft,
+        recentCoverage,
+        acceptedDrafts: attemptedDrafts,
+      })
+
+      attemptedDrafts.push(generatedDraft.draft)
+
+      if (!selectedDraft) {
+        selectedDraft = generatedDraft.draft
+        selectedEvaluation = evaluation
+        selectedTopicHint = generatedDraft.sourceRssTopic
+      }
+
+      if (evaluation.accepted) {
+        selectedDraft = generatedDraft.draft
+        selectedEvaluation = evaluation
+        selectedTopicHint = generatedDraft.sourceRssTopic
+        break
+      }
+    }
+
+    if (selectedDraft && selectedEvaluation) {
+      seedDraftForGeneration = {
+        headline: selectedDraft.headline,
+        subheadline: selectedDraft.subheadline,
+        excerpt: selectedDraft.excerpt,
+        topicHint: selectedTopicHint,
+      }
+      draftPathDebug = {
+        enabled: true,
+        accepted: selectedEvaluation.accepted,
+        attempts: attemptedDrafts.length,
+        selectedDraft,
+        selectedEvaluation,
+      }
+    }
+  }
 
   for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
     try {
@@ -241,6 +343,7 @@ export async function POST(req: Request) {
         recentCanonicalStoryReferences,
         precomputedBlacklistSummary: blacklistCache.summary,
         recentHeadlinePatterns: uniquePatterns,
+        seedDraft: seedDraftForGeneration,
       })
       generated = result.article
       usedRssTopic = result.usedRssTopic
@@ -416,6 +519,10 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       dryRun: true,
+      debug: {
+        useDraftPipeline,
+        draftPath: draftPathDebug ?? null,
+      },
       generated: {
         ...generated,
         slug,
@@ -449,6 +556,10 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
+    debug: {
+      useDraftPipeline,
+      draftPath: draftPathDebug ?? null,
+    },
     created: { id: created.id, slug, status: articleStatus },
     featuredImageUrl: featuredImageUrl ?? null,
   })

@@ -176,6 +176,9 @@ export async function generateDraftCandidate(params: {
     'Output strict JSON only.',
     'Be original, topical, and mercilessly funny.',
     '',
+    'TOP PRIORITY: The humor engine below is the main rule. All other guidance is secondary.',
+    'If anything conflicts, follow the humor engine.',
+    '',
     HUMOR_PERSPECTIVE_METHOD,
     '',
     WEDDING_REMINDER_SHORT,
@@ -183,6 +186,7 @@ export async function generateDraftCandidate(params: {
 
   const userPrompt = [
     'Write only a pitch, not the full article.',
+    'PASS/FAIL RULE: the pitch must center one overlooked detail that reveals the opposite of the official narrative.',
     'Return JSON schema:',
     '{ "headline": string, "subheadline": string|null, "excerpt": string|null }',
     '',
@@ -199,7 +203,8 @@ export async function generateDraftCandidate(params: {
       ? ['Already accepted in this same batch (must differ):', acceptedBatchLines, ''].join('\n')
       : '',
     'Rules:',
-    '- Use the humor engine above: find an overlooked detail and make the contradiction the comedic core.',
+    '- Main rule: find an overlooked detail and make the contradiction the comedic core.',
+    '- If the contradiction is weak or generic, reject and rethink the pitch angle.',
     '- Headline must be sharp and specific (not generic).',
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',
