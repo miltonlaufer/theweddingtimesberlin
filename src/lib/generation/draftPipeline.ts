@@ -106,7 +106,7 @@ function buildModeInstruction(slot: SlotConfig): string {
     return 'This pitch must center Berlin drugs/techno/nightlife culture.'
   }
   if (slot.forceStartup) {
-    return 'This pitch must center startup, gentrification, rent pressure, or wellness-capitalism themes.'
+    return 'This pitch must center startup culture, gentrification dynamics, expat/status signaling, co-working culture, or wellness-capitalism themes. Avoid defaulting to rent/housing as the main punchline unless the angle is unusually specific and fresh.'
   }
   if (slot.forceRss) {
     return 'This pitch must clearly satirize the assigned current-news topic.'
@@ -135,6 +135,77 @@ function normalizeDraft(candidate: DraftCandidate): DraftCandidate {
         ? normalizeExcerptForStorage(candidate.excerpt, 300) || null
         : null,
   }
+}
+
+const RENT_THEME_PATTERNS: RegExp[] = [
+  /\brent(?:s|ed|ing|al)?\b/i,
+  /\brent\s+(?:hike|hikes|control|increase|increases|protest|protests|price|prices)\b/i,
+  /\bhousing\b/i,
+  /\bhous(?:e|ing)\s+crisis\b/i,
+  /\blandlord(?:s)?\b/i,
+  /\bapartment(?:s)?\b/i,
+  /\bwohn(?:ung|ungs)/i,
+  /\bzwischenmiete\b/i,
+  /\bwg\b/i,
+  /\bairbnb\b/i,
+  /\bpriced?\s+out\b/i,
+  /\bmiete\b/i,
+]
+
+function textMatchesAnyPattern(text: string, patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(text))
+}
+
+function isRentThemePitch(candidate: DraftCandidate): boolean {
+  const text = [candidate.headline, candidate.subheadline ?? '', candidate.excerpt ?? '']
+    .join(' ')
+    .trim()
+  if (!text) return false
+  return textMatchesAnyPattern(text, RENT_THEME_PATTERNS)
+}
+
+function countRentThemeReferences(lines: string[]): number {
+  let count = 0
+  for (const line of lines) {
+    if (!line.trim()) continue
+    if (textMatchesAnyPattern(line, RENT_THEME_PATTERNS)) count += 1
+  }
+  return count
+}
+
+function buildRentThemeBiasInstruction(params: {
+  slot: SlotConfig
+  assignedTopic: string | null
+  recentCoverage: RecentCoverageItem[]
+  acceptedDrafts: DraftCandidate[]
+}): string {
+  const referenceTexts = [
+    ...params.recentCoverage.map((item) => `${item.headline} ${item.excerpt}`.trim()),
+    ...params.acceptedDrafts.map((item) => `${item.headline} ${item.excerpt ?? ''}`.trim()),
+  ].filter((line) => line.length > 0)
+
+  const rentThemeRecentCount = countRentThemeReferences(referenceTexts)
+  const promptBiasThreshold = Number(process.env.DRAFT_RENT_THEME_PROMPT_BIAS_THRESHOLD ?? 2)
+  const assignedTopicIsRentTheme =
+    typeof params.assignedTopic === 'string' &&
+    params.assignedTopic.trim().length > 0 &&
+    textMatchesAnyPattern(params.assignedTopic, RENT_THEME_PATTERNS)
+
+  if (!Number.isFinite(promptBiasThreshold) || promptBiasThreshold < 0) return ''
+  if (rentThemeRecentCount <= promptBiasThreshold) return ''
+
+  if (params.slot.forceStartup) {
+    if (assignedTopicIsRentTheme) {
+      return `Editorial steering: recent coverage is saturated with rent/housing angles (${rentThemeRecentCount} recent references). Because this slot/topic may still touch housing, do NOT use generic rent pain as the main joke. Find a different contradiction inside startup/gentrification (status signaling, co-working rituals, VC theater, expat behavior, wellness-capitalism, workplace hypocrisy, English-language bubble).`
+    }
+    return `Editorial steering: recent coverage is saturated with rent/housing angles (${rentThemeRecentCount} recent references). For this startup/gentrification slot, avoid rent/housing entirely and center a different contradiction: co-working culture, VC/pitch-night theater, startup workplace behavior, expat status games, wellness-capitalism, or language/culture displacement rituals.`
+  }
+
+  if (assignedTopicIsRentTheme) {
+    return `Editorial steering: rent/housing has been overused recently (${rentThemeRecentCount} recent references). If this topic mentions housing, avoid making rent prices/landlords/apartment hunting the central punchline; choose a less-used contradiction within the same story.`
+  }
+
+  return `Editorial steering: rent/housing has been overused recently (${rentThemeRecentCount} recent references). Do NOT pivot this pitch toward rent, landlords, apartment hunting, or generic housing crisis jokes.`
 }
 
 export async function generateDraftCandidate(params: {
@@ -170,6 +241,12 @@ export async function generateDraftCandidate(params: {
     .slice(0, 20)
     .map((d, i) => `${i + 1}. ${d.headline}${d.excerpt ? ` — ${d.excerpt}` : ''}`)
     .join('\n')
+  const rentThemeBiasInstruction = buildRentThemeBiasInstruction({
+    slot: params.slot,
+    assignedTopic: topic,
+    recentCoverage: params.recentCoverage,
+    acceptedDrafts: params.acceptedDrafts,
+  })
 
   const systemPrompt = [
     'You are writing one satirical NEWSPAPER PITCH for The Wedding Times (Berlin satire).',
@@ -186,7 +263,7 @@ export async function generateDraftCandidate(params: {
 
   const userPrompt = [
     'Write only a pitch, not the full article.',
-    'PASS/FAIL RULE: the pitch must center one overlooked detail that reveals the opposite of the official narrative.',
+    'PASS/FAIL RULE: the pitch must center one under-noticed detail that reveals the opposite of the official narrative.',
     'Return JSON schema:',
     '{ "headline": string, "subheadline": string|null, "excerpt": string|null }',
     '',
@@ -203,11 +280,16 @@ export async function generateDraftCandidate(params: {
       ? ['Already accepted in this same batch (must differ):', acceptedBatchLines, ''].join('\n')
       : '',
     'Rules:',
-    '- Main rule: find an overlooked detail and make the contradiction the comedic core.',
+    '- Main rule: find an under-noticed detail and make the contradiction the comedic core.',
     '- If the contradiction is weak or generic, reject and rethink the pitch angle.',
     '- Headline must be sharp and specific (not generic).',
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',
+    '- Do NOT use the exact phrase "overlooked detail" in the headline, subheadline, or excerpt.',
+    params.slot.forceStartup
+      ? '- In startup/gentrification mode: prefer co-working, venture capital, workplace theater, expat behavior, or wellness-capitalism angles before rent/housing. Rent is allowed only if the premise is unusually specific and not a default Berlin-housing joke.'
+      : '',
+    rentThemeBiasInstruction,
     '- US English only.',
   ].join('\n')
 
@@ -317,6 +399,25 @@ export async function evaluateDraftCandidate(params: {
     return {
       accepted: false,
       reason: `repetition: ${repetition.reason}`,
+      repetition,
+      tone,
+    }
+  }
+
+  const rentThemeRecentCount = countRentThemeReferences(referenceTexts)
+  // Hard reject is opt-in; prompt steering is the default mechanism to reduce retries.
+  const rentThemeMaxRecent = Number(process.env.DRAFT_RENT_THEME_MAX_RECENT ?? -1)
+  const candidateIsRentTheme = isRentThemePitch(params.candidate)
+
+  if (
+    candidateIsRentTheme &&
+    Number.isFinite(rentThemeMaxRecent) &&
+    rentThemeMaxRecent >= 0 &&
+    rentThemeRecentCount > Math.max(0, rentThemeMaxRecent)
+  ) {
+    return {
+      accepted: false,
+      reason: `theme-bias: rent/housing is overrepresented recently (${rentThemeRecentCount} recent references > limit ${Math.max(0, rentThemeMaxRecent)})`,
       repetition,
       tone,
     }

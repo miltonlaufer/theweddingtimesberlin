@@ -304,10 +304,11 @@ export const HUMOR_PERSPECTIVE_METHOD = [
   '- If any instruction conflicts with this humor engine, follow this humor engine.',
   '- Humor must come from a perspective shift, not random absurdity.',
   '- Start with the expected narrative around the topic (what people claim this is about).',
-  '- Zoom into overlooked concrete details: logistics, wording, incentives, side effects, rituals, status signals, tiny behaviors.',
+  '- Zoom into under-noticed concrete details: logistics, wording, incentives, side effects, rituals, status signals, tiny behaviors.',
   '- Find one detail that implies the opposite of the official narrative.',
   '- Build the core joke around that contradiction (stated intention vs observed behavior).',
-  '- Avoid obvious takes and generic mockery; choose the less-noticed detail most people ignore.',
+  '- Avoid obvious takes and generic mockery; choose the less-obvious detail most people ignore.',
+  '- Do NOT use the exact phrase "overlooked detail" in the output text; express the idea naturally in different words.',
   '- Prefer specific observable facts and consequences over abstract opinion.',
   '- PASS/FAIL: if the piece does not center this contradiction, it fails.',
 ].join('\n')
@@ -3792,8 +3793,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const userPrompt = [
     topicsSection,
-    'PRIMARY CHECK (MANDATORY): Build this article around one overlooked detail that flips the official narrative.',
+    'PRIMARY CHECK (MANDATORY): Build this article around one under-noticed detail that flips the official narrative.',
     'If your draft cannot name that contradiction clearly, rewrite before final output.',
+    'Do NOT use the exact phrase "overlooked detail" in the article, excerpt, or subheadline.',
     '',
     canonicalStructureInstruction,
     recentCanonicalReferencesSection,
