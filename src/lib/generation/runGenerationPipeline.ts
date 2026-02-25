@@ -84,7 +84,7 @@ function computeSlotConfigs(
 
   guaranteed.push({
     forceDrugsTechno: false,
-    forceStartup: true,
+    forceStartup: false,
     forceRss: false,
     forceOpinion: false,
     includeTopics: false,

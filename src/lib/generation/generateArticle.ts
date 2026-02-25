@@ -2665,6 +2665,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'A Wedding park where someone has been leaving cryptic notes in multiple languages for 3 months',
     'The great bike theft of Müllerstraße: 47 bikes disappeared in one night, all replaced with identical scooters',
     'A Neukölln bar that changes its name every month to avoid bad reviews',
+    'A Wedding street-cleaning pilot that promises weekly cleanup, delivers monthly, and publishes celebratory reports anyway',
+    'A Bürgeramt help desk in Wedding where every answer starts with a sigh and ends with a different form',
+    'A Hausarzt waiting room in Wedding where patients with appointments now bring lunch and phone chargers',
+    'Berlin weather office confirms 31 consecutive days of identical gray sky and "light emotional drizzle"',
+    'The district hotline that keeps callers on hold for 40 minutes before recommending they send a fax',
     // Wedding Turkish community stories
     'A Turkish-owned döner shop in Wedding that has been run by the same family for 30 years, now facing gentrification',
     'A Wedding Turkish grocery store owner who knows every customer by name and their shopping habits',
@@ -2796,10 +2801,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     useDrugsOrTechnoScenario = false
     useStartupScenario = false
   } else {
-    // Random: 20% drugs/techno, 20% startup, 60% general
+    // Random: 20% drugs/techno, 10% startup, 70% general
     const scenarioRoll = Math.random()
     useDrugsOrTechnoScenario = scenarioRoll < 0.2
-    useStartupScenario = !useDrugsOrTechnoScenario && scenarioRoll < 0.4
+    useStartupScenario = !useDrugsOrTechnoScenario && scenarioRoll < 0.3
   }
 
   // General pool: neither drugs/techno nor startup
@@ -2823,6 +2828,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Bürgeramt nightmares, appointment systems, or German paperwork hell',
     'Berlin bureaucracy, forms in triplicate, or civil servant attitudes',
     'the sadistic joy German officials take in rejecting incomplete forms',
+    'administrative slowness where each missing stamp adds two more weeks to your life',
+    'public-office rudeness treated as an efficiency feature, not a communication failure',
+    'the Berlin permit process: one request, seven desks, zero outcomes this quarter',
     // Leopoldplatz
     'Leopoldplatz happenings, the fountain crowd, or Wedding central life',
     'Leopoldplatz characters, street vendors, or the morning drunks',
@@ -2957,6 +2965,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Germanys sacred sick note culture: one mild symptom, one full week off',
     'the national productivity theater: everyone is busy, nothing gets done',
     'colleagues who are "out sick" all week and return with fresh brunch recommendations',
+    'Berlin weather: nine months of gray drizzle, two weeks of panic heat, and no transition period',
+    'customer service that starts with a sigh and ends with "not my department"',
+    'sidewalk obstacle courses of dog shit, broken glass, and mysterious puddles',
     'dating in Berlin, Tinder culture, or relationship chaos',
     'Berlin drug culture, club bathroom discoveries, or ketamine brunch',
     'Berlin decadence, after-parties that last days, or hedonistic lifestyle',
@@ -2967,6 +2978,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'waiting 3 hours with an appointment while the Praxis pretends time is a suggestion',
     'doctors who are rude, dismissive, and somehow still behind schedule by noon',
     'treatments that feel stuck between bureaucracy, folklore, and borderline non-science',
+    'Facharzt referral ping-pong where each Praxis sends you to another Praxis',
+    'health insurance hotlines that prescribe patience, tea, and waiting until next quarter',
     'Kita chaos: staff shortages, constant sick leave, and parents in permanent emergency mode',
     'Kitas that close early, cancel often, and call it reliable childcare',
     // Edgier topics
@@ -3152,10 +3165,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     useDrugsOrTechnoTopic = false
     useStartupTopic = false
   } else {
-    // Random: 20% drugs/techno, 35% startup, 45% general
+    // Random: 20% drugs/techno, 15% startup, 65% general
     const topicRoll = Math.random()
     useDrugsOrTechnoTopic = topicRoll < 0.2
-    useStartupTopic = !useDrugsOrTechnoTopic && topicRoll < 0.55
+    useStartupTopic = !useDrugsOrTechnoTopic && topicRoll < 0.35
   }
 
   // Opinion-only topics (when forceOpinion is true)
