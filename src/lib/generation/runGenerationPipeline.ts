@@ -34,6 +34,7 @@ const MIN_AUTHOR_POOL = Number(process.env.MIN_AUTHOR_POOL ?? 8)
 const MAX_NEW_AUTHORS_PER_RUN = Number(process.env.MAX_NEW_AUTHORS_PER_RUN ?? 3)
 export const ARTICLES_PER_RUN = Number(process.env.ARTICLES_PER_RUN ?? 8)
 const MAX_DRAFT_RETRIES = Number(process.env.DRAFT_MAX_RETRIES ?? 2)
+const FORCED_RSS_SLOTS = 2
 
 const BASELINE_CATEGORIES = [
   { name: 'Bureaucracy', slug: 'bureaucracy', order: 1 },
@@ -83,20 +84,22 @@ function computeSlotConfigs(
 
   guaranteed.push({
     forceDrugsTechno: false,
-    forceStartup: true,
+    forceStartup: false,
     forceRss: false,
     forceOpinion: false,
     includeTopics: false,
   })
 
   if (hasRssTopics) {
-    guaranteed.push({
-      forceDrugsTechno: false,
-      forceStartup: false,
-      forceRss: true,
-      forceOpinion: false,
-      includeTopics: true,
-    })
+    for (let i = 0; i < FORCED_RSS_SLOTS; i++) {
+      guaranteed.push({
+        forceDrugsTechno: i === 0,
+        forceStartup: false,
+        forceRss: true,
+        forceOpinion: false,
+        includeTopics: true,
+      })
+    }
   }
 
   const slots: SlotConfig[] = []

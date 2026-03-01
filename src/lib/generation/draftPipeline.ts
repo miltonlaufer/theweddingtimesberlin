@@ -351,6 +351,9 @@ export async function generateDraftCandidate(params: {
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',
     '- Do NOT use the exact phrase "overlooked detail" in the headline, subheadline, or excerpt.',
+    !params.slot.forceStartup && !params.slot.forceDrugsTechno && !params.slot.forceRss
+      ? '- For non-startup slots: prefer bureaucracy, administrative slowness, public rudeness, street filth, bad weather, and health-system dysfunction. Do not default to startup/gentrification unless the angle is clearly fresher than these themes.'
+      : '',
     params.slot.forceStartup
       ? '- In startup/gentrification mode: prefer co-working, venture capital, workplace theater, expat behavior, or wellness-capitalism angles before rent/housing. Rent is allowed only if the premise is unusually specific and not a default Berlin-housing joke.'
       : '',
