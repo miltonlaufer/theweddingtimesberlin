@@ -25,6 +25,14 @@ const payloadImportMapAutoGenerate =
 export default buildConfig({
   admin: {
     user: Users.slug,
+    components: {
+      beforeNavLinks: [
+        {
+          path: '/components/admin/AIComposeNavLink.tsx',
+          exportName: 'AIComposeNavLink',
+        },
+      ],
+    },
     importMap: {
       baseDir: path.resolve(dirname),
       autoGenerate: payloadImportMapAutoGenerate,

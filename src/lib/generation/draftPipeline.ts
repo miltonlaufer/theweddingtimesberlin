@@ -42,19 +42,38 @@ function extractFirstJsonObject(text: string): string {
   return text.slice(firstBrace, lastBrace + 1)
 }
 
-function toTopicLines(topicSummary: string): string[] {
+type TopicSource = 'rss' | 'manual' | 'hint' | 'unknown'
+
+type ParsedTopicLine = {
+  source: TopicSource
+  value: string
+}
+
+function parseTopicLine(line: string): ParsedTopicLine | null {
+  const withoutBullet = line.trim().replace(/^-+\s*/, '')
+  if (!withoutBullet) return null
+
+  const sourceTagged = withoutBullet.match(/^\[([^\]]+)\]\s*(.+)$/)
+  if (!sourceTagged?.[2]) {
+    return { source: 'unknown', value: withoutBullet }
+  }
+
+  const sourceRaw = sourceTagged[1]?.trim().toLowerCase() ?? ''
+  const value = sourceTagged[2].trim()
+  if (!value) return null
+
+  if (sourceRaw === 'rss' || sourceRaw === 'manual' || sourceRaw === 'hint') {
+    return { source: sourceRaw, value }
+  }
+  return { source: 'unknown', value }
+}
+
+function parseTopicSummary(topicSummary: string): ParsedTopicLine[] {
   return topicSummary
     .trim()
     .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-}
-
-function stripTopicSource(line: string): string {
-  const withoutBullet = line.replace(/^-+\s*/, '')
-  const sourceTagged = withoutBullet.match(/^\[[^\]]+\]\s*(.+)$/)
-  if (sourceTagged?.[1]) return sourceTagged[1].trim()
-  return withoutBullet.trim()
+    .map((line) => parseTopicLine(line))
+    .filter((line): line is ParsedTopicLine => line != null)
 }
 
 function normalizeTopicIdentity(topic: string): string {
@@ -69,41 +88,56 @@ function pickTopicForSlot(
   slot: SlotConfig,
   topicSummary: string,
   forbiddenSourceTopics: string[],
-): string | null {
-  const topicLines = toTopicLines(topicSummary)
-    .map(stripTopicSource)
-    .filter((line) => line.length > 0)
+  useRandomModes: boolean,
+): ParsedTopicLine | null {
+  const topicLines = parseTopicSummary(topicSummary)
   const forbidden = new Set(
     forbiddenSourceTopics.map(normalizeTopicIdentity).filter((line) => line.length > 0),
   )
-  const allowedTopics = topicLines.filter((line) => !forbidden.has(normalizeTopicIdentity(line)))
+  const allowedTopics = topicLines.filter(
+    (line) => !forbidden.has(normalizeTopicIdentity(line.value)),
+  )
   const allowReuseWhenExhausted =
     (process.env.DRAFT_ALLOW_RSS_TOPIC_REUSE_WHEN_EXHAUSTED ?? 'false') === 'true'
+  const rssTopics = topicLines.filter((line) => line.source === 'rss' || line.source === 'hint')
+  const allowedRssTopics = allowedTopics.filter(
+    (line) => line.source === 'rss' || line.source === 'hint',
+  )
 
   if (topicLines.length === 0) return null
   if (slot.forceRss) {
-    if (allowedTopics.length > 0) {
-      return allowedTopics[Math.floor(Math.random() * allowedTopics.length)] ?? null
+    if (allowedRssTopics.length > 0) {
+      return useRandomModes
+        ? (allowedRssTopics[Math.floor(Math.random() * allowedRssTopics.length)] ?? null)
+        : (allowedRssTopics[0] ?? null)
     }
     return allowReuseWhenExhausted
-      ? (topicLines[Math.floor(Math.random() * topicLines.length)] ?? null)
+      ? useRandomModes
+        ? (rssTopics[Math.floor(Math.random() * rssTopics.length)] ?? null)
+        : (rssTopics[0] ?? null)
       : null
   }
   if (!slot.includeTopics) return null
   if (allowedTopics.length > 0) {
-    return allowedTopics[Math.floor(Math.random() * allowedTopics.length)] ?? null
+    return useRandomModes
+      ? (allowedTopics[Math.floor(Math.random() * allowedTopics.length)] ?? null)
+      : (allowedTopics[0] ?? null)
   }
   return allowReuseWhenExhausted
-    ? (topicLines[Math.floor(Math.random() * topicLines.length)] ?? null)
+    ? useRandomModes
+      ? (topicLines[Math.floor(Math.random() * topicLines.length)] ?? null)
+      : (topicLines[0] ?? null)
     : null
 }
 
-function buildModeInstruction(slot: SlotConfig): string {
+function buildModeInstruction(slot: SlotConfig, includeBerlinThemes: boolean): string {
   if (slot.forceOpinion) {
     return 'This pitch must be an opinion/editorial angle with strong, direct point of view.'
   }
   if (slot.forceDrugsTechno) {
-    return 'This pitch must center Berlin drugs/techno/nightlife culture.'
+    return includeBerlinThemes
+      ? 'This pitch must center Berlin drugs/techno/nightlife culture.'
+      : 'This pitch must center drugs/techno/nightlife culture.'
   }
   if (slot.forceStartup) {
     return 'This pitch must center startup culture, gentrification dynamics, expat/status signaling, co-working culture, or wellness-capitalism themes. Avoid defaulting to rent/housing as the main punchline unless the angle is unusually specific and fresh.'
@@ -111,7 +145,9 @@ function buildModeInstruction(slot: SlotConfig): string {
   if (slot.forceRss) {
     return 'This pitch must clearly satirize the assigned current-news topic.'
   }
-  return 'Pick a fresh local Berlin satire angle that avoids repetition.'
+  return includeBerlinThemes
+    ? 'Pick a fresh local Berlin satire angle that avoids repetition.'
+    : 'Pick a fresh satirical angle that avoids repetition.'
 }
 
 function buildReferenceLines(items: RecentCoverageItem[], max = 25): string {
@@ -215,6 +251,10 @@ export async function generateDraftCandidate(params: {
   blacklistSummary: string
   acceptedDrafts: DraftCandidate[]
   forbiddenSourceTopics?: string[]
+  editorDirection?: string
+  includeBerlinThemes?: boolean
+  useRandomModes?: boolean
+  strictTopicFocus?: boolean
 }): Promise<{ draft: DraftCandidate; sourceRssTopic: string | null }> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY')
@@ -225,11 +265,17 @@ export async function generateDraftCandidate(params: {
     process.env.OPENAI_MODEL ??
     'gpt-4o-mini'
 
-  const topic = pickTopicForSlot(
+  const includeBerlinThemes = params.includeBerlinThemes !== false
+  const useRandomModes = params.useRandomModes !== false
+  const strictTopicFocus = params.strictTopicFocus === true
+
+  const selectedTopic = pickTopicForSlot(
     params.slot,
     params.topicSummary,
     params.forbiddenSourceTopics ?? [],
+    useRandomModes,
   )
+  const topic = selectedTopic?.value ?? null
   const llm = new ChatOpenAI({
     apiKey,
     model: modelName,
@@ -247,9 +293,13 @@ export async function generateDraftCandidate(params: {
     recentCoverage: params.recentCoverage,
     acceptedDrafts: params.acceptedDrafts,
   })
+  const editorDirection = params.editorDirection?.trim()
+  const hasEditorDirection = typeof editorDirection === 'string' && editorDirection.length > 0
 
   const systemPrompt = [
-    'You are writing one satirical NEWSPAPER PITCH for The Wedding Times (Berlin satire).',
+    includeBerlinThemes
+      ? 'You are writing one satirical NEWSPAPER PITCH for The Wedding Times (Berlin satire).'
+      : 'You are writing one satirical NEWSPAPER PITCH for a satirical newspaper covering global current events.',
     'Output strict JSON only.',
     'Be original, topical, and mercilessly funny.',
     '',
@@ -258,7 +308,7 @@ export async function generateDraftCandidate(params: {
     '',
     HUMOR_PERSPECTIVE_METHOD,
     '',
-    WEDDING_REMINDER_SHORT,
+    includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
   ].join('\n')
 
   const userPrompt = [
@@ -267,7 +317,7 @@ export async function generateDraftCandidate(params: {
     'Return JSON schema:',
     '{ "headline": string, "subheadline": string|null, "excerpt": string|null }',
     '',
-    `Mode: ${buildModeInstruction(params.slot)}`,
+    `Mode: ${buildModeInstruction(params.slot, includeBerlinThemes)}`,
     topic ? `Assigned topic/news hook: ${topic}` : 'No fixed topic: choose a fresh one.',
     '',
     'ABSOLUTE: Avoid overlap with these already-covered stories:',
@@ -278,6 +328,21 @@ export async function generateDraftCandidate(params: {
       : '',
     acceptedBatchLines.length > 0
       ? ['Already accepted in this same batch (must differ):', acceptedBatchLines, ''].join('\n')
+      : '',
+    hasEditorDirection
+      ? [
+          'Editor revision request (apply while preserving originality and punch):',
+          `- ${editorDirection?.slice(0, 700)}`,
+          '',
+        ].join('\n')
+      : '',
+    strictTopicFocus && topic
+      ? [
+          'STRICT TOPIC FOCUS (MANDATORY):',
+          '- Headline must explicitly mention the key named entity from the assigned topic when available.',
+          '- Subheadline or excerpt must make the same story immediately recognizable.',
+          '',
+        ].join('\n')
       : '',
     'Rules:',
     '- Main rule: find an under-noticed detail and make the contradiction the comedic core.',
@@ -314,7 +379,10 @@ export async function generateDraftCandidate(params: {
       subheadline: validated.subheadline ?? null,
       excerpt: validated.excerpt ?? null,
     },
-    sourceRssTopic: topic,
+    sourceRssTopic:
+      selectedTopic && (selectedTopic.source === 'rss' || selectedTopic.source === 'hint')
+        ? selectedTopic.value
+        : null,
   }
 }
 

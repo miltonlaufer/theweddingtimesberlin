@@ -47,6 +47,17 @@ export interface GenerateArticleInput {
     /** Optional topic/news hook selected during draft stage to preserve continuity. */
     topicHint?: string | null
   }
+  /** Optional editorial revision instructions for this generation pass. */
+  editorDirection?: string
+  /** Optional manual controls for AI compose mode. */
+  manualOverrides?: {
+    /** If false, disable random style/theme pivots and use deterministic selections. */
+    useRandomModes?: boolean
+    /** If false, remove Wedding/Berlin-localized framing from prompts. */
+    includeBerlinThemes?: boolean
+    /** If true, require explicit topic entities in headline/opening instructions. */
+    strictTopicFocus?: boolean
+  }
 }
 
 export const GeneratedArticleSchema = z.object({
@@ -79,6 +90,7 @@ export const GeneratedArticleSchema = z.object({
 export type GeneratedArticle = z.infer<typeof GeneratedArticleSchema>
 
 type OutputSchemaMode = 'full' | 'body-only-locked-draft'
+const SOURCE_RSS_TOPIC_MAX = 300
 
 export interface GenerateArticleResult {
   article: GeneratedArticle
@@ -1108,11 +1120,14 @@ function pickCandidateAvoidingRecentCoverage(params: {
   references: string[]
   fallback: string
   label: string
+  useRandom?: boolean
 }): string {
-  const { candidates, references, fallback, label } = params
+  const { candidates, references, fallback, label, useRandom = true } = params
   if (candidates.length === 0) return fallback
   if (references.length === 0) {
-    return candidates[Math.floor(Math.random() * candidates.length)] ?? fallback
+    return useRandom
+      ? (candidates[Math.floor(Math.random() * candidates.length)] ?? fallback)
+      : (candidates[0] ?? fallback)
   }
 
   const scored = candidates.map((candidate) => ({
@@ -1121,17 +1136,29 @@ function pickCandidateAvoidingRecentCoverage(params: {
   }))
   const nonOverlapping = scored.filter((entry) => !entry.overlaps)
   if (nonOverlapping.length > 0) {
-    const selected = nonOverlapping[Math.floor(Math.random() * nonOverlapping.length)]
+    const selected = useRandom
+      ? nonOverlapping[Math.floor(Math.random() * nonOverlapping.length)]
+      : nonOverlapping[0]
     return selected?.candidate ?? fallback
   }
 
   const bestScore = Math.min(...scored.map((entry) => entry.score))
   const leastOverlapping = scored.filter((entry) => entry.score === bestScore)
-  const selected = leastOverlapping[Math.floor(Math.random() * leastOverlapping.length)]
+  const selected = useRandom
+    ? leastOverlapping[Math.floor(Math.random() * leastOverlapping.length)]
+    : leastOverlapping[0]
   console.warn(
     `${LOG.prefix} All ${label} candidates overlapped recent coverage; using least-overlapping fallback`,
   )
   return selected?.candidate ?? fallback
+}
+
+function pickFromList<T>(items: T[], useRandom: boolean): T {
+  if (items.length === 0) {
+    throw new Error('Cannot pick from an empty list')
+  }
+  if (!useRandom) return items[0] as T
+  return items[Math.floor(Math.random() * items.length)] as T
 }
 
 function buildArticleRepetitionFingerprint(article: GeneratedArticle): string {
@@ -1172,12 +1199,42 @@ function assertArticleNotTooSimilarToRecentCoverage(params: {
 }
 
 function normalizeRssTopicLine(line: string): string {
+  const parsed = parseTopicSummaryLine(line)
+  return parsed?.value ?? line.trim().replace(/^-+\s*/, '')
+}
+
+type TopicSummarySource = 'rss' | 'manual' | 'hint' | 'unknown'
+
+type TopicSummaryLine = {
+  source: TopicSummarySource
+  value: string
+}
+
+function parseTopicSummaryLine(line: string): TopicSummaryLine | null {
   const withoutBullet = line.trim().replace(/^-+\s*/, '')
-  const sourceTagged = withoutBullet.match(/^\[[^\]]+\]\s*(.+)$/)
-  if (sourceTagged && sourceTagged[1]) {
-    return sourceTagged[1].trim()
+  if (!withoutBullet) return null
+
+  const sourceTagged = withoutBullet.match(/^\[([^\]]+)\]\s*(.+)$/)
+  if (!sourceTagged?.[2]) {
+    return { source: 'unknown', value: withoutBullet }
   }
-  return withoutBullet
+
+  const sourceRaw = sourceTagged[1]?.trim().toLowerCase() ?? ''
+  const value = sourceTagged[2].trim()
+  if (!value) return null
+
+  if (sourceRaw === 'rss' || sourceRaw === 'manual' || sourceRaw === 'hint') {
+    return { source: sourceRaw, value }
+  }
+  return { source: 'unknown', value }
+}
+
+function parseTopicSummary(topicSummary: string): TopicSummaryLine[] {
+  return topicSummary
+    .trim()
+    .split('\n')
+    .map((line) => parseTopicSummaryLine(line))
+    .filter((line): line is TopicSummaryLine => line != null)
 }
 
 const AFD_TOPIC_PATTERN = /\bafd\b|alternative\s+f(?:u|ü)r\s+deutschland/i
@@ -1825,6 +1882,7 @@ async function generateSatireBrief(args: {
   useFeatureStoryPrompt: boolean
   selectedRssTopic: string | null
   randomFocus: string
+  includeBerlinThemes: boolean
 }): Promise<SatireBrief | null> {
   const briefModelName = process.env.OPENAI_BRIEF_MODEL ?? args.modelName
   const llm = new ChatOpenAI({
@@ -1845,7 +1903,7 @@ async function generateSatireBrief(args: {
     'Critique institutions, ideologies, and behaviors; avoid slurs, hate speech, and calls for harm.',
     `Tone profile guidance: ${TONE_PROFILE_GUIDANCE[args.toneProfile]}`,
     '',
-    WEDDING_REMINDER_SHORT,
+    args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
   ].join('\n')
 
   const userPrompt = [
@@ -1902,6 +1960,7 @@ async function critiqueSatireArticle(args: {
   toneProfile: ToneProfile
   article: GeneratedArticle
   brief: SatireBrief | null
+  includeBerlinThemes: boolean
 }): Promise<SatireCritique | null> {
   const criticModelName =
     process.env.OPENAI_CRITIC_MODEL ??
@@ -1922,8 +1981,10 @@ async function critiqueSatireArticle(args: {
     'Penalize vagueness and generic absurdism. Reward specificity and social observation.',
     'No score inflation.',
     '',
-    WEDDING_REMINDER_SHORT,
-    'CRITICAL: If this article is about wedding ceremonies instead of the Wedding neighborhood, flag it harshly in the critique.',
+    args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
+    args.includeBerlinThemes
+      ? 'CRITICAL: If this article is about wedding ceremonies instead of the Wedding neighborhood, flag it harshly in the critique.'
+      : '',
   ].join('\n')
 
   const userPrompt = [
@@ -2002,6 +2063,7 @@ async function rewriteArticleFromCritique(args: {
   toneProfile: ToneProfile
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
+  includeBerlinThemes: boolean
 }): Promise<GeneratedArticle> {
   const rewriteModelName = process.env.OPENAI_REWRITE_MODEL ?? args.modelName
   const llm = new ChatOpenAI({
@@ -2021,8 +2083,10 @@ async function rewriteArticleFromCritique(args: {
     'No slurs, hate speech, or calls for harm.',
     'Output MUST be strict JSON only.',
     '',
-    WEDDING_REMINDER_SHORT,
-    'If the article is about wedding ceremonies, you MUST rewrite it to be about the Wedding neighborhood instead.',
+    args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
+    args.includeBerlinThemes
+      ? 'If the article is about wedding ceremonies, you MUST rewrite it to be about the Wedding neighborhood instead.'
+      : '',
   ].join('\n')
 
   const userPrompt = [
@@ -2573,6 +2637,18 @@ function finalizeGeneratedExcerpt(article: GeneratedArticle): GeneratedArticle {
   }
 }
 
+function enforceSourceRssTopic(
+  article: GeneratedArticle,
+  usedRssTopic: string | null,
+): GeneratedArticle {
+  const normalized = usedRssTopic?.trim() ?? ''
+  return {
+    ...article,
+    sourceRssTopic:
+      normalized.length > 0 ? normalized.slice(0, SOURCE_RSS_TOPIC_MAX).trim() || null : null,
+  }
+}
+
 /******************* MAIN ***********************/
 
 export async function generateArticle(input: GenerateArticleInput): Promise<GenerateArticleResult> {
@@ -2589,9 +2665,15 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const critiqueEnabled = isFlagEnabled(process.env.SATIRE_CRITIQUE_ENABLED, false)
   const outputSchemaMode = resolveOutputSchemaMode(input)
   const seedDraftTopicHint = input.seedDraft?.topicHint?.trim() || null
+  const useRandomModes = input.manualOverrides?.useRandomModes !== false
+  const includeBerlinThemes = input.manualOverrides?.includeBerlinThemes !== false
+  const strictTopicFocus = input.manualOverrides?.strictTopicFocus === true
   console.log(`${LOG.prefix} Model: ${modelName}`)
   console.log(
     `${LOG.prefix} Tone profile: ${toneProfile} | min critique score: ${minCritiqueScore}`,
+  )
+  console.log(
+    `${LOG.prefix} Manual overrides | random=${useRandomModes} berlinThemes=${includeBerlinThemes} strictTopicFocus=${strictTopicFocus}`,
   )
   if (outputSchemaMode === 'body-only-locked-draft') {
     console.log(
@@ -2607,9 +2689,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   // 33% chance to use the new feature/soft news/local/crime/news story prompt type
   // When forceRss or forceOpinion is true, skip feature story
-  let useFeatureStoryPrompt = input.forceRss || input.forceOpinion ? false : Math.random() < 0.33
+  let useFeatureStoryPrompt =
+    input.forceRss || input.forceOpinion ? false : useRandomModes && Math.random() < 0.33
   // 30% chance to force a canonical Western-story adaptation for non-opinion pieces
-  let useCanonicalWeddingStoryStructure = !input.forceOpinion && Math.random() < 0.3
+  let useCanonicalWeddingStoryStructure =
+    !input.forceOpinion && useRandomModes && Math.random() < 0.3
 
   if (input.seedDraft?.headline?.trim()) {
     // Keep continuity with accepted draft by disabling style pivots that can change premise.
@@ -2627,7 +2711,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'crime report',
     'news story',
   ]
-  const selectedStoryType = storyTypes[Math.floor(Math.random() * storyTypes.length)]
+  const selectedStoryType = pickFromList(storyTypes, useRandomModes)
 
   // Concrete, specific Berlin scenarios for feature/soft news/local/crime/news stories
   // These are designed to be absurd, surreal, patafisic, and NOT abstract
@@ -2795,6 +2879,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   } else if (input.forceDrugsTechno === false && input.forceStartup === false) {
     useDrugsOrTechnoScenario = false
     useStartupScenario = false
+  } else if (!useRandomModes) {
+    useDrugsOrTechnoScenario = false
+    useStartupScenario = false
   } else {
     // Random: 20% drugs/techno, 20% startup, 60% general
     const scenarioRoll = Math.random()
@@ -2810,12 +2897,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   )
 
   let selectedScenario = useDrugsOrTechnoScenario
-    ? drugsAndTechnoScenarios[Math.floor(Math.random() * drugsAndTechnoScenarios.length)]
+    ? pickFromList(drugsAndTechnoScenarios, useRandomModes)
     : useStartupScenario
-      ? startupAndGentrificationScenarios[
-          Math.floor(Math.random() * startupAndGentrificationScenarios.length)
-        ]
-      : generalScenarios[Math.floor(Math.random() * generalScenarios.length)]
+      ? pickFromList(startupAndGentrificationScenarios, useRandomModes)
+      : pickFromList(generalScenarios, useRandomModes)
 
   // Randomly pick a topic focus to force variety (aligned with site categories)
   const topicFocuses = [
@@ -3151,6 +3236,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   } else if (input.forceDrugsTechno === false && input.forceStartup === false) {
     useDrugsOrTechnoTopic = false
     useStartupTopic = false
+  } else if (!useRandomModes) {
+    useDrugsOrTechnoTopic = false
+    useStartupTopic = false
   } else {
     // Random: 20% drugs/techno, 35% startup, 45% general
     const topicRoll = Math.random()
@@ -3164,16 +3252,13 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   let randomFocus: string
 
   if (input.forceOpinion && opinionOnlyTopics.length > 0) {
-    randomFocus = opinionOnlyTopics[Math.floor(Math.random() * opinionOnlyTopics.length)]
+    randomFocus = pickFromList(opinionOnlyTopics, useRandomModes)
   } else if (useDrugsOrTechnoTopic) {
-    randomFocus = drugsAndTechnoTopics[Math.floor(Math.random() * drugsAndTechnoTopics.length)]
+    randomFocus = pickFromList(drugsAndTechnoTopics, useRandomModes)
   } else if (useStartupTopic) {
-    randomFocus =
-      startupAndGentrificationTopics[
-        Math.floor(Math.random() * startupAndGentrificationTopics.length)
-      ]
+    randomFocus = pickFromList(startupAndGentrificationTopics, useRandomModes)
   } else {
-    randomFocus = generalTopics[Math.floor(Math.random() * generalTopics.length)]
+    randomFocus = pickFromList(generalTopics, useRandomModes)
   }
 
   if (input.seedDraft?.headline?.trim()) {
@@ -3238,6 +3323,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       references: recentCoverageReferences,
       fallback: selectedScenario,
       label: 'scenario',
+      useRandom: useRandomModes,
     })
     if (filteredScenario !== selectedScenario) {
       console.log(`${LOG.prefix} Replaced overlapping scenario seed with a fresher one`)
@@ -3257,6 +3343,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       references: recentCoverageReferences,
       fallback: randomFocus,
       label: 'topic',
+      useRandom: useRandomModes,
     })
     if (filteredTopic !== randomFocus) {
       console.log(`${LOG.prefix} Replaced overlapping topic seed with a fresher one`)
@@ -3267,10 +3354,18 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   // When RSS topics are available, pick one that does NOT overlap with the blacklist.
   // Otherwise we keep assigning the same real-world story (e.g. bikes/scooters) and the LLM
   // produces yet another variation of an article we told it to avoid.
-  const rssTopicsRaw = input.topicSummary
-    .trim()
-    .split('\n')
-    .map((line) => normalizeRssTopicLine(line))
+  const topicSummaryLines = parseTopicSummary(input.topicSummary)
+  const manualTopics = Array.from(
+    new Set(
+      topicSummaryLines
+        .filter((line) => line.source === 'manual')
+        .map((line) => line.value)
+        .filter((line) => line.length > 0),
+    ),
+  )
+  const rssTopicsRaw = topicSummaryLines
+    .filter((line) => line.source === 'rss' || line.source === 'hint')
+    .map((line) => line.value)
     .filter((line) => line.length > 0)
   const uniqueRssTopics = Array.from(new Set(rssTopicsRaw))
   const rssTopics =
@@ -3291,13 +3386,34 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       `${LOG.prefix} Filtered ${uniqueRssTopics.length - rssTopics.length} RSS topic(s) that overlap blacklist`,
     )
   }
-  const hasRssTopics = (input.includeTopics && rssTopics.length > 0) || Boolean(seedDraftTopicHint)
+  const seedDraftRssTopicHint =
+    seedDraftTopicHint && rssTopics.includes(seedDraftTopicHint) ? seedDraftTopicHint : null
+  const seedDraftManualTopicHint =
+    seedDraftTopicHint && !seedDraftRssTopicHint ? seedDraftTopicHint : null
+  const effectiveManualTopics = seedDraftManualTopicHint
+    ? Array.from(new Set([seedDraftManualTopicHint, ...manualTopics]))
+    : manualTopics
+
+  const hasRssTopics =
+    (input.includeTopics && rssTopics.length > 0) || Boolean(seedDraftRssTopicHint)
   const afdTriggeredRssTopic = hasRssTopics ? rssTopics.find((topic) => isAfDTopic(topic)) : null
-  const selectedRssTopic = seedDraftTopicHint
-    ? seedDraftTopicHint
+  const selectedRssTopic = seedDraftRssTopicHint
+    ? seedDraftRssTopicHint
     : hasRssTopics
-      ? (afdTriggeredRssTopic ?? rssTopics[Math.floor(Math.random() * rssTopics.length)])
+      ? (afdTriggeredRssTopic ?? pickFromList(rssTopics, useRandomModes))
       : null
+  const selectedManualTopic =
+    !selectedRssTopic && effectiveManualTopics.length > 0
+      ? pickFromList(effectiveManualTopics, useRandomModes)
+      : null
+  if (selectedManualTopic) {
+    randomFocus = selectedManualTopic
+    selectedScenario = selectedManualTopic
+  }
+  if (strictTopicFocus && selectedRssTopic) {
+    randomFocus = selectedRssTopic
+    selectedScenario = selectedRssTopic
+  }
 
   // Track whether RSS topic was ACTUALLY used in the prompt (not just selected)
   // RSS topics are only used when NOT a feature story AND RSS topics are available
@@ -3310,6 +3426,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   )
   if (actuallyUsedRssTopic) {
     console.log(`${LOG.prefix} RSS topic: ${actuallyUsedRssTopic.slice(0, 80)}...`)
+  } else if (selectedManualTopic) {
+    console.log(`${LOG.prefix} Manual topic: ${selectedManualTopic.slice(0, 80)}...`)
   }
 
   const rawTitlesBlock = recentTitles
@@ -3550,6 +3668,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         useFeatureStoryPrompt,
         selectedRssTopic,
         randomFocus,
+        includeBerlinThemes,
       })
     : null
   const satireBriefSection = buildSatireBriefSection(satireBrief)
@@ -3564,7 +3683,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   }
 
   const systemPrompt = [
-    'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.',
+    includeBerlinThemes
+      ? 'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.'
+      : 'You are a satire writer for a fictional satirical newspaper covering global current events.',
     'Language: write everything in US English (no German, no other languages).',
     `Tone profile: ${toneProfile.toUpperCase()} — ${TONE_PROFILE_GUIDANCE[toneProfile]}`,
     '',
@@ -3580,19 +3701,23 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'If your output resembles any example from this prompt, it will be REJECTED.',
     '═══════════════════════════════════════════════════════════════════',
     '',
-    WEDDING_NEIGHBORHOOD_CONTEXT,
+    includeBerlinThemes ? WEDDING_NEIGHBORHOOD_CONTEXT : '',
     '',
-    TURKISH_COMMUNITY_CONTEXT,
+    includeBerlinThemes ? TURKISH_COMMUNITY_CONTEXT : '',
     '',
     // Use strong drugs/techno encouragement when that topic is selected, mild version otherwise
-    useDrugsOrTechnoTopic || useDrugsOrTechnoScenario
+    includeBerlinThemes && (useDrugsOrTechnoTopic || useDrugsOrTechnoScenario)
       ? BERLIN_DRUGS_TECHNO_CULTURE_STRONG
-      : BERLIN_DRUGS_TECHNO_CULTURE_MILD,
+      : includeBerlinThemes
+        ? BERLIN_DRUGS_TECHNO_CULTURE_MILD
+        : '',
     '',
     // Use strong startup/gentrification encouragement when that topic is selected, mild version otherwise
-    useStartupTopic || useStartupScenario
+    includeBerlinThemes && (useStartupTopic || useStartupScenario)
       ? BERLIN_STARTUP_CULTURE_STRONG
-      : BERLIN_STARTUP_CULTURE_MILD,
+      : includeBerlinThemes
+        ? BERLIN_STARTUP_CULTURE_MILD
+        : '',
     '',
     'WRITING STYLE NOTES:',
     '- Reduce usage of the word "vibes" or "vibe"—it is overused. Prefer more specific, evocative language.',
@@ -3606,9 +3731,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     satireBriefSection,
     '',
-    AVOID_OVERUSED_THEMES,
+    includeBerlinThemes ? AVOID_OVERUSED_THEMES : '',
     '',
-    SURREALISM_AND_LOCAL_KNOWLEDGE,
+    includeBerlinThemes ? SURREALISM_AND_LOCAL_KNOWLEDGE : '',
     '',
     NEWSPAPER_STRUCTURE_RULES,
     '',
@@ -3675,18 +3800,22 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         '- Add quotes from fictional characters/sources',
         '- Describe the situation, its causes, and its consequences',
         '- Make it absurd and surreal but treat it with journalistic seriousness',
-        '- Include concrete details: "On Tuesday, sometime before noon, residents of Müllerstraße 23 noticed..."',
-        '- Name specific Berlin locations, streets, neighborhoods',
+        includeBerlinThemes
+          ? '- Include concrete details: "On Tuesday, sometime before noon, residents of Müllerstraße 23 noticed..."'
+          : '- Include concrete details: "On Tuesday, sometime before noon, residents noticed..."',
+        includeBerlinThemes
+          ? '- Name specific Berlin locations, streets, neighborhoods'
+          : '- Name specific real-world locations relevant to the story',
         '- Include dialogue, witness accounts, official statements (all fictional but realistic)',
         '- The article should be approximately 400 words of detailed, specific reporting',
         '- MUST provide an imagePrompt: describe a photorealistic photo that would illustrate this news story',
         '',
         EDGE_SHORT,
         '',
-        WEDDING_REMINDER_SHORT,
-        '',
-        TURKISH_REMINDER_SHORT,
-        '',
+        includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
+        includeBerlinThemes ? '' : '',
+        includeBerlinThemes ? TURKISH_REMINDER_SHORT : '',
+        includeBerlinThemes ? '' : '',
         'TONE: Deadpan, serious journalism about something completely ridiculous, but with an edge. Like The Onion but more detailed, specific, AND uncomfortable.',
         'STYLE: Read like a real local newspaper article. Who, what, where, when, why, how - all answered with absurd but specific details.',
         '',
@@ -3719,27 +3848,55 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
                 'REQUIRED ANGLE - DRUGS/TECHNO/NIGHTLIFE:',
                 randomFocus,
                 '',
-                'You MUST connect this news topic to Berlin drugs/techno/nightlife culture.',
+                includeBerlinThemes
+                  ? 'You MUST connect this news topic to Berlin drugs/techno/nightlife culture.'
+                  : 'You MUST connect this news topic to drugs/techno/nightlife culture.',
                 'Find a way to tie the news story to clubs, drugs, DJs, Berghain, Sisyphos, after-parties, dealers, ketamine, etc.',
-                'The drugs/techno angle is MANDATORY - do not write a generic Berlin article.',
+                includeBerlinThemes
+                  ? 'The drugs/techno angle is MANDATORY - do not write a generic Berlin article.'
+                  : 'The drugs/techno angle is MANDATORY - do not write a generic article.',
                 '═══════════════════════════════════════════════════════════════════',
                 '',
               ].join('\n')
             : '',
-          'CRITICAL INSTRUCTION: You MUST write a satirical article that connects this real-world news topic to Berlin.',
-          'Take the essence/theme of this news story and write about how it manifests in Berlin, the Wedding neighborhood, or the Berlin expat/local scene.',
-          'REMINDER: "Wedding" refers to the Berlin neighborhood, NOT wedding ceremonies. Do NOT write about weddings, marriage, or wedding-related topics.',
+          includeBerlinThemes
+            ? 'CRITICAL INSTRUCTION: You MUST write a satirical article that connects this real-world news topic to Berlin.'
+            : 'CRITICAL INSTRUCTION: You MUST write a satirical article about this real-world news topic directly, without localizing it to Berlin.',
+          includeBerlinThemes
+            ? 'Take the essence/theme of this news story and write about how it manifests in Berlin, the Wedding neighborhood, or the Berlin expat/local scene.'
+            : 'Take the essence/theme of this news story and satirize the broader political/media contradiction directly.',
+          includeBerlinThemes
+            ? 'REMINDER: "Wedding" refers to the Berlin neighborhood, NOT wedding ceremonies. Do NOT write about weddings, marriage, or wedding-related topics.'
+            : '',
           SOURCE_ATTRIBUTION_RULES,
           'Examples of how to connect:',
           useDrugsOrTechnoTopic
             ? '- Connect to clubs, DJs, drug culture, after-parties, Berghain queues, dealer economics, ketamine therapy, etc.'
-            : '- If the news is about a tech company layoff, write about how Berlin startups are affected or how laid-off tech bros are now DJing',
-          '- If the news is about politics, write about how Berliners react to it at their local Späti or how it affects the bureaucracy',
-          '- If the news is about climate, write about Berlin climate activists or how Berliners are coping',
-          '- If the news is about economy/inflation, write about Berlin rent, döner prices, or club entry fees',
+            : includeBerlinThemes
+              ? '- If the news is about a tech company layoff, write about how Berlin startups are affected or how laid-off tech bros are now DJing'
+              : '- If the news is about a tech company layoff, focus on media, workplace, and power contradictions in the story itself',
+          includeBerlinThemes
+            ? '- If the news is about politics, write about how Berliners react to it at their local Späti or how it affects the bureaucracy'
+            : '- If the news is about politics, satirize the political/media behavior directly',
+          includeBerlinThemes
+            ? '- If the news is about climate, write about Berlin climate activists or how Berliners are coping'
+            : '- If the news is about climate, satirize the policy, PR, and behavior gap directly',
+          includeBerlinThemes
+            ? '- If the news is about economy/inflation, write about Berlin rent, döner prices, or club entry fees'
+            : '- If the news is about economy/inflation, satirize incentives, messaging, and consequences directly',
           '',
           'The connection to the real news should be CLEAR in the article, not just vaguely inspired.',
-          'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.',
+          includeBerlinThemes
+            ? 'Your satirical angle should make fun of both the news topic AND Berlin culture simultaneously.'
+            : 'Your satirical angle should expose the contradiction within the news topic itself.',
+          strictTopicFocus
+            ? [
+                '',
+                'STRICT TOPIC FOCUS (MANDATORY):',
+                '- The headline must explicitly mention the key named entity from the topic when available (person, company, party, institution).',
+                '- The opening paragraph must immediately signal this exact story.',
+              ].join('\n')
+            : '',
           '',
           'MAKE THE REAL-NEWS TOPIC OBVIOUS TO READERS:',
           '- Readers must understand which real-world news story you are satirizing WITHOUT reading the summary or metadata.',
@@ -3790,6 +3947,13 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         '- In LOCKED DRAFT mode, headline/subheadline/excerpt are server-owned and must not be rewritten.',
       ].join('\n')
     : ''
+  const editorDirectionSection =
+    typeof input.editorDirection === 'string' && input.editorDirection.trim().length > 0
+      ? [
+          'EDITOR REVISION REQUEST (APPLY WHILE PRESERVING COHERENCE):',
+          `- ${input.editorDirection.trim().slice(0, 1200)}`,
+        ].join('\n')
+      : ''
 
   const userPrompt = [
     topicsSection,
@@ -3800,6 +3964,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     canonicalStructureInstruction,
     recentCanonicalReferencesSection,
     seedDraftSection,
+    editorDirectionSection,
     outputSchemaMode === 'body-only-locked-draft'
       ? [
           'LOCKED DRAFT RESPONSE MODE:',
@@ -3843,10 +4008,18 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     'Return an article that could plausibly run on the front page of a satirical local paper.',
     '',
-    WEDDING_REMINDER_SHORT,
+    includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
     '',
-    TURKISH_REMINDER_SHORT,
+    includeBerlinThemes ? TURKISH_REMINDER_SHORT : '',
     '',
+    strictTopicFocus
+      ? [
+          'STRICT TOPIC FOCUS (MANDATORY):',
+          '- Keep the specific story subject front-and-center in headline and lead.',
+          '- Do not drift into unrelated local color or backup themes.',
+          '',
+        ].join('\n')
+      : '',
     NEWSPAPER_STRUCTURE_RULES,
     '',
     NEWSPAPER_VARIANT_GUIDE,
@@ -3874,7 +4047,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
                 '- Keep it news-like but absurd, matching your specific topic',
               ].join('\n')
             : [
-                'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".',
+                includeBerlinThemes
+                  ? 'Your headline structure must be creative and varied. Avoid repetitive patterns like "Berlin [verb] [noun]".'
+                  : 'Your headline structure must be creative and varied. Avoid repetitive formula patterns.',
                 'Use different structures: questions, character-focused, descriptive, comparisons, direct statements, narratives, etc.',
                 'Think like a real newspaper: headlines should grab attention with wit, not formula.',
                 'Match your headline to your assigned topic—do not force unrelated themes into it.',
@@ -3977,6 +4152,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           toneProfile,
           article: validated,
           brief: satireBrief,
+          includeBerlinThemes,
         })
 
         if (critique) {
@@ -3996,6 +4172,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
               toneProfile,
               categories: input.categories,
               authors: input.authors,
+              includeBerlinThemes,
             })
 
             const rewrittenLangSample =
@@ -4043,10 +4220,13 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       validated = { ...validated, categorySlug: 'opinion', layout: 'opinion' }
     }
 
+    validated = enforceSourceRssTopic(validated, actuallyUsedRssTopic)
     validated = finalizeGeneratedExcerpt(applySeedDraft(validated, input.seedDraft))
 
-    // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
-    assertNotAboutWeddingCeremonies(validated)
+    if (includeBerlinThemes) {
+      // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
+      assertNotAboutWeddingCeremonies(validated)
+    }
 
     assertArticleNotTooSimilarToRecentCoverage({
       article: validated,
@@ -4090,10 +4270,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       repaired.layout = 'opinion'
     }
 
-    const repairedWithSeed = finalizeGeneratedExcerpt(applySeedDraft(repaired, input.seedDraft))
+    const repairedWithSeed = finalizeGeneratedExcerpt(
+      applySeedDraft(enforceSourceRssTopic(repaired, actuallyUsedRssTopic), input.seedDraft),
+    )
 
-    // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
-    assertNotAboutWeddingCeremonies(repairedWithSeed)
+    if (includeBerlinThemes) {
+      // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
+      assertNotAboutWeddingCeremonies(repairedWithSeed)
+    }
 
     assertArticleNotTooSimilarToRecentCoverage({
       article: repairedWithSeed,

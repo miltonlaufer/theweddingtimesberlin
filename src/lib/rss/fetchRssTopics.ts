@@ -19,7 +19,7 @@ export interface FetchRssTopicsResult {
 /******************* CONSTANTS ***********************/
 
 const DEFAULT_REVALIDATE_SECONDS = 3600
-const DEFAULT_MAX_ITEMS_PER_SOURCE = 12
+const DEFAULT_MAX_ITEMS_PER_SOURCE = 30
 
 const DEFAULT_FEEDS: Record<RssSource, string[]> = {
   // Berliner Zeitung: provide via env (RSS_BERLINER_ZEITUNG_FEED).
