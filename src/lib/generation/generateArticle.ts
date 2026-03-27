@@ -252,6 +252,83 @@ export async function summarizeRecentArticlesForBlacklist(params: {
   }
 }
 
+const RssTopicRankingItemSchema = z.object({
+  index: z.number().int().min(0),
+  importanceScore: z.number().int().min(1).max(10),
+  humorScore: z.number().int().min(1).max(10),
+})
+
+const RssTopicRankingResponseSchema = z.array(RssTopicRankingItemSchema).min(1)
+
+/**
+ * Cheap nano-model helper to rank RSS topics by:
+ * 1) perceived news importance
+ * 2) likelihood of producing a funny satirical piece
+ *
+ * It only runs when we already know at least one slot will use RSS.
+ */
+export async function rankRssTopicsForHumor(params: {
+  titles: string[]
+  maxTopics?: number
+  apiKey?: string
+}): Promise<number[]> {
+  const { titles, maxTopics = 12, apiKey: providedKey } = params
+  const apiKey = providedKey ?? process.env.OPENAI_API_KEY
+  if (!apiKey || titles.length === 0) return []
+
+  const analysisModelName = process.env.OPENAI_ANALYSIS_MODEL ?? 'gpt-5-nano-2025-08-07'
+  const analysisLlm = new ChatOpenAI({
+    apiKey,
+    model: analysisModelName,
+    // Do not set temperature: nano and some models only support default (1).
+  })
+
+  const numberedList = titles.map((title, idx) => `${idx}. ${title}`).join('\n')
+
+  try {
+    const response = await analysisLlm.invoke([
+      {
+        role: 'system',
+        content: [
+          'You are helping select which current-news topics should be turned into dark, satirical newspaper pieces.',
+          'From a list of topics, rate each for (a) news importance and (b) humor potential.',
+          'Return STRICT JSON ONLY: an array of objects { "index": number, "importanceScore": 1-10, "humorScore": 1-10 }.',
+          'Do not include any extra keys, text, or commentary.',
+        ].join(' '),
+      },
+      {
+        role: 'user',
+        content: [
+          'Here are candidate RSS topics, one per line, prefixed with a numeric index:',
+          numberedList,
+          '',
+          'Rate ALL of them. JSON only.',
+        ].join('\n'),
+      },
+    ])
+
+    const raw =
+      typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
+
+    const parsed = JSON.parse(raw) as unknown
+    const rankings = RssTopicRankingResponseSchema.parse(parsed)
+
+    const sorted = [...rankings].sort((a, b) => {
+      // Humor first, then importance as tiebreaker
+      if (b.humorScore !== a.humorScore) return b.humorScore - a.humorScore
+      if (b.importanceScore !== a.importanceScore) return b.importanceScore - a.importanceScore
+      return 0
+    })
+
+    return sorted
+      .map((item) => item.index)
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < titles.length)
+      .slice(0, Math.min(maxTopics, titles.length))
+  } catch {
+    return []
+  }
+}
+
 /******************* PROMPT CONSTANTS ***********************/
 
 // Reusable prompt text blocks to avoid repetition
@@ -3695,6 +3772,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     console.log(`${LOG.prefix} Satire brief generation failed; using fallback instructions`)
   }
 
+  // Only include the full, heavy HUMOR engine about one-third of the time to vary tone.
+  const includeHumorEngine = Math.random() < 1 / 5
+
   const systemPrompt = [
     includeBerlinThemes
       ? 'You are a satire writer for "The Wedding Times", a fictional satirical newspaper covering Berlin.'
@@ -3702,7 +3782,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'Language: write everything in US English (no German, no other languages).',
     `Tone profile: ${toneProfile.toUpperCase()} — ${TONE_PROFILE_GUIDANCE[toneProfile]}`,
     '',
-    HUMOR_PERSPECTIVE_METHOD,
+    includeHumorEngine ? HUMOR_PERSPECTIVE_METHOD : '',
     '',
     '═══════════════════════════════════════════════════════════════════',
     'ABSOLUTE RULE — DO NOT USE ANY EXAMPLES FROM THIS PROMPT',

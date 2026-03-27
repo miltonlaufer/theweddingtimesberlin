@@ -3,6 +3,7 @@ import { getPayload } from '@/lib/payload'
 import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import {
   extractHeadlinePatterns,
+  rankRssTopicsForHumor,
   summarizeRecentArticlesForBlacklist,
 } from '@/lib/generation/generateArticle'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
@@ -594,7 +595,6 @@ export async function runGenerationPipeline(params: {
       (t) => !recentlyUsedRssTopics.has(normalizeTopicIdentity(t.title)),
     )
 
-    const topicSummary = freshTopics.map((t) => `- [${t.source}] ${t.title}`).join('\n')
     CRON_LOG.info(
       `JOB ${String(jobId)}: rss topic filtering | fetched=${rssTopicsResult.topics.length} fresh=${freshTopics.length} lockedFromRecent=${recentlyUsedRssTopics.size}`,
     )
@@ -629,6 +629,8 @@ export async function runGenerationPipeline(params: {
     const recentHeadlinePatterns = extractHeadlinePatterns(recentArticleTitles)
     const uniquePatterns = Array.from(new Set(recentHeadlinePatterns))
 
+    const hasRssTopics = freshTopics.length > 0
+
     const maxRecentForAnalysis = 20
     const titlesForAnalysis = recentArticleTitles.slice(0, maxRecentForAnalysis)
     const excerptsForAnalysis = recentArticleExcerpts.slice(0, maxRecentForAnalysis)
@@ -644,10 +646,27 @@ export async function runGenerationPipeline(params: {
         }),
     })
 
+    let prioritizedTopics = freshTopics
+    if (hasRssTopics) {
+      try {
+        const rankedIndexes = await rankRssTopicsForHumor({
+          titles: freshTopics.map((t) => t.title),
+        })
+        if (rankedIndexes.length > 0) {
+          prioritizedTopics = rankedIndexes.map((index) => freshTopics[index]!).filter(Boolean)
+        }
+      } catch (error) {
+        CRON_LOG.warn(
+          `JOB ${String(jobId)}: rss topic ranking failed, falling back to chronological order (${error instanceof Error ? error.message : 'unknown error'})`,
+        )
+      }
+    }
+
+    const topicSummary = prioritizedTopics.map((t) => `- [${t.source}] ${t.title}`).join('\n')
+
     currentStage = 'prepare-slots'
     CRON_LOG.info(`JOB ${String(jobId)}: stage=${currentStage}`)
     const precomputedBlacklistSummary = blacklistCache.summary
-    const hasRssTopics = topicSummary.trim().length > 0
     const slotConfigs = computeSlotConfigs(ARTICLES_PER_RUN, hasRssTopics, forceOpinionThisRun)
     CRON_LOG.info(
       `JOB ${String(jobId)}: prepared ${slotConfigs.length} slots | hasRssTopics=${hasRssTopics} forceOpinion=${forceOpinionThisRun} blacklistCache=${blacklistCache.cacheHit ? 'HIT' : 'MISS'}`,

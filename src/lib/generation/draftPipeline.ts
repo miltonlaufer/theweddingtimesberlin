@@ -296,6 +296,9 @@ export async function generateDraftCandidate(params: {
   const editorDirection = params.editorDirection?.trim()
   const hasEditorDirection = typeof editorDirection === 'string' && editorDirection.length > 0
 
+  // Only include the full, heavy HUMOR engine about one-third of the time to vary tone.
+  const includeHumorEngine = Math.random() < 1 / 5
+
   const systemPrompt = [
     includeBerlinThemes
       ? 'You are writing one satirical NEWSPAPER PITCH for The Wedding Times (Berlin satire).'
@@ -303,11 +306,15 @@ export async function generateDraftCandidate(params: {
     'Output strict JSON only.',
     'Be original, topical, and mercilessly funny.',
     '',
-    'TOP PRIORITY: The humor engine below is the main rule. All other guidance is secondary.',
-    'If anything conflicts, follow the humor engine.',
-    '',
-    HUMOR_PERSPECTIVE_METHOD,
-    '',
+    includeHumorEngine
+      ? [
+          'TOP PRIORITY: The humor engine below is the main rule. All other guidance is secondary.',
+          'If anything conflicts, follow the humor engine.',
+          '',
+          HUMOR_PERSPECTIVE_METHOD,
+          '',
+        ].join('\n')
+      : '',
     includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
   ].join('\n')
 
