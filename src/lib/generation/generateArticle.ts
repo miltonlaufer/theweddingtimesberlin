@@ -359,13 +359,14 @@ const EDGE_AND_POLITICAL_INCORRECTNESS = [
   '- The goal is "I don\'t know if I should laugh" not "haha that\'s cute"',
   '- Push boundaries. Be provocative. Make people think "can they say that?"',
   '- Use dark humor, shock value, and uncomfortable truths wrapped in absurdity',
-  "- Don't be mean-spirited, but don't be safe either. Make readers squirm a little.",
+  "- Don't be mean-spirited, but don't be safe either. Make readers squirm, wince, and feel slightly implicated.",
   '',
   'COMEDIC VOICE - AUTHENTIC SOCIAL CRITICISM (THIS IS CRITICAL):',
   '- Channel Oscar Wilde, Louis CK, Ricky Gervais, George Carlin, Bill Hicks, Doug Stanhope, Bill Burr, Frankie Boyle.',
   '- The humor must come from REAL uncomfortable truths about society, not just wacky absurdism.',
   '- Say the thing everyone is THINKING but nobody dares to say out loud. Name the hypocrisy directly.',
   '- Observe real human behavior and call out the bullshit: the performative activism, the moral posturing, the self-deception, the cowardice disguised as politeness.',
+  '- Be cruel to vanity, cowardice, fake compassion, prestige hunger, and sexual insecurity.',
   '- Examples of the RIGHT tone:',
   '  * A gentrifier writing a think-piece about "preserving neighborhood character" from their 2000-euro loft',
   '  * Expats who complain about other expats ruining the city while being expats themselves',
@@ -387,6 +388,7 @@ const EDGE_SHORT = [
   '- Channel Oscar Wilde / Louis CK / Ricky Gervais / George Carlin: say the thing everyone THINKS but nobody dares say.',
   '- The comedy must come from REAL observations about human hypocrisy, not just random absurdism.',
   '- Name specific contradictions: the gentrifier who mourns gentrification, the leftist funded by daddy, the wellness guru who does coke.',
+  '- Be harsher on vanity, status hunger, fake sensitivity, and sexual embarrassment.',
   '- The best satire makes the reader recognize themselves and feel personally attacked.',
 ].join('\n')
 
@@ -395,9 +397,10 @@ export const ACID_HUMOR_REQUIREMENTS = [
   '- A clever mechanism is not enough. Every premise must expose a recognizable hypocrisy, cowardice, status ritual, or ideological performance.',
   '- Somebody specific should be getting humiliated: institutions, expats, club people, landlords, activists, startups, bureaucrats, media types, wellness creeps, moral careerists.',
   '- Prefer accusation over whimsy. Prefer social embarrassment over cute absurdity.',
+  '- Push harder on malice, vanity, sexual awkwardness, class anxiety, and power games.',
   '- If the piece could be mistaken for a quirky local feature, it fails.',
   '- Politically incorrect tone is welcome; slurs, hate speech, and identity-based dehumanization are not.',
-  '- Best-case reader reaction: "That is brutal, but annoyingly true."',
+  '- Best-case reader reaction: "That is brutal, filthy, and annoyingly true."',
 ].join('\n')
 
 export const HUMOR_PERSPECTIVE_METHOD = [
@@ -434,7 +437,7 @@ const TONE_PROFILE_GUIDANCE: Record<ToneProfile, string> = {
   acidic:
     'Write darker satire with sharp political criticism. Be ruthless about hypocrisy and force uncomfortable self-recognition.',
   merciless:
-    'Write maximum-intensity dark satire. Be clinically cynical, politically aggressive, and socially uncomfortable while avoiding slurs, hate speech, and calls for harm.',
+    'Write maximum-intensity dark satire. Be clinically cynical, politically aggressive, sexually charged in the phrasing, and socially uncomfortable while avoiding slurs, hate speech, and calls for harm.',
 }
 
 const AVOID_OVERUSED_THEMES = [
@@ -447,7 +450,9 @@ const AVOID_OVERUSED_THEMES = [
 
 const SPICE_IT_UP = [
   'SPICE IT UP (subtle sexual innuendo):',
-  '- Include 2-3 subtle double entendres or sexual innuendo that can be read innocently or suggestively',
+  '- Include 4-6 double entendres or sexual innuendo that can be read innocently or suggestively',
+  '- Make them more noticeable than before: still clever, but not so faint that readers miss them.',
+  '- At least one should land in a line that also advances the satire, not just decorate it.',
   '- Use phrases that have a second, sexual meaning when read carefully. VARY YOUR CHOICES widely from examples like:',
   '  * "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance"',
   '  * "coming from behind in the polls", "a firm grip on the situation", "going down in the rankings"',
@@ -460,8 +465,8 @@ const SPICE_IT_UP = [
   '  * "laying pipe (construction)", "going all the way to the Bürgeramt", "a satisfying resolution"',
   '  * "grinding to a halt", "the tip of the iceberg", "sliding into new territory"',
   '- DO NOT reuse the same innuendo across articles. Each article should have FRESH double entendres.',
-  '- Keep it clever—readers should catch the double meaning',
-  '- NOT explicit, NOT vulgar—just playful wordplay with sexual undertones',
+  '- Keep it clever, but sharper and dirtier than before—readers should definitely catch the double meaning.',
+  '- NOT explicit pornographic detail, but you may be a little filthier, meaner, and more libidinal in the phrasing.',
 ].join('\n')
 
 const WEDDING_NEIGHBORHOOD_CONTEXT = [
@@ -2180,6 +2185,7 @@ async function critiqueSatireArticle(args: {
     'Penalize vagueness and generic absurdism. Reward specificity and social observation.',
     'Penalize pieces that merely describe a mechanism or scam without humiliating a recognizable target.',
     'If the article reads like clever reportage rather than acidic satire, score it down hard.',
+    'Penalize prudish or overly clean phrasing when the piece could sustain sharper innuendo and a dirtier rhythm.',
     'No score inflation.',
     '',
     args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
@@ -2215,7 +2221,7 @@ async function critiqueSatireArticle(args: {
     '  "revisionInstructions": string[]',
     '}',
     '',
-    'Set passes=true only if ALL scores are at least 8.',
+    'Set passes=true only if ALL scores are at least 9.',
     'revisionInstructions should be concrete and directly actionable.',
   ].join('\n')
 
@@ -2315,6 +2321,7 @@ async function rewriteArticleFromCritique(args: {
     '- Increase specificity: names, places, observable behavior.',
     '- Keep the piece uncomfortable and politically critical in both directions.',
     '- If the current draft is merely clever or mechanical, rewrite toward accusation, humiliation, and sharper social truth.',
+    '- Increase sexual double-entendre density where natural; aim for nastier wordplay without becoming explicit.',
     '- Preserve category/author unless clearly incompatible with revised content.',
   ].join('\n')
 
@@ -2862,7 +2869,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const modelName = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
   const toneProfile = resolveToneProfile(process.env.OPENAI_TONE_PROFILE)
-  const minCritiqueScore = clampScore(Number(process.env.SATIRE_MIN_CRITIQUE_SCORE ?? '8'))
+  const minCritiqueScore = clampScore(Number(process.env.SATIRE_MIN_CRITIQUE_SCORE ?? '9'))
   const briefEnabled = isFlagEnabled(process.env.SATIRE_BRIEF_ENABLED, true)
   const critiqueEnabled = isFlagEnabled(process.env.SATIRE_CRITIQUE_ENABLED, true)
   const outputSchemaMode = resolveOutputSchemaMode(input)

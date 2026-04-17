@@ -431,7 +431,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
     'JSON schema:',
     '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "pass": boolean, "reason": string }',
     '',
-    'Set pass=true only when all scores are >= 7, the angle is not bland, and the pitch has real bite.',
+    'Set pass=true only when all scores are >= 8, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -475,8 +475,8 @@ export async function evaluateDraftCandidate(params: {
     }
   }
 
-  const minFun = Number(process.env.DRAFT_MIN_FUN_SCORE ?? 7)
-  const minMerciless = Number(process.env.DRAFT_MIN_MERCILESS_SCORE ?? 7)
+  const minFun = Number(process.env.DRAFT_MIN_FUN_SCORE ?? 8)
+  const minMerciless = Number(process.env.DRAFT_MIN_MERCILESS_SCORE ?? 8)
   const minSpecificity = Number(process.env.DRAFT_MIN_SPECIFICITY_SCORE ?? 6)
 
   const tonePass =
