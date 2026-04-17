@@ -4,6 +4,7 @@ import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
 import {
   assessRecentCoverageOverlap,
   HUMOR_PERSPECTIVE_METHOD,
+  HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE,
   MICRO_DETAIL_FORMULA_GUARD,
   WEDDING_REMINDER_SHORT,
 } from '@/lib/generation/generateArticle'
@@ -297,8 +298,8 @@ export async function generateDraftCandidate(params: {
   const editorDirection = params.editorDirection?.trim()
   const hasEditorDirection = typeof editorDirection === 'string' && editorDirection.length > 0
 
-  // Only include the full, heavy HUMOR engine about one-third of the time to vary tone.
-  const includeHumorEngine = Math.random() < 1 / 5
+  // Only include the full, heavy HUMOR engine in 10% of runs to vary tone.
+  const includeHumorEngine = Math.random() < HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE
 
   const systemPrompt = [
     includeBerlinThemes

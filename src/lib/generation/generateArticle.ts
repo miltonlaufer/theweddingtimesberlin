@@ -405,6 +405,8 @@ export const HUMOR_PERSPECTIVE_METHOD = [
   '- PASS/FAIL: if the piece does not center this contradiction, it fails.',
 ].join('\n')
 
+export const HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE = 1 / 10
+
 export const MICRO_DETAIL_FORMULA_GUARD = [
   'ANTI-REPETITION — DO NOT FALL INTO THE MICRO-DETAIL FORMULA:',
   '- Do NOT build the whole premise around a tiny hidden object or exact measurement that "reveals the truth."',
@@ -3882,8 +3884,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     console.log(`${LOG.prefix} Satire brief generation failed; using fallback instructions`)
   }
 
-  // Only include the full, heavy HUMOR engine about one-third of the time to vary tone.
-  const includeHumorEngine = Math.random() < 1 / 5
+  // Only include the full, heavy HUMOR engine in 10% of runs to vary tone.
+  const includeHumorEngine = Math.random() < HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE
 
   const systemPrompt = [
     includeBerlinThemes
@@ -4185,7 +4187,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     satireBriefSection,
     '',
-    HUMOR_PERSPECTIVE_METHOD,
+    includeHumorEngine ? HUMOR_PERSPECTIVE_METHOD : '',
     '',
     MICRO_DETAIL_FORMULA_GUARD,
     '',
