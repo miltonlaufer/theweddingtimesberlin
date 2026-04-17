@@ -2,6 +2,7 @@ import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
 import {
+  ACID_HUMOR_REQUIREMENTS,
   assessRecentCoverageOverlap,
   HUMOR_PERSPECTIVE_METHOD,
   HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE,
@@ -317,6 +318,8 @@ export async function generateDraftCandidate(params: {
           '',
         ].join('\n')
       : '',
+    ACID_HUMOR_REQUIREMENTS,
+    '',
     MICRO_DETAIL_FORMULA_GUARD,
     '',
     includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
@@ -358,6 +361,8 @@ export async function generateDraftCandidate(params: {
     'Rules:',
     '- Main rule: find an under-noticed detail and make the contradiction the comedic core.',
     '- If the contradiction is weak or generic, reject and rethink the pitch angle.',
+    '- The pitch must contain social bite, not just a mechanism. Someone recognizable should look ridiculous, hypocritical, cowardly, vain, greedy, or performative.',
+    '- If the pitch reads like smart urban observation but not an actual joke with teeth, reject it.',
     '- Do NOT use the exhausted micro-detail hook: tiny hidden object, exact mm/cm/Hz measurement, then scam reveal.',
     '- Avoid headlines shaped like "The [tiny thing] That..." or "How a [small measured thing]..." unless the story absolutely cannot work without it.',
     '- Prefer larger mechanisms: policy, staffing, paperwork, pricing, app settings, permits, queues, meetings, incentives, enforcement, social rituals.',
@@ -426,7 +431,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
     'JSON schema:',
     '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "pass": boolean, "reason": string }',
     '',
-    'Set pass=true only when all scores are >= 6 and the angle is not bland.',
+    'Set pass=true only when all scores are >= 7, the angle is not bland, and the pitch has real bite.',
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -470,8 +475,8 @@ export async function evaluateDraftCandidate(params: {
     }
   }
 
-  const minFun = Number(process.env.DRAFT_MIN_FUN_SCORE ?? 6)
-  const minMerciless = Number(process.env.DRAFT_MIN_MERCILESS_SCORE ?? 6)
+  const minFun = Number(process.env.DRAFT_MIN_FUN_SCORE ?? 7)
+  const minMerciless = Number(process.env.DRAFT_MIN_MERCILESS_SCORE ?? 7)
   const minSpecificity = Number(process.env.DRAFT_MIN_SPECIFICITY_SCORE ?? 6)
 
   const tonePass =

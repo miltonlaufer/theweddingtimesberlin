@@ -390,6 +390,16 @@ const EDGE_SHORT = [
   '- The best satire makes the reader recognize themselves and feel personally attacked.',
 ].join('\n')
 
+export const ACID_HUMOR_REQUIREMENTS = [
+  'ACID HUMOR REQUIREMENTS (MANDATORY):',
+  '- A clever mechanism is not enough. Every premise must expose a recognizable hypocrisy, cowardice, status ritual, or ideological performance.',
+  '- Somebody specific should be getting humiliated: institutions, expats, club people, landlords, activists, startups, bureaucrats, media types, wellness creeps, moral careerists.',
+  '- Prefer accusation over whimsy. Prefer social embarrassment over cute absurdity.',
+  '- If the piece could be mistaken for a quirky local feature, it fails.',
+  '- Politically incorrect tone is welcome; slurs, hate speech, and identity-based dehumanization are not.',
+  '- Best-case reader reaction: "That is brutal, but annoyingly true."',
+].join('\n')
+
 export const HUMOR_PERSPECTIVE_METHOD = [
   'PRIMARY DIRECTIVE — HUMOR ENGINE (TOP PRIORITY, MANDATORY):',
   '- This is the main rule for this generation. Treat all other style guidance as secondary.',
@@ -2018,11 +2028,11 @@ export function extractOverusedKeywords(titles: string[]): {
 /******************* VALIDATION / REPAIR ***********************/
 
 function resolveToneProfile(raw: string | undefined): ToneProfile {
-  const normalized = (raw ?? 'acidic').trim().toLowerCase()
+  const normalized = (raw ?? 'merciless').trim().toLowerCase()
   if (normalized === 'balanced' || normalized === 'acidic' || normalized === 'merciless') {
     return normalized
   }
-  return 'acidic'
+  return 'merciless'
 }
 
 function clampScore(value: number, min = 1, max = 10): number {
@@ -2168,6 +2178,8 @@ async function critiqueSatireArticle(args: {
     'Output MUST be strict JSON only.',
     'Do not sanitize. Judge based on writing quality and satirical sharpness.',
     'Penalize vagueness and generic absurdism. Reward specificity and social observation.',
+    'Penalize pieces that merely describe a mechanism or scam without humiliating a recognizable target.',
+    'If the article reads like clever reportage rather than acidic satire, score it down hard.',
     'No score inflation.',
     '',
     args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
@@ -2203,7 +2215,7 @@ async function critiqueSatireArticle(args: {
     '  "revisionInstructions": string[]',
     '}',
     '',
-    'Set passes=true only if ALL scores are at least 7.',
+    'Set passes=true only if ALL scores are at least 8.',
     'revisionInstructions should be concrete and directly actionable.',
   ].join('\n')
 
@@ -2302,6 +2314,7 @@ async function rewriteArticleFromCritique(args: {
     '- Apply the revisionInstructions directly.',
     '- Increase specificity: names, places, observable behavior.',
     '- Keep the piece uncomfortable and politically critical in both directions.',
+    '- If the current draft is merely clever or mechanical, rewrite toward accusation, humiliation, and sharper social truth.',
     '- Preserve category/author unless clearly incompatible with revised content.',
   ].join('\n')
 
@@ -2849,9 +2862,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const modelName = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
   const toneProfile = resolveToneProfile(process.env.OPENAI_TONE_PROFILE)
-  const minCritiqueScore = clampScore(Number(process.env.SATIRE_MIN_CRITIQUE_SCORE ?? '7'))
-  const briefEnabled = isFlagEnabled(process.env.SATIRE_BRIEF_ENABLED, false)
-  const critiqueEnabled = isFlagEnabled(process.env.SATIRE_CRITIQUE_ENABLED, false)
+  const minCritiqueScore = clampScore(Number(process.env.SATIRE_MIN_CRITIQUE_SCORE ?? '8'))
+  const briefEnabled = isFlagEnabled(process.env.SATIRE_BRIEF_ENABLED, true)
+  const critiqueEnabled = isFlagEnabled(process.env.SATIRE_CRITIQUE_ENABLED, true)
   const outputSchemaMode = resolveOutputSchemaMode(input)
   const seedDraftTopicHint = input.seedDraft?.topicHint?.trim() || null
   const useRandomModes = input.manualOverrides?.useRandomModes !== false
@@ -3940,6 +3953,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     includeBerlinThemes ? AVOID_OVERUSED_THEMES : '',
     '',
+    ACID_HUMOR_REQUIREMENTS,
+    '',
     includeBerlinThemes ? SURREALISM_AND_LOCAL_KNOWLEDGE : '',
     '',
     NEWSPAPER_STRUCTURE_RULES,
@@ -4188,6 +4203,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     satireBriefSection,
     '',
     includeHumorEngine ? HUMOR_PERSPECTIVE_METHOD : '',
+    '',
+    ACID_HUMOR_REQUIREMENTS,
     '',
     MICRO_DETAIL_FORMULA_GUARD,
     '',
