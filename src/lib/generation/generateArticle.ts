@@ -236,6 +236,9 @@ export async function summarizeRecentArticlesForBlacklist(params: {
           'SPECIFIC JOKES/PREMISES ALREADY DONE (list the core comedic premise of each article in one sentence):',
           '- ...',
           '',
+          'OVERUSED STORY FORMULAS / DEVICES (list repeated narrative devices or headline/premise formulas, e.g. "tiny physical clue exposes monetization/surveillance"):',
+          '- ...',
+          '',
           'OVERREPRESENTED THEMES (topics that appear in 2+ articles — these are ESPECIALLY off-limits):',
           '- ...',
         ].join('\n'),
@@ -400,6 +403,17 @@ export const HUMOR_PERSPECTIVE_METHOD = [
   '- Do NOT use the exact phrase "overlooked detail" in the output text; express the idea naturally in different words.',
   '- Prefer specific observable facts and consequences over abstract opinion.',
   '- PASS/FAIL: if the piece does not center this contradiction, it fails.',
+].join('\n')
+
+export const MICRO_DETAIL_FORMULA_GUARD = [
+  'ANTI-REPETITION — DO NOT FALL INTO THE MICRO-DETAIL FORMULA:',
+  '- Do NOT build the whole premise around a tiny hidden object or exact measurement that "reveals the truth."',
+  '- Avoid default hooks like: 3-mm dots, 5-mm slits, tiny labels, secret vents, hidden tags, coded rivets, miniature ports, precise Hz tweaks, minute stamps.',
+  '- Do NOT make a microscopic engineering clue carry the entire article. That pattern is overused.',
+  '- Measurements in headlines should be rare and only used when they matter to a broader public consequence, not as a gimmick.',
+  '- If you include a concrete object, it must support a larger social mechanism, not substitute for one.',
+  '- Prefer bigger contradictions: staffing rules, permit language, pricing schemes, app settings, committee rituals, procurement decisions, queues, official memos, incentives, enforcement habits, public reactions.',
+  '- Vary headline shapes. Avoid formulas like "The [tiny thing] That..." and "How a [small measured thing]..." unless absolutely unavoidable.',
 ].join('\n')
 
 const TONE_PROFILE_GUIDANCE: Record<ToneProfile, string> = {
@@ -1108,6 +1122,79 @@ function assessPairSimilarity(candidate: string, reference: string): SimilarityA
   }
 }
 
+const MICRO_DETAIL_MEASUREMENT_PATTERN =
+  /\b(?:\d+(?:[.,-]\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|half)\s*(?:-|–|—|\s)?(?:mm|millimeter(?:s)?|millimetre(?:s)?|cm|centimeter(?:s)?|centimetre(?:s)?|hz|khz|second(?:s)?|sec(?:ond)?s?)\b/i
+const MICRO_DETAIL_DESCRIPTOR_PATTERN =
+  /\b(tiny|minute|micro|small|little|hairline|hidden|invisible|narrow|angled|stamped|coded|threaded|recessed|bored|carved|shallow)\b/i
+const MICRO_DETAIL_ARTIFACT_PATTERN =
+  /\b(vent|slit|slot|scallop|dot|puck|tag|label|stamp|seal|rivet|chip|glyph|bead|notch|port|lip|hologram|flap|sticker|perforation|cut|clip|disk|disc|throat)\b/i
+const MICRO_DETAIL_REVEAL_PATTERN =
+  /\b(turn(?:s|ed|ing)?|let(?:s|ting)?|reveal(?:s|ed|ing)?|prove(?:s|d)?|expose(?:s|d|ing)?|betray(?:s|ed|ing)?|show(?:s|ed|ing)?|flip(?:s|ped|ping)?|trace(?:s|d|ing)?|quietly|secretly)\b/i
+const MICRO_DETAIL_OUTCOME_PATTERN =
+  /\b(sell(?:s|ing)?|monetiz(?:e|es|ed|ing)|privatiz(?:e|es|ed|ing)|rent(?:al|als)?|bill(?:s|ed|ing)?|licen(?:s|c)e(?:d|s|ing)?|outsourc(?:e|es|ed|ing)|track(?:s|ed|ing)?|snitch(?:es|ed|ing)?|log(?:s|ged|ging)?|funnel(?:s|ed|ing)?|invoice(?:s|d)?|profit(?:s|ing)?|subscription|marketplace|surveillance|algorithm|data)\b/i
+const MICRO_DETAIL_HEADLINE_SHAPE_PATTERN = /\b(?:that|letting|lets|turns|turned|how)\b/i
+const MICRO_DETAIL_FORMULA_MIN_RECENT_MATCHES = Math.max(
+  2,
+  parseEnvInt('REPETITION_GUARD_MICRO_DETAIL_FORMULA_MIN', 3),
+)
+
+type MicroDetailFormulaAssessment = {
+  matches: boolean
+  score: number
+  signals: string[]
+}
+
+function assessMicroDetailFormula(text: string): MicroDetailFormulaAssessment {
+  const normalized = text
+    .normalize('NFKC')
+    .replace(/[‐‑‒–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!normalized) {
+    return { matches: false, score: 0, signals: [] }
+  }
+
+  const signals: string[] = []
+  let score = 0
+
+  if (MICRO_DETAIL_MEASUREMENT_PATTERN.test(normalized)) {
+    signals.push('measurement')
+    score += 2
+  }
+  if (MICRO_DETAIL_DESCRIPTOR_PATTERN.test(normalized)) {
+    signals.push('micro-descriptor')
+    score += 1
+  }
+  if (MICRO_DETAIL_ARTIFACT_PATTERN.test(normalized)) {
+    signals.push('artifact')
+    score += 2
+  }
+  if (MICRO_DETAIL_REVEAL_PATTERN.test(normalized)) {
+    signals.push('reveal')
+    score += 1
+  }
+  if (MICRO_DETAIL_OUTCOME_PATTERN.test(normalized)) {
+    signals.push('scheme-outcome')
+    score += 2
+  }
+  if (MICRO_DETAIL_HEADLINE_SHAPE_PATTERN.test(normalized)) {
+    signals.push('headline-shape')
+    score += 1
+  }
+
+  const hasMeasurement = signals.includes('measurement')
+  const hasDescriptor = signals.includes('micro-descriptor')
+  const hasArtifact = signals.includes('artifact')
+  const hasReveal = signals.includes('reveal')
+  const hasOutcome = signals.includes('scheme-outcome')
+
+  const matches =
+    (hasArtifact && (hasMeasurement || hasDescriptor) && (hasReveal || hasOutcome)) || score >= 6
+
+  return { matches, score, signals }
+}
+
 export function assessRecentCoverageOverlap(params: { candidate: string; references: string[] }): {
   overlaps: boolean
   score: number
@@ -1117,6 +1204,29 @@ export function assessRecentCoverageOverlap(params: { candidate: string; referen
   const { candidate, references } = params
   if (!candidate.trim() || references.length === 0) {
     return { overlaps: false, score: 0, reason: 'no references', matchedReference: null }
+  }
+
+  const candidateFormula = assessMicroDetailFormula(candidate)
+  if (candidateFormula.matches) {
+    const repeatedFormulaReferences = references
+      .map((reference) => ({
+        reference,
+        assessment: assessMicroDetailFormula(reference),
+      }))
+      .filter((entry) => entry.assessment.matches)
+
+    if (repeatedFormulaReferences.length >= MICRO_DETAIL_FORMULA_MIN_RECENT_MATCHES) {
+      const strongestFormulaReference = repeatedFormulaReferences.sort(
+        (left, right) => right.assessment.score - left.assessment.score,
+      )[0]
+
+      return {
+        overlaps: true,
+        score: 100 + candidateFormula.score + repeatedFormulaReferences.length,
+        reason: `formulaRepeat=micro-detail-hook, recentMatches=${repeatedFormulaReferences.length}, candidateSignals=${candidateFormula.signals.join(',')}`,
+        matchedReference: strongestFormulaReference?.reference ?? null,
+      }
+    }
   }
 
   let bestScore = 0
@@ -3812,6 +3922,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ? BERLIN_STARTUP_CULTURE_MILD
         : '',
     '',
+    MICRO_DETAIL_FORMULA_GUARD,
+    '',
     'WRITING STYLE NOTES:',
     '- Reduce usage of the word "vibes" or "vibe"—it is overused. Prefer more specific, evocative language.',
     '- Instead of "the vibe was off", try "the atmosphere felt wrong", "something was different", "the energy had shifted", etc.',
@@ -4053,6 +4165,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     'PRIMARY CHECK (MANDATORY): Build this article around one under-noticed detail that flips the official narrative.',
     'If your draft cannot name that contradiction clearly, rewrite before final output.',
     'Do NOT use the exact phrase "overlooked detail" in the article, excerpt, or subheadline.',
+    'Do NOT fall back to the overused micro-detail gimmick: tiny hidden object + exact measurement + scam reveal.',
     '',
     canonicalStructureInstruction,
     recentCanonicalReferencesSection,
@@ -4073,6 +4186,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     satireBriefSection,
     '',
     HUMOR_PERSPECTIVE_METHOD,
+    '',
+    MICRO_DETAIL_FORMULA_GUARD,
     '',
     useFeatureStoryPrompt
       ? [

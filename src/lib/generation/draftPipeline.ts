@@ -4,6 +4,7 @@ import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
 import {
   assessRecentCoverageOverlap,
   HUMOR_PERSPECTIVE_METHOD,
+  MICRO_DETAIL_FORMULA_GUARD,
   WEDDING_REMINDER_SHORT,
 } from '@/lib/generation/generateArticle'
 import type {
@@ -315,6 +316,8 @@ export async function generateDraftCandidate(params: {
           '',
         ].join('\n')
       : '',
+    MICRO_DETAIL_FORMULA_GUARD,
+    '',
     includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
   ].join('\n')
 
@@ -354,6 +357,9 @@ export async function generateDraftCandidate(params: {
     'Rules:',
     '- Main rule: find an under-noticed detail and make the contradiction the comedic core.',
     '- If the contradiction is weak or generic, reject and rethink the pitch angle.',
+    '- Do NOT use the exhausted micro-detail hook: tiny hidden object, exact mm/cm/Hz measurement, then scam reveal.',
+    '- Avoid headlines shaped like "The [tiny thing] That..." or "How a [small measured thing]..." unless the story absolutely cannot work without it.',
+    '- Prefer larger mechanisms: policy, staffing, paperwork, pricing, app settings, permits, queues, meetings, incentives, enforcement, social rituals.',
     '- Headline must be sharp and specific (not generic).',
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',

@@ -39,6 +39,35 @@ describe('generateArticle repetition guard helpers', () => {
     expect(assessment.overlaps).toBe(false)
   })
 
+  it('flags repeated micro-detail formula even when nouns change', () => {
+    const assessment = assessRecentCoverageOverlap({
+      candidate:
+        'The 4-mm notch that turns Wedding bus shelters into a loyalty funnel for landlords',
+      references: [
+        'The 7-mm Vent Letting Wedding Clubs Call Themselves Quiet — tiny acoustic cheat code tuned to municipal meters',
+        "The 5-mm Scallop That Turns Wedding's Free Phone Chargers into a 1.50 Rental — a carved crescent behind every flap",
+        "Peel Here, Profit There: Wedding's Community Compost Bins Have a Tiny Brass Slot That Sells Your Scraps",
+      ],
+    })
+
+    expect(assessment.overlaps).toBe(true)
+    expect(assessment.reason).toContain('formulaRepeat=micro-detail-hook')
+  })
+
+  it('does not flag a different civic-premise story just because recent stories used micro-detail formula', () => {
+    const assessment = assessRecentCoverageOverlap({
+      candidate:
+        'District clerks begin swapping queue numbers at random, calling it participatory administration',
+      references: [
+        'The 7-mm Vent Letting Wedding Clubs Call Themselves Quiet — tiny acoustic cheat code tuned to municipal meters',
+        "The 5-mm Scallop That Turns Wedding's Free Phone Chargers into a 1.50 Rental — a carved crescent behind every flap",
+        "Peel Here, Profit There: Wedding's Community Compost Bins Have a Tiny Brass Slot That Sells Your Scraps",
+      ],
+    })
+
+    expect(assessment.overlaps).toBe(false)
+  })
+
   it('identifies retryable repetition-guard errors', () => {
     expect(isRetryableGenerationError(new Error('REPETITION_GUARD: overlap detected'))).toBe(true)
     expect(isRetryableGenerationError(new Error('different error'))).toBe(false)
