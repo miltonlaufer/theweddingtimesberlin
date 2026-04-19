@@ -2045,6 +2045,35 @@ function clampScore(value: number, min = 1, max = 10): number {
   return Math.max(min, Math.min(max, Math.round(value)))
 }
 
+function clampOptionalString(value: unknown, max: number): string {
+  if (typeof value !== 'string') return ''
+  return trimToReadableLength(value.trim(), max)
+}
+
+function clampOptionalStringList(value: unknown, maxItems: number, maxLen: number): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => clampOptionalString(item, maxLen))
+    .filter((item) => item.length > 0)
+    .slice(0, maxItems)
+}
+
+function normalizeCritiquePayload(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed
+
+  const critique = parsed as Record<string, unknown>
+  return {
+    darknessScore: critique.darknessScore,
+    politicalCriticismScore: critique.politicalCriticismScore,
+    discomfortScore: critique.discomfortScore,
+    specificityScore: critique.specificityScore,
+    passes: critique.passes,
+    strongestLine: clampOptionalString(critique.strongestLine, 220),
+    weaknesses: clampOptionalStringList(critique.weaknesses, 5, 180),
+    revisionInstructions: clampOptionalStringList(critique.revisionInstructions, 6, 200),
+  }
+}
+
 function isFlagEnabled(raw: string | undefined, defaultValue = false): boolean {
   if (raw == null) return defaultValue
   const normalized = raw.trim().toLowerCase()
@@ -2233,7 +2262,8 @@ async function critiqueSatireArticle(args: {
     const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
     const jsonText = extractFirstJsonObject(text)
     const parsed = JSON.parse(jsonText) as unknown
-    const validation = SatireCritiqueSchema.safeParse(parsed)
+    const normalized = normalizeCritiquePayload(parsed)
+    const validation = SatireCritiqueSchema.safeParse(normalized)
     if (!validation.success) {
       const issues = validation.error.issues
         .slice(0, 3)
