@@ -18,6 +18,7 @@ import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryC
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { CANONICAL_SITE_URL } from '@/lib/getBaseUrl'
 import { createAndUploadInstagramImage } from '@/lib/instagram/createInstagramImage'
@@ -971,7 +972,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           collection: 'articles',
           data: {
             headline: article.headline,
-            subheadline: article.subheadline ?? undefined,
+            subheadline: normalizeOptionalSubheadlineForStorage(article.subheadline),
             slug,
             featuredImageUrl: body.featuredImageUrl,
             imageCaption: article.imageCaption ?? undefined,

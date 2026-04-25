@@ -12,6 +12,8 @@ import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
 import type { DraftCandidate, DraftEvaluation, SlotConfig } from '@/lib/generation/pipelineTypes'
+import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   convertMarkdownToLexical,
   defaultEditorConfig,
@@ -535,12 +537,15 @@ export async function POST(req: Request) {
     collection: 'articles',
     data: {
       headline: generated.headline,
-      subheadline: generated.subheadline ?? undefined,
+      subheadline: normalizeOptionalSubheadlineForStorage(generated.subheadline),
       slug,
       featuredImageUrl,
       imageCaption: generated.imageCaption ?? undefined,
       content: lexical,
-      excerpt: generated.excerpt ?? undefined,
+      excerpt:
+        typeof generated.excerpt === 'string'
+          ? normalizeExcerptForStorage(generated.excerpt, 300)
+          : undefined,
       category: categoryDoc.id,
       author: authorDoc.id,
       publishedAt: articleStatus === 'published' ? new Date().toISOString() : undefined,

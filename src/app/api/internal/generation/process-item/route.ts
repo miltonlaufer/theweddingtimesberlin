@@ -16,6 +16,10 @@ import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/gener
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
 import { tryFinalizeGenerationJob } from '@/lib/generation/runGenerationPipeline'
 import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
+import { CANONICAL_SITE_URL } from '@/lib/getBaseUrl'
+import { createAndUploadInstagramImage } from '@/lib/instagram/createInstagramImage'
+import { postToInstagram } from '@/lib/instagram/postToInstagram'
 import {
   convertMarkdownToLexical,
   defaultEditorConfig,
@@ -131,6 +135,78 @@ function getAuthorIdFromArticleDoc(doc: unknown): string | number | null {
   const relId = (relation as { id?: unknown }).id
   if (typeof relId === 'string' || typeof relId === 'number') return relId
   return null
+}
+
+async function maybePublishInstagram(args: {
+  slug: string
+  headline: string
+  excerpt: string | null
+  featuredImageUrl: string
+}) {
+  if (process.env.INSTAGRAM_AUTO_POST_ON_ARTICLE_CREATE === 'true') {
+    return {
+      attempted: false,
+      queuedByArticleHook: true,
+      skipped: true,
+      reason: 'Handled by article afterChange hook',
+    }
+  }
+
+  if (process.env.CRON_AUTO_PUBLISH_INSTAGRAM !== 'true') {
+    return {
+      attempted: false,
+      queuedByArticleHook: false,
+      skipped: true,
+      reason: 'CRON_AUTO_PUBLISH_INSTAGRAM is not true',
+    }
+  }
+
+  if (process.env.INSTAGRAM_ENABLED !== 'true') {
+    return {
+      attempted: false,
+      queuedByArticleHook: false,
+      skipped: true,
+      reason: 'INSTAGRAM_ENABLED is not true',
+    }
+  }
+
+  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN?.trim()
+  const igUserId = process.env.INSTAGRAM_IG_USER_ID?.trim()
+  if (!accessToken || !igUserId) {
+    return {
+      attempted: false,
+      queuedByArticleHook: false,
+      skipped: true,
+      reason: 'Missing INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_IG_USER_ID',
+    }
+  }
+
+  const { publicUrl } = await createAndUploadInstagramImage(
+    {
+      imageUrl: args.featuredImageUrl,
+      headline: args.headline,
+      excerpt: args.excerpt,
+    },
+    args.slug,
+  )
+
+  const articleUrl = `${CANONICAL_SITE_URL}/article/${args.slug}`
+  const caption = args.excerpt
+    ? `${args.headline}\n\n${args.excerpt}\n\n${articleUrl}`
+    : `${args.headline}\n\n${articleUrl}`
+
+  const result = await postToInstagram({
+    imageUrl: publicUrl,
+    caption,
+    altText: args.headline,
+  })
+
+  return {
+    attempted: true,
+    queuedByArticleHook: false,
+    skipped: !result.ok,
+    reason: result.ok ? undefined : result.error,
+  }
 }
 
 function pickAuthorContext(params: {
@@ -628,21 +704,23 @@ export async function POST(request: Request): Promise<NextResponse> {
     const slug = `${slugify(finalGenerated.headline)}-${Date.now()}-${body.itemId}`
     const imagePrompt =
       typeof finalGenerated.imagePrompt === 'string' ? finalGenerated.imagePrompt : ''
+    const normalizedSubheadline = normalizeOptionalSubheadlineForStorage(finalGenerated.subheadline)
+    const normalizedExcerpt =
+      typeof finalGenerated.excerpt === 'string'
+        ? normalizeExcerptForStorage(finalGenerated.excerpt, 300) || undefined
+        : undefined
     let featuredImageUrl: string | undefined
 
     const createdArticle = await payload.create({
       collection: 'articles',
       data: {
         headline: finalGenerated.headline,
-        subheadline: finalGenerated.subheadline ?? undefined,
+        subheadline: normalizedSubheadline,
         slug,
         featuredImageUrl: undefined,
         imageCaption: finalGenerated.imageCaption ?? undefined,
         content: lexical,
-        excerpt:
-          typeof finalGenerated.excerpt === 'string'
-            ? normalizeExcerptForStorage(finalGenerated.excerpt, 300)
-            : undefined,
+        excerpt: normalizedExcerpt,
         category: categoryDoc.id,
         author: resolvedAuthorDoc.id,
         publishedAt: body.publish ? new Date().toISOString() : undefined,
@@ -673,6 +751,24 @@ export async function POST(request: Request): Promise<NextResponse> {
             featuredImageUrl,
           },
         })
+        if (body.publish && featuredImageUrl) {
+          try {
+            const instagramResult = await maybePublishInstagram({
+              slug,
+              headline: finalGenerated.headline,
+              excerpt: normalizedExcerpt ?? null,
+              featuredImageUrl,
+            })
+            console.log(
+              `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} instagram post status | attempted=${instagramResult.attempted} skipped=${instagramResult.skipped} hook=${instagramResult.queuedByArticleHook} reason=${instagramResult.reason ?? 'ok'}`,
+            )
+          } catch (instagramError) {
+            console.warn(
+              `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} instagram publish failed`,
+              instagramError,
+            )
+          }
+        }
         console.log(
           `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} image uploaded`,
         )

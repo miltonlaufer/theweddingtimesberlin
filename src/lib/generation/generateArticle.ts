@@ -804,6 +804,14 @@ const SOURCE_ATTRIBUTION_RULES = [
   '- Use only the underlying topic and write as original local reporting/satire.',
 ].join('\n')
 
+const ABSURD_ANONYMITY_RULES = [
+  'ANONYMITY BOILERPLATE GAG (USE WHEN IT HELPS):',
+  '- You may occasionally use real-newspaper phrasing like "speaking on condition of anonymity because..." or "who requested anonymity because...".',
+  '- When you use it, give a bizarre, petty, contradictory, self-incriminating, or impossible reason for anonymity.',
+  '- The reason can undermine the source, the institution, or the entire premise, but it should stay deadpan.',
+  '- Usually no more than two such anonymity clause per article.',
+].join('\n')
+
 const NEWSPAPER_STRUCTURE_RULES = [
   'NEWSPAPER STRUCTURE (MANDATORY FOR NON-OPINION PIECES):',
   '- Write as a publishable newspaper article, not a sketch, list, or abstract rant.',
@@ -3984,6 +3992,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     SOURCE_ATTRIBUTION_RULES,
     '',
+    ABSURD_ANONYMITY_RULES,
+    '',
     useAfRTopicMode ? AFR_RECURRING_STORY_RULES : '',
     '',
     satireBriefSection,
@@ -4234,6 +4244,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       : '',
     'Important: ALL text fields must be written in US English.',
     SOURCE_ATTRIBUTION_RULES,
+    '',
+    ABSURD_ANONYMITY_RULES,
     '',
     `Tone profile target: ${toneProfile.toUpperCase()} (${TONE_PROFILE_GUIDANCE[toneProfile]})`,
     '',

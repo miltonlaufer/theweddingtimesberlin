@@ -72,6 +72,7 @@ export const GenerationJobItems: CollectionConfig = {
     {
       name: 'subheadline',
       type: 'text',
+      maxLength: 220,
     },
     {
       name: 'excerpt',

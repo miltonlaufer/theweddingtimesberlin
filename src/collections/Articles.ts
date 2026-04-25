@@ -11,6 +11,12 @@ type ArticleDoc = {
   status?: string
 }
 
+function isInstagramReady(doc: ArticleDoc | null | undefined): boolean {
+  if (!doc) return false
+  if (doc.status !== 'published') return false
+  return Boolean(doc.featuredImageUrl?.trim() && doc.headline?.trim() && doc.slug?.trim())
+}
+
 function shouldPostToInstagram(
   doc: ArticleDoc,
   previousDoc: ArticleDoc | null,
@@ -18,12 +24,9 @@ function shouldPostToInstagram(
 ): boolean {
   if (process.env.INSTAGRAM_AUTO_POST_ON_ARTICLE_CREATE !== 'true') return false
   if (operation === 'delete') return false
-  if (doc.status !== 'published') return false
-  const hadImage = Boolean(doc.featuredImageUrl?.trim())
-  const hadHeadline = Boolean(doc.headline?.trim())
-  if (!hadImage || !hadHeadline) return false
+  if (!isInstagramReady(doc)) return false
   if (operation === 'create') return true
-  return previousDoc?.status !== 'published'
+  return !isInstagramReady(previousDoc)
 }
 
 export const Articles: CollectionConfig = {
@@ -45,6 +48,7 @@ export const Articles: CollectionConfig = {
     {
       name: 'subheadline',
       type: 'text',
+      maxLength: 220,
     },
     {
       name: 'slug',

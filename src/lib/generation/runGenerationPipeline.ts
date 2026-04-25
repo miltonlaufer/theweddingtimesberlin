@@ -219,7 +219,7 @@ export async function tryFinalizeGenerationJob(params: {
   tokenForInternalCalls: string | undefined
   jobId: string | number
 }): Promise<{ finalized: boolean; pending: boolean; status?: 'completed' | 'failed' }> {
-  const { baseUrl, tokenForInternalCalls, jobId } = params
+  const { jobId } = params
   const payload = await getPayload()
   if (!payload) {
     throw new Error('Database unavailable')
@@ -375,39 +375,11 @@ export async function tryFinalizeGenerationJob(params: {
     reason?: string
   } | null = null
   if (createdArticles.length > 0 && process.env.CRON_AUTO_PUBLISH_INSTAGRAM === 'true') {
-    const ig = await callInternalJson<{
-      ok?: boolean
-      sent?: number
-      failed?: number
-      skipped?: boolean
-      reason?: string
-      error?: string
-    }>({
-      baseUrl,
-      path: '/api/internal/generation/publish-instagram',
-      token: tokenForInternalCalls,
-      body: { slugs: createdArticles.map((article) => article.slug) },
-    })
-
-    if (ig.ok) {
-      instagramResult = ig.data as {
-        sent?: number
-        failed?: number
-        skipped?: boolean
-        reason?: string
-      }
-      CRON_LOG.info(
-        `JOB ${String(jobId)}: instagram publish completed | sent=${instagramResult.sent ?? 0} failed=${instagramResult.failed ?? 0} skipped=${instagramResult.skipped === true}`,
-      )
-    } else {
-      instagramResult = {
-        failed: createdArticles.length,
-        reason: (ig.data as { error?: string }).error ?? `HTTP ${ig.status}`,
-      }
-      CRON_LOG.warn(
-        `JOB ${String(jobId)}: instagram publish failed (${instagramResult.reason ?? 'unknown'})`,
-      )
+    instagramResult = {
+      skipped: true,
+      reason: 'Handled per article during item processing',
     }
+    CRON_LOG.info(`JOB ${String(jobId)}: instagram publish handled per article during processing`)
   }
 
   const finalStatus: 'completed' | 'failed' = createdArticles.length > 0 ? 'completed' : 'failed'
