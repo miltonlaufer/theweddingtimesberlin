@@ -1,4 +1,10 @@
-import { assessRecentCoverageOverlap, isRetryableGenerationError } from './generateArticle'
+import {
+  assessRecentCoverageOverlap,
+  buildArticlePrimaryCheck,
+  isRetryableGenerationError,
+  shouldIncludeHumorPerspectiveMethod,
+} from './generateArticle'
+import { buildDraftPerspectiveRuleLines } from './draftPipeline'
 import { describe, expect, it } from 'vitest'
 
 describe('generateArticle repetition guard helpers', () => {
@@ -71,5 +77,21 @@ describe('generateArticle repetition guard helpers', () => {
   it('identifies retryable repetition-guard errors', () => {
     expect(isRetryableGenerationError(new Error('REPETITION_GUARD: overlap detected'))).toBe(true)
     expect(isRetryableGenerationError(new Error('different error'))).toBe(false)
+  })
+
+  it('uses an explicit slot-level humor perspective decision when provided', () => {
+    expect(shouldIncludeHumorPerspectiveMethod(true, () => 0.99)).toBe(true)
+    expect(shouldIncludeHumorPerspectiveMethod(false, () => 0)).toBe(false)
+    expect(shouldIncludeHumorPerspectiveMethod(undefined, () => 0.099)).toBe(true)
+    expect(shouldIncludeHumorPerspectiveMethod(undefined, () => 0.1)).toBe(false)
+  })
+
+  it('does not leak the under-noticed-detail rule when the humor engine is off', () => {
+    expect(buildArticlePrimaryCheck(false)).not.toContain('under-noticed detail')
+    expect(buildArticlePrimaryCheck(false)).not.toContain('flips the official narrative')
+    expect(buildDraftPerspectiveRuleLines(false).join('\n')).not.toContain('under-noticed detail')
+    expect(buildDraftPerspectiveRuleLines(false).join('\n')).not.toContain(
+      'opposite of the official narrative',
+    )
   })
 })

@@ -4,6 +4,7 @@ import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import {
   extractHeadlinePatterns,
   rankRssTopicsForHumor,
+  shouldIncludeHumorPerspectiveMethod,
   summarizeRecentArticlesForBlacklist,
 } from '@/lib/generation/generateArticle'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
@@ -65,41 +66,54 @@ function computeSlotConfigs(
 ): SlotConfig[] {
   const guaranteed: SlotConfig[] = []
 
+  const withToneRoll = (slot: Omit<SlotConfig, 'useHumorPerspectiveMethod'>): SlotConfig => ({
+    ...slot,
+    useHumorPerspectiveMethod: shouldIncludeHumorPerspectiveMethod(),
+  })
+
   if (forceOpinionFirst) {
-    guaranteed.push({
+    guaranteed.push(
+      withToneRoll({
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: false,
+        forceOpinion: true,
+        includeTopics: false,
+      }),
+    )
+  }
+
+  guaranteed.push(
+    withToneRoll({
+      forceDrugsTechno: true,
+      forceStartup: false,
+      forceRss: false,
+      forceOpinion: false,
+      includeTopics: false,
+    }),
+  )
+
+  guaranteed.push(
+    withToneRoll({
       forceDrugsTechno: false,
       forceStartup: false,
       forceRss: false,
-      forceOpinion: true,
+      forceOpinion: false,
       includeTopics: false,
-    })
-  }
-
-  guaranteed.push({
-    forceDrugsTechno: true,
-    forceStartup: false,
-    forceRss: false,
-    forceOpinion: false,
-    includeTopics: false,
-  })
-
-  guaranteed.push({
-    forceDrugsTechno: false,
-    forceStartup: false,
-    forceRss: false,
-    forceOpinion: false,
-    includeTopics: false,
-  })
+    }),
+  )
 
   if (hasRssTopics) {
     for (let i = 0; i < FORCED_RSS_SLOTS; i++) {
-      guaranteed.push({
-        forceDrugsTechno: i === 0,
-        forceStartup: false,
-        forceRss: true,
-        forceOpinion: false,
-        includeTopics: true,
-      })
+      guaranteed.push(
+        withToneRoll({
+          forceDrugsTechno: i === 0,
+          forceStartup: false,
+          forceRss: true,
+          forceOpinion: false,
+          includeTopics: true,
+        }),
+      )
     }
   }
 
@@ -108,13 +122,15 @@ function computeSlotConfigs(
     if (i < guaranteed.length) {
       slots.push(guaranteed[i])
     } else {
-      slots.push({
-        forceDrugsTechno: undefined,
-        forceStartup: undefined,
-        forceRss: undefined,
-        forceOpinion: false,
-        includeTopics: pickTwoThirds(),
-      })
+      slots.push(
+        withToneRoll({
+          forceDrugsTechno: undefined,
+          forceStartup: undefined,
+          forceRss: undefined,
+          forceOpinion: false,
+          includeTopics: pickTwoThirds(),
+        }),
+      )
     }
   }
 

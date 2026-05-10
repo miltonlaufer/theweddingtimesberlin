@@ -77,6 +77,7 @@ type DraftResult = {
   draft: Draft
   sourceRssTopic: string | null
   evaluation: DraftEvaluation
+  useHumorPerspectiveMethod?: boolean
 }
 
 type GenerationOptions = {
@@ -415,6 +416,7 @@ export function AIComposeClient() {
         draft: Draft
         sourceRssTopic: string | null
         evaluation: DraftEvaluation
+        useHumorPerspectiveMethod?: boolean
       }>({
         action: 'generateDraft',
         rssTopic: rssTopic.trim() || undefined,
@@ -437,6 +439,7 @@ export function AIComposeClient() {
       draft: nextDraft,
       sourceRssTopic: result.sourceRssTopic,
       evaluation: result.evaluation,
+      useHumorPerspectiveMethod: result.useHumorPerspectiveMethod,
     })
     setDraftHistory((prev) => [...prev, nextDraft])
     resetDownstreamFromDraft()
@@ -463,6 +466,7 @@ export function AIComposeClient() {
         rssTopic: rssTopic.trim() || undefined,
         storyDescription: storyDescription.trim() || undefined,
         revisionInstructions: articleFeedback.trim() || undefined,
+        useHumorPerspectiveMethod: draftResult.useHumorPerspectiveMethod,
         options: generationOptions,
       }),
     )

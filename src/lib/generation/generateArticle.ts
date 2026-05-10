@@ -2,6 +2,7 @@ import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
 import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 
 /******************* TYPES ***********************/
 
@@ -37,6 +38,8 @@ export interface GenerateArticleInput {
   forceStartup?: boolean // Force startup/gentrification topic (true) or force non-startup (false), undefined = random
   forceRss?: boolean // Force using RSS topic if available
   forceOpinion?: boolean // Force opinion/editorial piece (categorySlug "opinion", layout "opinion")
+  /** Optional slot-level tone decision shared with draft generation. Undefined rolls at the default rate. */
+  useHumorPerspectiveMethod?: boolean
   /** When set, pre-analysis is skipped and this summary is used for the blacklist. Cron runs analysis once per batch. */
   precomputedBlacklistSummary?: string
   /** Optional draft lock: when set, headline/subheadline/excerpt are forced to these values. */
@@ -420,6 +423,32 @@ export const HUMOR_PERSPECTIVE_METHOD = [
 
 export const HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE = 1 / 10
 
+export function shouldIncludeHumorPerspectiveMethod(
+  forcedValue?: boolean,
+  random: () => number = Math.random,
+): boolean {
+  return typeof forcedValue === 'boolean'
+    ? forcedValue
+    : random() < HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE
+}
+
+export function buildArticlePrimaryCheck(includeHumorEngine: boolean): string {
+  if (includeHumorEngine) {
+    return [
+      'PRIMARY CHECK (MANDATORY): Build this article around one under-noticed detail that flips the official narrative.',
+      'If your draft cannot name that contradiction clearly, rewrite before final output.',
+      'Do NOT use the exact phrase "overlooked detail" in the article, excerpt, or subheadline.',
+      'Do NOT fall back to the overused micro-detail gimmick: tiny hidden object + exact measurement + scam reveal.',
+    ].join('\n')
+  }
+
+  return [
+    'PRIMARY CHECK (MANDATORY): Build this article around a clear satirical premise with concrete stakes and social bite.',
+    'If your draft feels generic, toothless, or too similar to recent angles, rewrite before final output.',
+    'Do NOT fall back to the overused micro-detail gimmick: tiny hidden object + exact measurement + scam reveal.',
+  ].join('\n')
+}
+
 export const MICRO_DETAIL_FORMULA_GUARD = [
   'ANTI-REPETITION — DO NOT FALL INTO THE MICRO-DETAIL FORMULA:',
   '- Do NOT build the whole premise around a tiny hidden object or exact measurement that "reveals the truth."',
@@ -637,8 +666,8 @@ const JSON_SCHEMA = [
   'JSON schema:',
   '{',
   '  "headline": string,  // YOUR OWN original headline - DO NOT copy the topic direction (<= 140 chars)',
-  '  "subheadline": string|null,  // <= 220 chars',
-  '  "excerpt": string|null,  // <= 300 chars',
+  '  "subheadline": string|null,  // <= 220 chars; complete standalone sentence(s), never a cropped fragment',
+  '  "excerpt": string|null,  // <= 300 chars; complete standalone sentence(s), never a cropped fragment',
   '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
   '  "categorySlug": string,  // existing slug OR new slug if creating category',
   '  "authorSlug": string,  // existing slug OR new slug if creating author',
@@ -2832,7 +2861,7 @@ function applySeedDraft(
   }
 
   if (typeof seed.subheadline === 'string') {
-    next.subheadline = seed.subheadline.trim().slice(0, 220) || null
+    next.subheadline = normalizeOptionalSubheadlineForStorage(seed.subheadline) ?? null
   }
   if (typeof seed.excerpt === 'string') {
     next.excerpt = normalizeExcerptForStorage(seed.excerpt, 300) || null
@@ -2865,7 +2894,7 @@ function hydrateLockedDraftFields(args: {
 
   hydrated.subheadline =
     typeof args.seedDraft.subheadline === 'string'
-      ? args.seedDraft.subheadline.trim().slice(0, 220) || null
+      ? (normalizeOptionalSubheadlineForStorage(args.seedDraft.subheadline) ?? null)
       : null
   hydrated.excerpt =
     typeof args.seedDraft.excerpt === 'string'
@@ -2877,10 +2906,13 @@ function hydrateLockedDraftFields(args: {
 }
 
 function finalizeGeneratedExcerpt(article: GeneratedArticle): GeneratedArticle {
-  if (typeof article.excerpt !== 'string') return article
   return {
     ...article,
-    excerpt: normalizeExcerptForStorage(article.excerpt, 300) || null,
+    subheadline: normalizeOptionalSubheadlineForStorage(article.subheadline) ?? null,
+    excerpt:
+      typeof article.excerpt === 'string'
+        ? normalizeExcerptForStorage(article.excerpt, 300) || null
+        : article.excerpt,
   }
 }
 
@@ -3942,8 +3974,11 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     console.log(`${LOG.prefix} Satire brief generation failed; using fallback instructions`)
   }
 
-  // Only include the full, heavy HUMOR engine in 10% of runs to vary tone.
-  const includeHumorEngine = Math.random() < HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE
+  // Only include the full, heavy HUMOR engine in the slot-level sample to vary tone.
+  const includeHumorEngine = shouldIncludeHumorPerspectiveMethod(input.useHumorPerspectiveMethod)
+  console.log(
+    `${LOG.prefix} Humor perspective method: ${includeHumorEngine ? 'included' : 'skipped'}`,
+  )
 
   const systemPrompt = [
     includeBerlinThemes
@@ -4199,15 +4234,22 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
             : '',
         ].join('\n')
 
+  const lockedDraftSubheadline = input.seedDraft
+    ? normalizeOptionalSubheadlineForStorage(input.seedDraft.subheadline)
+    : undefined
+  const lockedDraftExcerpt =
+    typeof input.seedDraft?.excerpt === 'string'
+      ? normalizeExcerptForStorage(input.seedDraft.excerpt, 300) || undefined
+      : undefined
   const seedDraftSection = input.seedDraft
     ? [
         'LOCKED DRAFT (MANDATORY):',
         `- Use this EXACT headline: "${input.seedDraft.headline.trim().slice(0, 140)}"`,
-        typeof input.seedDraft.subheadline === 'string'
-          ? `- Use this EXACT subheadline: "${input.seedDraft.subheadline.trim().slice(0, 220)}"`
+        lockedDraftSubheadline
+          ? `- Use this EXACT subheadline: "${lockedDraftSubheadline}"`
           : '- Subheadline may be null if needed.',
-        typeof input.seedDraft.excerpt === 'string'
-          ? `- Use this EXACT excerpt: "${trimToReadableLength(input.seedDraft.excerpt, 300)}"`
+        lockedDraftExcerpt
+          ? `- Use this EXACT excerpt: "${lockedDraftExcerpt}"`
           : '- Excerpt may be null if needed.',
         typeof input.seedDraft.topicHint === 'string' && input.seedDraft.topicHint.trim().length > 0
           ? `- Keep this SAME topic/news hook continuity: "${input.seedDraft.topicHint.trim().slice(0, 300)}"`
@@ -4226,10 +4268,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const userPrompt = [
     topicsSection,
-    'PRIMARY CHECK (MANDATORY): Build this article around one under-noticed detail that flips the official narrative.',
-    'If your draft cannot name that contradiction clearly, rewrite before final output.',
-    'Do NOT use the exact phrase "overlooked detail" in the article, excerpt, or subheadline.',
-    'Do NOT fall back to the overused micro-detail gimmick: tiny hidden object + exact measurement + scam reveal.',
+    buildArticlePrimaryCheck(includeHumorEngine),
     '',
     canonicalStructureInstruction,
     recentCanonicalReferencesSection,
@@ -4243,6 +4282,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ].join('\n')
       : '',
     'Important: ALL text fields must be written in US English.',
+    'Subheadline and excerpt must be complete standalone sentence(s) under their limits. Never end either field with a comma, dash, connector word, dependent clause, or visibly cropped thought.',
     SOURCE_ATTRIBUTION_RULES,
     '',
     ABSURD_ANONYMITY_RULES,

@@ -19,6 +19,7 @@ const RequestSchema = z.object({
     forceRss: z.boolean().optional(),
     forceOpinion: z.boolean(),
     includeTopics: z.boolean(),
+    useHumorPerspectiveMethod: z.boolean().optional(),
   }),
   topicSummary: z.string(),
   recentCoverage: z

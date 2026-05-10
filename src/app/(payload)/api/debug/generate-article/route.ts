@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import { getPayload } from '@/lib/payload'
 import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import {
-  generateArticle,
   extractHeadlinePatterns,
+  generateArticle,
   isRetryableGenerationError,
+  shouldIncludeHumorPerspectiveMethod,
   summarizeRecentArticlesForBlacklist,
 } from '@/lib/generation/generateArticle'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
@@ -255,6 +256,7 @@ export async function POST(req: Request) {
         selectedEvaluation: DraftEvaluation
       }
     | undefined
+  const useHumorPerspectiveMethod = shouldIncludeHumorPerspectiveMethod()
 
   if (useDraftPipeline) {
     const slot: SlotConfig = {
@@ -263,6 +265,7 @@ export async function POST(req: Request) {
       forceRss: false,
       forceOpinion: false,
       includeTopics,
+      useHumorPerspectiveMethod,
     }
 
     const recentCoverage = recentArticlesForOverlap
@@ -345,6 +348,7 @@ export async function POST(req: Request) {
         recentCanonicalStoryReferences,
         precomputedBlacklistSummary: blacklistCache.summary,
         recentHeadlinePatterns: uniquePatterns,
+        useHumorPerspectiveMethod,
         seedDraft: seedDraftForGeneration,
       })
       generated = result.article

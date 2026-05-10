@@ -11,6 +11,7 @@ import { fetchRssTopics } from '@/lib/rss/fetchRssTopics'
 import {
   extractHeadlinePatterns,
   generateArticle,
+  shouldIncludeHumorPerspectiveMethod,
   summarizeRecentArticlesForBlacklist,
   type GeneratedArticle,
 } from '@/lib/generation/generateArticle'
@@ -124,6 +125,7 @@ const GenerateArticleRequestSchema = z
     rssTopic: z.string().max(300).optional(),
     storyDescription: z.string().max(STORY_DESCRIPTION_MAX).optional(),
     revisionInstructions: z.string().max(1500).optional(),
+    useHumorPerspectiveMethod: z.boolean().optional(),
     options: GenerationOptionsSchema.default(DEFAULT_GENERATION_OPTIONS),
   })
   .superRefine((value, ctx) => {
@@ -743,12 +745,14 @@ export async function POST(request: Request): Promise<NextResponse> {
         const forceOpinion = options.forceOpinion
         const forceDrugsTechno = !forceOpinion && options.forceDrugsTechno
         const forceStartup = !forceOpinion && options.forceStartup
+        const useHumorPerspectiveMethod = shouldIncludeHumorPerspectiveMethod()
         const slot: SlotConfig = {
           forceDrugsTechno: forceDrugsTechno ? true : options.useRandomModes ? undefined : false,
           forceStartup: forceStartup ? true : options.useRandomModes ? undefined : false,
           forceRss: options.useRssTopic && Boolean(body.rssTopic?.trim()),
           forceOpinion,
           includeTopics: true,
+          useHumorPerspectiveMethod,
         }
 
         const acceptedDrafts: DraftCandidate[] = body.previousDrafts.map((draft) => ({
@@ -789,6 +793,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           draft: result.draft,
           sourceRssTopic: normalizedSourceRssTopic,
           evaluation,
+          useHumorPerspectiveMethod,
         })
       }
 
@@ -834,6 +839,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         const hasRssInput =
           options.useRssTopic && Boolean(body.rssTopic?.trim() || normalizedSourceRssTopic?.trim())
         const hasManualInput = Boolean(body.storyDescription?.trim())
+        const useHumorPerspectiveMethod = shouldIncludeHumorPerspectiveMethod(
+          body.useHumorPerspectiveMethod,
+        )
         const generated = await generateArticle({
           categories: categories.map((category) => ({
             slug: category.slug,
@@ -855,6 +863,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           latestArticleContentSample: recent.latestArticleContentSample,
           forceRss: hasRssInput,
           forceOpinion,
+          useHumorPerspectiveMethod,
           forceDrugsTechno: forceDrugsTechno ? true : options.useRandomModes ? undefined : false,
           forceStartup: forceStartup ? true : options.useRandomModes ? undefined : false,
           seedDraft: {

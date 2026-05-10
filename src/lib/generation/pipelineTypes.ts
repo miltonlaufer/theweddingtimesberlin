@@ -4,6 +4,8 @@ export type SlotConfig = {
   forceRss: boolean | undefined
   forceOpinion: boolean
   includeTopics: boolean
+  /** One slot-level roll shared by draft and article prompts. */
+  useHumorPerspectiveMethod?: boolean
 }
 
 export type RecentCoverageItem = {

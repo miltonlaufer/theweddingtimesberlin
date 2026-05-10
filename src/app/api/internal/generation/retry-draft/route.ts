@@ -17,6 +17,7 @@ const RequestSchema = z.object({
     forceRss: z.boolean().optional(),
     forceOpinion: z.boolean(),
     includeTopics: z.boolean(),
+    useHumorPerspectiveMethod: z.boolean().optional(),
   }),
   topicSummary: z.string(),
   recentCoverage: z
@@ -119,6 +120,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       forceRss: body.slot.forceRss,
       forceOpinion: body.slot.forceOpinion,
       includeTopics: body.slot.includeTopics,
+      useHumorPerspectiveMethod: body.slot.useHumorPerspectiveMethod,
     }
     const recentCoverage: RecentCoverageItem[] = body.recentCoverage.map((entry) => ({
       headline: entry.headline,

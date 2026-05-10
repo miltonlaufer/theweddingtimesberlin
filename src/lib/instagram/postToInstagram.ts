@@ -38,6 +38,24 @@ function shouldRetryPublish(errorMessage?: string): boolean {
   return normalized.includes('media id is not available')
 }
 
+function normalizeInstagramErrorMessage(errorMessage?: string): string {
+  const raw = (errorMessage ?? '').trim()
+  const normalized = raw.toLowerCase()
+
+  if (
+    normalized.includes('error validating access token') &&
+    normalized.includes('session has expired')
+  ) {
+    return 'Instagram access token expired. Rotate INSTAGRAM_ACCESS_TOKEN in production.'
+  }
+
+  if (normalized.includes('error validating access token')) {
+    return 'Instagram access token invalid. Check INSTAGRAM_ACCESS_TOKEN in production.'
+  }
+
+  return raw || 'Instagram publish failed'
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -56,7 +74,7 @@ async function waitForContainerReady(
     )
     const data = (await res.json()) as { status_code?: string; error?: { message: string } }
     if (data.error) {
-      return { ok: false, error: data.error.message ?? 'Failed to get container status' }
+      return { ok: false, error: normalizeInstagramErrorMessage(data.error.message) }
     }
     const status = data.status_code
     if (status === 'FINISHED') {
@@ -92,7 +110,9 @@ async function publishContainer(
 
   const publishData = (await publishRes.json()) as { id?: string; error?: { message: string } }
   if (!publishRes.ok || !publishData.id) {
-    const msg = publishData.error?.message ?? publishRes.statusText ?? 'Publish failed'
+    const msg = normalizeInstagramErrorMessage(
+      publishData.error?.message ?? publishRes.statusText ?? 'Publish failed',
+    )
     return { ok: false, error: msg }
   }
 
@@ -142,7 +162,9 @@ export async function postToInstagram(
 
     const createData = (await createRes.json()) as { id?: string; error?: { message: string } }
     if (!createRes.ok || !createData.id) {
-      const msg = createData.error?.message ?? createRes.statusText ?? 'Create container failed'
+      const msg = normalizeInstagramErrorMessage(
+        createData.error?.message ?? createRes.statusText ?? 'Create container failed',
+      )
       return { ok: false, error: msg }
     }
 
@@ -170,6 +192,6 @@ export async function postToInstagram(
     return { ok: false, error: lastError ?? 'Publish failed' }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: message }
+    return { ok: false, error: normalizeInstagramErrorMessage(message) }
   }
 }

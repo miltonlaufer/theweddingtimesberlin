@@ -1,12 +1,13 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   ACID_HUMOR_REQUIREMENTS,
   assessRecentCoverageOverlap,
   HUMOR_PERSPECTIVE_METHOD,
-  HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE,
   MICRO_DETAIL_FORMULA_GUARD,
+  shouldIncludeHumorPerspectiveMethod,
   WEDDING_REMINDER_SHORT,
 } from '@/lib/generation/generateArticle'
 import type {
@@ -153,6 +154,25 @@ function buildModeInstruction(slot: SlotConfig, includeBerlinThemes: boolean): s
     : 'Pick a fresh satirical angle that avoids repetition.'
 }
 
+export function buildDraftPerspectiveRuleLines(includeHumorEngine: boolean): string[] {
+  if (includeHumorEngine) {
+    return [
+      '- Main rule: find an under-noticed detail and make the contradiction the comedic core.',
+      '- If the contradiction is weak or generic, reject and rethink the pitch angle.',
+      '- The pitch must contain social bite, not just a mechanism. Someone recognizable should look ridiculous, hypocritical, cowardly, vain, greedy, or performative.',
+      '- If the pitch reads like smart urban observation but not an actual joke with teeth, reject it.',
+      '- Do NOT use the exact phrase "overlooked detail" in the headline, subheadline, or excerpt.',
+    ]
+  }
+
+  return [
+    '- Find a specific satirical angle with concrete stakes, not a generic topic summary.',
+    '- If the angle is weak, toothless, or generic, reject and rethink the pitch angle.',
+    '- The pitch must contain social bite, not just a mechanism. Someone recognizable should look ridiculous, hypocritical, cowardly, vain, greedy, or performative.',
+    '- If the pitch reads like smart urban observation but not an actual joke with teeth, reject it.',
+  ]
+}
+
 function buildReferenceLines(items: RecentCoverageItem[], max = 25): string {
   return items
     .slice(0, max)
@@ -168,7 +188,7 @@ function buildReferenceLines(items: RecentCoverageItem[], max = 25): string {
 function normalizeDraft(candidate: DraftCandidate): DraftCandidate {
   return {
     headline: candidate.headline.trim().slice(0, 140),
-    subheadline: candidate.subheadline?.trim().slice(0, 220) || null,
+    subheadline: normalizeOptionalSubheadlineForStorage(candidate.subheadline) ?? null,
     excerpt:
       typeof candidate.excerpt === 'string'
         ? normalizeExcerptForStorage(candidate.excerpt, 300) || null
@@ -299,8 +319,10 @@ export async function generateDraftCandidate(params: {
   const editorDirection = params.editorDirection?.trim()
   const hasEditorDirection = typeof editorDirection === 'string' && editorDirection.length > 0
 
-  // Only include the full, heavy HUMOR engine in 10% of runs to vary tone.
-  const includeHumorEngine = Math.random() < HUMOR_PERSPECTIVE_METHOD_INCLUSION_RATE
+  // Only include the full, heavy HUMOR engine in the slot-level sample to vary tone.
+  const includeHumorEngine = shouldIncludeHumorPerspectiveMethod(
+    params.slot.useHumorPerspectiveMethod,
+  )
 
   const systemPrompt = [
     includeBerlinThemes
@@ -327,7 +349,9 @@ export async function generateDraftCandidate(params: {
 
   const userPrompt = [
     'Write only a pitch, not the full article.',
-    'PASS/FAIL RULE: the pitch must center one under-noticed detail that reveals the opposite of the official narrative.',
+    includeHumorEngine
+      ? 'PASS/FAIL RULE: the pitch must center one under-noticed detail that reveals the opposite of the official narrative.'
+      : 'QUALITY RULE: the pitch must have a specific satirical angle with concrete stakes and social bite.',
     'Return JSON schema:',
     '{ "headline": string, "subheadline": string|null, "excerpt": string|null }',
     '',
@@ -359,17 +383,15 @@ export async function generateDraftCandidate(params: {
         ].join('\n')
       : '',
     'Rules:',
-    '- Main rule: find an under-noticed detail and make the contradiction the comedic core.',
-    '- If the contradiction is weak or generic, reject and rethink the pitch angle.',
-    '- The pitch must contain social bite, not just a mechanism. Someone recognizable should look ridiculous, hypocritical, cowardly, vain, greedy, or performative.',
-    '- If the pitch reads like smart urban observation but not an actual joke with teeth, reject it.',
+    ...buildDraftPerspectiveRuleLines(includeHumorEngine),
     '- Do NOT use the exhausted micro-detail hook: tiny hidden object, exact mm/cm/Hz measurement, then scam reveal.',
     '- Avoid headlines shaped like "The [tiny thing] That..." or "How a [small measured thing]..." unless the story absolutely cannot work without it.',
     '- Prefer larger mechanisms: policy, staffing, paperwork, pricing, app settings, permits, queues, meetings, incentives, enforcement, social rituals.',
     '- Headline must be sharp and specific (not generic).',
+    '- Subheadline and excerpt must be complete standalone sentence(s), not cropped fragments.',
+    '- Never end subheadline or excerpt with a comma, dash, connector word, dependent clause, or visibly unfinished thought.',
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',
-    '- Do NOT use the exact phrase "overlooked detail" in the headline, subheadline, or excerpt.',
     !params.slot.forceStartup && !params.slot.forceDrugsTechno && !params.slot.forceRss
       ? '- For non-startup slots: prefer bureaucracy, administrative slowness, public rudeness, street filth, bad weather, and health-system dysfunction. Do not default to startup/gentrification unless the angle is clearly fresher than these themes.'
       : '',

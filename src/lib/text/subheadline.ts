@@ -1,11 +1,11 @@
-import { trimToReadableLength } from './trimToReadableLength'
+import { normalizeSummaryForStorage } from './excerptQuality'
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
 export function normalizeSubheadlineForStorage(input: string, maxLength = 220): string {
-  return trimToReadableLength(collapseWhitespace(input), maxLength)
+  return normalizeSummaryForStorage(collapseWhitespace(input), maxLength)
 }
 
 export function normalizeOptionalSubheadlineForStorage(

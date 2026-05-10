@@ -40,13 +40,44 @@ export function hasTerminalExcerptEnding(value: string): boolean {
   return TERMINAL_ENDING_RE.test(normalized)
 }
 
-function trimToLastSentenceBoundary(value: string): string {
+function trimToLastSentenceBoundary(value: string, minRatio = 0.55): string {
   const matches = [...value.matchAll(/[.!?]["')\]]?\s+/g)]
   const last = matches.at(-1)
   if (!last) return value
   const sentenceEnd = (last.index ?? 0) + last[0].trimEnd().length
-  if (sentenceEnd < Math.floor(value.length * 0.55)) return value
+  if (sentenceEnd < Math.floor(value.length * minRatio)) return value
   return value.slice(0, sentenceEnd).trim()
+}
+
+function stripDanglingTrailingClause(value: string): string {
+  const match = value.match(
+    /\s+(?:[–—-]|,|;)\s+(?:and|or|but|while|where|when|as|because|since|although|though|unless|until|before|after|with|without|who|which|that|whose|so|then)\b([^.!?]*)([.!?]["')\]]?)?$/i,
+  )
+  if (!match || typeof match.index !== 'number') return value
+
+  const clause = (match[1] ?? '').trim()
+  const terminal = match[2] ?? ''
+  const lastWord = clause
+    .split(/\s+/)
+    .filter(Boolean)
+    .at(-1)
+    ?.toLowerCase()
+    .replace(/[^a-z]/g, '')
+
+  const suspiciousTerminal =
+    terminal.length === 0 ||
+    !lastWord ||
+    TRAILING_CONNECTORS.has(lastWord) ||
+    /ly$/.test(lastWord) ||
+    ['else', 'also', 'still', 'now', 'then', 'too', 'instead', 'anymore', 'again'].includes(
+      lastWord,
+    )
+
+  if (!suspiciousTerminal) return value
+
+  const stripped = value.slice(0, match.index).trim()
+  if (stripped.length < Math.floor(value.length * 0.45)) return value
+  return stripped
 }
 
 function stripTrailingConnectors(value: string): string {
@@ -63,13 +94,21 @@ function stripTrailingConnectors(value: string): string {
   return words.join(' ').trim()
 }
 
-export function normalizeExcerptForStorage(input: string, maxLength = 300): string {
-  const base = trimToReadableLength(collapseWhitespace(input), maxLength)
+export function normalizeSummaryForStorage(input: string, maxLength = 300): string {
+  const normalized = collapseWhitespace(input)
+  const base = trimToReadableLength(normalized, maxLength)
   if (!base) return ''
+  const withoutDanglingClause = stripDanglingTrailingClause(base)
+  if (withoutDanglingClause !== base) {
+    return normalizeSummaryForStorage(withoutDanglingClause, maxLength)
+  }
   if (hasTerminalExcerptEnding(base)) return base
 
+  const wasLengthTrimmed = normalized.length > maxLength || /(?:\.\.\.|…)$/.test(base)
   let out = base.replace(/\.\.\.+$/g, '').trimEnd()
-  out = trimToLastSentenceBoundary(out)
+  const hadDanglingPunctuation = /[,:;\-–—]$/.test(out)
+  out = trimToLastSentenceBoundary(out, wasLengthTrimmed || hadDanglingPunctuation ? 0.35 : 0.55)
+  out = stripDanglingTrailingClause(out)
   out = out.replace(/[,:;\-–—]+$/g, '').trimEnd()
   out = stripTrailingConnectors(out)
 
@@ -88,4 +127,8 @@ export function normalizeExcerptForStorage(input: string, maxLength = 300): stri
     finalText = trimToReadableLength(finalText, maxLength)
   }
   return finalText
+}
+
+export function normalizeExcerptForStorage(input: string, maxLength = 300): string {
+  return normalizeSummaryForStorage(input, maxLength)
 }

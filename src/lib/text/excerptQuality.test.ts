@@ -28,4 +28,13 @@ describe('normalizeExcerptForStorage', () => {
     const normalized = normalizeExcerptForStorage(value, 300)
     expect(normalized.length).toBeLessThanOrEqual(300)
   })
+
+  it('removes dangling dependent clauses created by length trimming', () => {
+    const value =
+      'The real spectacle in Wedding nightlife is not the dance floor anymore. It is the growing class of chemically confident regulars who drift up to the booth to narrate their breakup, burnout, and brand collapse as if the DJ were obliged to absorb it between tracks — while everyone else quietly.'
+
+    expect(normalizeExcerptForStorage(value, 300)).toBe(
+      'The real spectacle in Wedding nightlife is not the dance floor anymore. It is the growing class of chemically confident regulars who drift up to the booth to narrate their breakup, burnout, and brand collapse as if the DJ were obliged to absorb it between tracks.',
+    )
+  })
 })
