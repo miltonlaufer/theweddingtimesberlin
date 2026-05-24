@@ -537,13 +537,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
             attemptedDrafts.push(regeneratedDraft.draft)
 
-            const nonOverlappingFallback =
-              GENERATION_REDRAFT_ACCEPT_NON_OVERLAP && !evaluation.repetition.overlaps
-            if (evaluation.accepted || nonOverlappingFallback) {
+            const nonOverlappingToneFallback =
+              GENERATION_REDRAFT_ACCEPT_NON_OVERLAP &&
+              !evaluation.repetition.overlaps &&
+              evaluation.reason.startsWith('tone:')
+            if (evaluation.accepted || nonOverlappingToneFallback) {
               selectedDraft = regeneratedDraft.draft
               selectedTopicHint = regeneratedDraft.sourceRssTopic ?? seedTopicHint
               selectedEvaluation = evaluation
-              if (!evaluation.accepted && nonOverlappingFallback) {
+              if (!evaluation.accepted && nonOverlappingToneFallback) {
                 console.warn(
                   `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} using non-overlap fallback draft after repetition (tone gate bypassed)`,
                 )

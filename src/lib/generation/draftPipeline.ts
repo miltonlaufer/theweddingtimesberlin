@@ -4,6 +4,8 @@ import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   ACID_HUMOR_REQUIREMENTS,
+  analyzeHeadlineStructures,
+  assessHeadlineSimilarity,
   assessRecentCoverageOverlap,
   HUMOR_PERSPECTIVE_METHOD,
   MICRO_DETAIL_FORMULA_GUARD,
@@ -196,6 +198,64 @@ function normalizeDraft(candidate: DraftCandidate): DraftCandidate {
   }
 }
 
+function buildHeadlineSimilarityReferenceTitles(params: {
+  recentCoverage: RecentCoverageItem[]
+  acceptedDrafts: DraftCandidate[]
+}): string[] {
+  return [
+    ...params.recentCoverage.map((item) => item.headline.trim()),
+    ...params.acceptedDrafts.map((item) => item.headline.trim()),
+  ].filter((headline) => headline.length > 0)
+}
+
+function buildHeadlineSimilarityGuardSection(params: {
+  recentCoverage: RecentCoverageItem[]
+  acceptedDrafts: DraftCandidate[]
+}): string {
+  const referenceTitles = buildHeadlineSimilarityReferenceTitles(params)
+  const headlineAnalysis = analyzeHeadlineStructures(referenceTitles)
+
+  if (referenceTitles.length === 0) {
+    return ''
+  }
+
+  return [
+    'TITLE SIMILARITY GUARD (MANDATORY):',
+    'The headline must not look like a sibling of any recent or already accepted headline.',
+    'Similarity includes shared title fingerprints, repeated phrase skeletons, close word order, high character overlap, or near-template reuse.',
+    'Changing only the topic nouns is not enough; write a title that reads distinctly different as a full headline.',
+    headlineAnalysis.overusedOpenings.length > 0
+      ? [
+          'Recent repeated title fingerprints:',
+          headlineAnalysis.overusedOpenings.map((opening) => `- ${opening}`).join('\n'),
+        ].join('\n')
+      : '',
+    'A draft is rejected when deterministic title similarity says it is too close.',
+    '',
+  ]
+    .filter((line) => line.length > 0)
+    .join('\n')
+}
+
+function assessHeadlineSimilarityForDraft(params: {
+  candidate: DraftCandidate
+  recentCoverage: RecentCoverageItem[]
+  acceptedDrafts: DraftCandidate[]
+}): { violates: boolean; reason: string } {
+  const assessment = assessHeadlineSimilarity({
+    candidate: params.candidate.headline,
+    recentTitles: params.recentCoverage.map((item) => item.headline),
+    batchTitles: params.acceptedDrafts.map((item) => item.headline),
+  })
+
+  if (!assessment.tooSimilar) return { violates: false, reason: 'headline similarity accepted' }
+
+  return {
+    violates: true,
+    reason: assessment.reason,
+  }
+}
+
 const RENT_THEME_PATTERNS: RegExp[] = [
   /\brent(?:s|ed|ing|al)?\b/i,
   /\brent\s+(?:hike|hikes|control|increase|increases|protest|protests|price|prices)\b/i,
@@ -310,6 +370,10 @@ export async function generateDraftCandidate(params: {
     .slice(0, 20)
     .map((d, i) => `${i + 1}. ${d.headline}${d.excerpt ? ` — ${d.excerpt}` : ''}`)
     .join('\n')
+  const headlineSimilarityGuardSection = buildHeadlineSimilarityGuardSection({
+    recentCoverage: params.recentCoverage,
+    acceptedDrafts: params.acceptedDrafts,
+  })
   const rentThemeBiasInstruction = buildRentThemeBiasInstruction({
     slot: params.slot,
     assignedTopic: topic,
@@ -367,6 +431,7 @@ export async function generateDraftCandidate(params: {
     acceptedBatchLines.length > 0
       ? ['Already accepted in this same batch (must differ):', acceptedBatchLines, ''].join('\n')
       : '',
+    headlineSimilarityGuardSection,
     hasEditorDirection
       ? [
           'Editor revision request (apply while preserving originality and punch):',
@@ -483,6 +548,27 @@ export async function evaluateDraftCandidate(params: {
     candidate: fingerprint,
     references: referenceTexts,
   })
+
+  const headlineSimilarity = assessHeadlineSimilarityForDraft({
+    candidate: params.candidate,
+    recentCoverage: params.recentCoverage,
+    acceptedDrafts: params.acceptedDrafts,
+  })
+
+  if (headlineSimilarity.violates) {
+    return {
+      accepted: false,
+      reason: headlineSimilarity.reason,
+      repetition,
+      tone: {
+        funScore: 1,
+        mercilessScore: 1,
+        specificityScore: 1,
+        pass: false,
+        reason: 'Tone evaluation skipped because headline similarity was rejected.',
+      },
+    }
+  }
 
   let tone: DraftEvaluation['tone']
   try {

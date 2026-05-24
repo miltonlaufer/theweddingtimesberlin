@@ -929,7 +929,7 @@ function safeStringList(
 }
 
 /**
- * Analyzes recent headlines and returns a detailed breakdown of overused structural patterns.
+ * Analyzes recent headlines and returns a detailed breakdown of repeated opening clusters.
  * This is a data-driven approach: count actual opening words/phrases and flag any that appear 2+ times.
  */
 export function analyzeHeadlineStructures(titles: string[]): {
@@ -945,7 +945,7 @@ export function analyzeHeadlineStructures(titles: string[]): {
     if (words.length === 0) continue
 
     // Track first word (normalized to lowercase for comparison, but keep original for display)
-    const firstWord = words[0].toLowerCase().replace(/[^a-z]/g, '')
+    const firstWord = normalizeHeadlineOpeningWord(title)
     if (firstWord) {
       const existing = openingWordCounts.get(firstWord) ?? []
       existing.push(title)
@@ -999,6 +999,226 @@ export function analyzeHeadlineStructures(titles: string[]): {
   }
 
   return { openingWordCounts, openingPhraseCounts, overusedOpenings }
+}
+
+export function normalizeHeadlineOpeningWord(headline: string): string {
+  return (
+    headline
+      .trim()
+      .split(/\s+/)[0]
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, '') ?? ''
+  )
+}
+
+export type HeadlineSimilarityAssessment = {
+  tooSimilar: boolean
+  score: number
+  reason: string
+  matchedTitle: string | null
+}
+
+function normalizeHeadlineForStructure(headline: string): string {
+  return headline
+    .normalize('NFKC')
+    .replace(/[’‘]/g, "'")
+    .replace(/[‐‑‒–—]/g, ' — ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function normalizeHeadlineForSimilarity(headline: string): string {
+  return normalizeHeadlineForStructure(headline)
+    .toLowerCase()
+    .replace(/'s\b/g, 's')
+    .replace(/[^a-z0-9äöüß]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function tokenizeHeadlineForSimilarity(headline: string): string[] {
+  return normalizeHeadlineForSimilarity(headline)
+    .split(/\s+/)
+    .filter((token) => token.length >= 2)
+}
+
+function buildNgrams(items: string[], size: number): Set<string> {
+  const out = new Set<string>()
+  for (let i = 0; i <= items.length - size; i++) {
+    out.add(items.slice(i, i + size).join(' '))
+  }
+  return out
+}
+
+function buildCharNgrams(text: string, size: number): Set<string> {
+  const compact = text.replace(/\s+/g, ' ')
+  const out = new Set<string>()
+  for (let i = 0; i <= compact.length - size; i++) {
+    out.add(compact.slice(i, i + size))
+  }
+  return out
+}
+
+function diceCoefficient(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0
+  return (2 * countSetOverlap(left, right)) / (left.size + right.size)
+}
+
+function jaccardCoefficient(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0
+  const overlap = countSetOverlap(left, right)
+  return overlap / (left.size + right.size - overlap)
+}
+
+function longestCommonSubsequenceLength(left: string[], right: string[]): number {
+  if (left.length === 0 || right.length === 0) return 0
+  const prev = Array(right.length + 1).fill(0) as number[]
+  const curr = Array(right.length + 1).fill(0) as number[]
+
+  for (let i = 1; i <= left.length; i++) {
+    for (let j = 1; j <= right.length; j++) {
+      curr[j] = left[i - 1] === right[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], curr[j - 1] ?? 0)
+    }
+    for (let j = 0; j <= right.length; j++) {
+      prev[j] = curr[j] ?? 0
+      curr[j] = 0
+    }
+  }
+
+  return prev[right.length] ?? 0
+}
+
+function countCommonPrefixTokens(left: string[], right: string[]): number {
+  const limit = Math.min(left.length, right.length)
+  let count = 0
+  for (let i = 0; i < limit; i++) {
+    if (left[i] !== right[i]) break
+    count += 1
+  }
+  return count
+}
+
+function scoreHeadlinePairSimilarity(candidate: string, reference: string): number {
+  const candidateNormalized = normalizeHeadlineForSimilarity(candidate)
+  const referenceNormalized = normalizeHeadlineForSimilarity(reference)
+  if (!candidateNormalized || !referenceNormalized) return 0
+  if (candidateNormalized === referenceNormalized) return 1
+
+  const candidateTokens = tokenizeHeadlineForSimilarity(candidate)
+  const referenceTokens = tokenizeHeadlineForSimilarity(reference)
+  const candidateWords = new Set(candidateTokens)
+  const referenceWords = new Set(referenceTokens)
+  const wordJaccard = jaccardCoefficient(candidateWords, referenceWords)
+  const bigramDice = diceCoefficient(
+    buildNgrams(candidateTokens, 2),
+    buildNgrams(referenceTokens, 2),
+  )
+  const trigramDice = diceCoefficient(
+    buildCharNgrams(candidateNormalized, 3),
+    buildCharNgrams(referenceNormalized, 3),
+  )
+  const lcsLength = longestCommonSubsequenceLength(candidateTokens, referenceTokens)
+  const orderedOverlap =
+    lcsLength / Math.max(1, Math.min(candidateTokens.length, referenceTokens.length))
+  const commonPrefix = countCommonPrefixTokens(candidateTokens, referenceTokens)
+  const prefixScore = Math.min(commonPrefix / 3, 1)
+
+  return Math.max(
+    wordJaccard * 0.3 +
+      bigramDice * 0.25 +
+      trigramDice * 0.2 +
+      orderedOverlap * 0.2 +
+      prefixScore * 0.05,
+    commonPrefix >= 3 ? 0.72 : 0,
+    bigramDice >= 0.45 && orderedOverlap >= 0.45 ? 0.7 : 0,
+  )
+}
+
+function assessSharedPrefixSaturation(params: {
+  candidate: string
+  recentTitles: string[]
+  recentWindow: number
+}): HeadlineSimilarityAssessment | null {
+  const candidateTokens = tokenizeHeadlineForSimilarity(params.candidate)
+  const candidateFirstToken = candidateTokens[0]
+  if (!candidateFirstToken) return null
+
+  const recentTokens = params.recentTitles
+    .slice(0, params.recentWindow)
+    .map(tokenizeHeadlineForSimilarity)
+  const sameFirstTokenCount = recentTokens.filter(
+    (tokens) => tokens[0] === candidateFirstToken,
+  ).length
+  const consideredCount = Math.min(params.recentWindow, params.recentTitles.length)
+  if (consideredCount < 4) return null
+
+  const sameFirstTokenRatio = sameFirstTokenCount / consideredCount
+  if (sameFirstTokenCount >= 4 && sameFirstTokenRatio >= 0.5) {
+    return {
+      tooSimilar: true,
+      score: sameFirstTokenRatio,
+      reason: `title-similarity: shares a saturated title fingerprint with ${sameFirstTokenCount}/${consideredCount} recent headlines`,
+      matchedTitle:
+        params.recentTitles.find(
+          (title) => tokenizeHeadlineForSimilarity(title)[0] === candidateFirstToken,
+        ) ?? null,
+    }
+  }
+
+  return null
+}
+
+export function assessHeadlineSimilarity(params: {
+  candidate: string
+  recentTitles: string[]
+  batchTitles?: string[]
+  recentWindow?: number
+}): HeadlineSimilarityAssessment {
+  const { candidate, recentTitles, batchTitles = [], recentWindow = 16 } = params
+  const candidateNormalized = normalizeHeadlineForSimilarity(candidate)
+  if (!candidateNormalized) {
+    return { tooSimilar: false, score: 0, reason: 'empty candidate title', matchedTitle: null }
+  }
+
+  const references = [
+    ...batchTitles.map((title) => ({ title, source: 'batch' as const })),
+    ...recentTitles.slice(0, recentWindow).map((title) => ({ title, source: 'recent' as const })),
+  ].filter((item) => normalizeHeadlineForSimilarity(item.title).length > 0)
+
+  let bestScore = 0
+  let bestTitle: string | null = null
+  let bestSource: 'batch' | 'recent' = 'recent'
+
+  for (const reference of references) {
+    const score = scoreHeadlinePairSimilarity(candidate, reference.title)
+    if (score > bestScore) {
+      bestScore = score
+      bestTitle = reference.title
+      bestSource = reference.source
+    }
+  }
+
+  const pairThreshold = bestSource === 'batch' ? 0.54 : 0.62
+  if (bestTitle && bestScore >= pairThreshold) {
+    return {
+      tooSimilar: true,
+      score: bestScore,
+      reason: `title-similarity: too close to a ${bestSource} headline (score=${bestScore.toFixed(2)})`,
+      matchedTitle: bestTitle,
+    }
+  }
+
+  const prefixSaturation = assessSharedPrefixSaturation({ candidate, recentTitles, recentWindow })
+  if (prefixSaturation) return prefixSaturation
+
+  return {
+    tooSimilar: false,
+    score: bestScore,
+    reason: bestTitle
+      ? `closest title similarity score=${bestScore.toFixed(2)}`
+      : 'no reference titles',
+    matchedTitle: bestTitle,
+  }
 }
 
 // Legacy function for backward compatibility
@@ -2712,141 +2932,21 @@ async function shortenToSchema(args: {
   return validation.data
 }
 
-/******************* HEADLINE REGENERATION ***********************/
+/******************* HEADLINE SIMILARITY VALIDATION ***********************/
 
-/**
- * Regenerates ONLY the headline when it violates banned opening word rules.
- * This is more efficient than regenerating the entire article.
- */
-async function regenerateHeadline(args: {
-  article: GeneratedArticle
-  bannedOpeningWords: string[]
-  recentTitles: string[]
-}): Promise<GeneratedArticle> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    throw new Error('Missing OPENAI_API_KEY')
-  }
-
-  const repairModelName = process.env.OPENAI_REPAIR_MODEL ?? 'gpt-4o-mini'
-
-  const llm = new ChatOpenAI({
-    apiKey,
-    model: repairModelName,
-    temperature: 1,
+function assertHeadlineNotTooSimilar(headline: string, recentTitles: string[]): void {
+  const assessment = assessHeadlineSimilarity({
+    candidate: headline,
+    recentTitles,
   })
+  if (!assessment.tooSimilar) return
 
-  const bannedWordsLower = args.bannedOpeningWords.map((w) => w.toLowerCase())
-  const currentFirstWord =
-    args.article.headline
-      .split(/\s+/)[0]
-      ?.toLowerCase()
-      .replace(/[^a-z]/g, '') ?? ''
-
-  const systemPrompt = [
-    'You are a headline editor for a satirical newspaper called "The Wedding Times".',
-    'Your ONLY job is to rewrite a headline that violates structural rules.',
-    'You must preserve the meaning and tone but change the STRUCTURE (especially the opening word).',
-    '',
-    'CRITICAL: "Wedding" refers to the Wedding neighborhood in Berlin, NOT wedding ceremonies.',
-    'The headline must NEVER be about wedding ceremonies, marriage, brides, grooms, or wedding planning.',
-    'If the headline is about wedding ceremonies, rewrite it to be about the Wedding neighborhood instead.',
-    '',
-    'Output ONLY the new headline as plain text. No JSON, no quotes, no explanation.',
-    'The headline must be <= 140 characters.',
-  ].join('\n')
-
-  const userPrompt = [
-    'PROBLEM: The following headline starts with a BANNED word that is overused in recent articles.',
-    '',
-    `Current headline: "${args.article.headline}"`,
-    `Banned opening word: "${currentFirstWord}" (this word starts too many recent headlines)`,
-    '',
-    'ALL BANNED OPENING WORDS (do NOT start with ANY of these):',
-    args.bannedOpeningWords.map((w) => `  ❌ "${w}..."`).join('\n'),
-    '',
-    'Recent headlines for context (yours must be STRUCTURALLY different):',
-    args.recentTitles
-      .slice(0, 10)
-      .map((t, i) => `  ${i + 1}. ${t}`)
-      .join('\n'),
-    '',
-    'Article context (to preserve meaning):',
-    `- Subheadline: ${args.article.subheadline ?? 'N/A'}`,
-    `- Excerpt: ${args.article.excerpt ?? 'N/A'}`,
-    '',
-    'REWRITE the headline with a DIFFERENT opening structure.',
-    'Some alternatives:',
-    '- Start with a proper noun/name: "Klaus Müller Discovers..."',
-    '- Start with a location: "In Wedding...", "At Leopoldplatz..."',
-    '- Start with a number: "47 Bikes...", "Three Days After..."',
-    '- Start with a verb: "Forget Everything...", "Meet the..."',
-    '- Start with an adjective: "Desperate...", "Mysterious..."',
-    '- Use quotation: ""I Regret Nothing," Says..."',
-    '',
-    'Output ONLY the new headline (no quotes, no explanation):',
-  ].join('\n')
-
-  const raw = await llm.invoke([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt },
-  ])
-
-  const newHeadline = (typeof raw.content === 'string' ? raw.content : String(raw.content))
-    .trim()
-    .replace(/^["']|["']$/g, '') // Remove surrounding quotes if any
-    .slice(0, 140) // Enforce max length
-
-  // Verify the new headline doesn't also start with a banned word
-  const newFirstWord =
-    newHeadline
-      .split(/\s+/)[0]
-      ?.toLowerCase()
-      .replace(/[^a-z]/g, '') ?? ''
-  if (bannedWordsLower.includes(newFirstWord)) {
-    // If still banned, try one more time with even stronger instruction
-    const retryPrompt = [
-      `The headline "${newHeadline}" STILL starts with a banned word "${newFirstWord}".`,
-      '',
-      'ABSOLUTELY FORBIDDEN opening words:',
-      args.bannedOpeningWords.map((w) => `  ❌ "${w}"`).join('\n'),
-      '',
-      'Write a headline that starts with a COMPLETELY DIFFERENT word.',
-      'Try: a name, a number, a location, an adjective, or a quoted statement.',
-      '',
-      'Output ONLY the new headline:',
-    ].join('\n')
-
-    const retryRaw = await llm.invoke([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: retryPrompt },
-    ])
-
-    const retryHeadline = (
-      typeof retryRaw.content === 'string' ? retryRaw.content : String(retryRaw.content)
-    )
-      .trim()
-      .replace(/^["']|["']$/g, '')
-      .slice(0, 140)
-
-    return { ...args.article, headline: retryHeadline }
-  }
-
-  return { ...args.article, headline: newHeadline }
-}
-
-/**
- * Checks if a headline starts with a banned opening word.
- */
-function headlineViolatesBannedWords(headline: string, bannedOpeningWords: string[]): boolean {
-  if (bannedOpeningWords.length === 0) return false
-  const firstWord =
-    headline
-      .split(/\s+/)[0]
-      ?.toLowerCase()
-      .replace(/[^a-z]/g, '') ?? ''
-  const bannedLower = bannedOpeningWords.map((w) => w.toLowerCase())
-  return bannedLower.includes(firstWord)
+  const matched = assessment.matchedTitle
+    ? `; matched="${assessment.matchedTitle.replace(/\s+/g, ' ').slice(0, 140)}"`
+    : ''
+  throw new Error(
+    `${REPETITION_GUARD_PREFIX}: Generated headline is too similar to recent titles (${assessment.reason}); headline="${headline.slice(0, 140)}"${matched}`,
+  )
 }
 
 function applySeedDraft(
@@ -3804,46 +3904,37 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const headlineAnalysis = analyzeHeadlineStructures(input.recentArticleTitles)
   const overusedOpenings = headlineAnalysis.overusedOpenings
 
-  // Build a list of BANNED opening words (any word used 2+ times)
-  const bannedOpeningWords: string[] = []
-  for (const [word, headlines] of headlineAnalysis.openingWordCounts) {
-    if (headlines.length >= 2) {
-      bannedOpeningWords.push(word.charAt(0).toUpperCase() + word.slice(1))
-    }
-  }
-
   // Extract overused keywords (nouns, verbs, adjectives) from recent titles
   const keywordAnalysis = extractOverusedKeywords(input.recentArticleTitles)
   const bannedKeywords = keywordAnalysis.bannedKeywords
 
   const headlinePatternsSection =
-    overusedOpenings.length > 0
+    input.recentArticleTitles.length > 0
       ? [
           '',
           '═══════════════════════════════════════════════════════════════════',
-          'CRITICAL: HEADLINE STRUCTURE VARIETY REQUIRED',
+          'CRITICAL: TITLE SIMILARITY GUARD',
           '═══════════════════════════════════════════════════════════════════',
           '',
-          'OVERUSED HEADLINE OPENINGS DETECTED (you MUST NOT use these):',
-          overusedOpenings.map((p) => `  ❌ ${p}`).join('\n'),
+          'Your headline must not look like a sibling of any recent headline.',
+          'Similarity includes shared title fingerprints, repeated phrase skeletons, close word order, high character overlap, or near-template reuse.',
+          'Changing only the topic nouns is not enough. The full headline must read distinctly different.',
           '',
-          bannedOpeningWords.length > 0
+          overusedOpenings.length > 0
             ? [
-                'BANNED OPENING WORDS (DO NOT start your headline with ANY of these):',
-                bannedOpeningWords.map((w) => `  ❌ "${w}..."`).join('\n'),
+                'RECENT REPEATED TITLE FINGERPRINTS (do not add another title that feels like these):',
+                overusedOpenings.map((p) => `  - ${p}`).join('\n'),
                 '',
-                'This is NOT a suggestion. If your headline starts with any of the banned words above, it will be REJECTED.',
-                'You MUST choose a DIFFERENT opening word that is NOT in this list.',
               ].join('\n')
             : '',
           '',
           'WHY THIS MATTERS:',
-          'Headlines that start the same way create monotony. Readers notice when multiple headlines',
-          'start with "Who...", "The...", "How...", etc. Each headline must feel FRESH and DIFFERENT.',
+          'Readers experience similar headlines as repetition even when the article topics differ.',
+          'The deterministic guard will reject titles that are too close to recent or in-batch titles.',
           '',
           'WHAT TO DO INSTEAD:',
-          'Look at the banned words above and deliberately choose a DIFFERENT structure.',
-          'Some alternatives (only use if not already banned above):',
+          'Invent a title with a genuinely different full-title fingerprint.',
+          'Some alternatives:',
           '- Start with a proper noun/name: "Klaus Müller Discovers...", "Leopoldplatz Residents..."',
           '- Start with a number: "47 Bikes Vanish...", "Three Years Later..."',
           '- Start with a location: "In Wedding...", "At Leopoldplatz..."',
@@ -3851,9 +3942,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Start with an adjective: "Desperate Späti Owner...", "Mysterious Note..."',
           '- Start with a time reference: "After 3 Years...", "Since Tuesday..."',
           '- Use quotation: ""I Regret Nothing," Says...", ""This Is Normal," Claims..."',
+          '- Use a punchline construction, quote, reported-action line, question, or fragment that does not resemble the recent list.',
           '',
-          'REMEMBER: Check the banned list above. If "The" is banned, do NOT start with "The".',
-          'If "Who" is banned, do NOT start with "Who". Choose something ELSE.',
+          'REMEMBER: if a reader could scan the homepage and feel this headline came from the same title mold, rewrite it.',
           '═══════════════════════════════════════════════════════════════════',
         ].join('\n')
       : ''
@@ -4448,18 +4539,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       })
     }
 
-    // Check if headline violates banned opening words and regenerate if needed
-    if (
-      !input.seedDraft?.headline &&
-      headlineViolatesBannedWords(validated.headline, bannedOpeningWords)
-    ) {
-      validated = await regenerateHeadline({
-        article: validated,
-        bannedOpeningWords,
-        recentTitles: input.recentArticleTitles,
-      })
-    }
-
     try {
       if (critiqueEnabled) {
         const critique = await critiqueSatireArticle({
@@ -4503,17 +4582,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
                 authors: input.authors,
               })
             }
-
-            if (
-              !input.seedDraft?.headline &&
-              headlineViolatesBannedWords(validated.headline, bannedOpeningWords)
-            ) {
-              validated = await regenerateHeadline({
-                article: validated,
-                bannedOpeningWords,
-                recentTitles: input.recentArticleTitles,
-              })
-            }
           }
         } else {
           console.log(`${LOG.prefix} Critique unavailable; keeping first-pass article`)
@@ -4543,6 +4611,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
       assertNotAboutWeddingCeremonies(validated)
     }
+
+    assertHeadlineNotTooSimilar(validated.headline, input.recentArticleTitles)
 
     assertArticleNotTooSimilarToRecentCoverage({
       article: validated,
@@ -4594,6 +4664,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
       assertNotAboutWeddingCeremonies(repairedWithSeed)
     }
+
+    assertHeadlineNotTooSimilar(repairedWithSeed.headline, input.recentArticleTitles)
 
     assertArticleNotTooSimilarToRecentCoverage({
       article: repairedWithSeed,
