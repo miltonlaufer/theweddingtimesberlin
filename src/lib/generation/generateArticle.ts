@@ -767,6 +767,18 @@ const INTELLECTUAL_HEADLINE_REFERENCES = [
   'This is a SUGGESTION, not a requirement—use when it enhances the headline without forcing it.',
 ].join('\n')
 
+export const CRAZY_HEADLINE_REQUIREMENTS = [
+  'CRAZY HEADLINE REQUIREMENTS (MANDATORY):',
+  '- The headline must feel dangerous, funny, and slightly wrong in the mouth.',
+  '- Prefer 5-12 words. Hard cap 18 words unless a named current-news entity truly requires more.',
+  '- Make the title a punchline, threat, confession, question, curse, quote, absurd official notice, or image the reader cannot immediately file away.',
+  '- Create curiosity before explanation. Do not summarize the whole thesis.',
+  '- Avoid polished explainer formulas: "has become", "have become", "is really", "is just", "is mostly", "is now", "has turned", "have turned", "for people who", "for residents who", "for [group] who".',
+  '- Avoid starting by default with "Wedding’s" or "Berlin’s". Start with a person, object, quote, command, taboo image, or institutional sentence when possible.',
+  '- If the title sounds like a think-piece subtitle, policy memo, or moral lesson, rewrite it.',
+  '- Desired reaction: the reader pauses, feels accused, then clicks.',
+].join('\n')
+
 const IMAGE_GENERATION = [
   'IMAGE GENERATION:',
   'You MUST provide an imagePrompt for almost every article. Think: what photo would a real newspaper use to illustrate this story?',
@@ -1218,6 +1230,72 @@ export function assessHeadlineSimilarity(params: {
       ? `closest title similarity score=${bestScore.toFixed(2)}`
       : 'no reference titles',
     matchedTitle: bestTitle,
+  }
+}
+
+export type HeadlineTasteAssessment = {
+  passes: boolean
+  reason: string
+  signals: string[]
+}
+
+const EXPLAINER_HEADLINE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'has-become', pattern: /\b(?:has|have)\s+become\b/i },
+  { label: 'has-turned', pattern: /\b(?:has|have)\s+turned\b/i },
+  { label: 'is-now', pattern: /\b(?:is|are)\s+now\b/i },
+  { label: 'is-really', pattern: /\b(?:is|are)\s+really\b/i },
+  { label: 'is-just', pattern: /\b(?:is|are)\s+just\b/i },
+  { label: 'is-mostly', pattern: /\b(?:is|are)\s+mostly\b/i },
+  {
+    label: 'for-people-who',
+    pattern:
+      /\bfor\s+(?:people|residents|tenants|drivers|kids|cowards|men|women|anyone|the\s+[a-z]+)\s+who\b/i,
+  },
+]
+
+const POSSESSIVE_PLACE_HEADLINE_OPENING_PATTERN =
+  /^(?:wedding|berlin|mitte|neuk[oö]lln|kreuzberg|charlottenburg|prenzlauer\s+berg|friedrichshain|moabit|berghain|bvg|techno)[’']s\b/i
+
+function countHeadlineWords(headline: string): number {
+  return normalizeHeadlineForStructure(headline)
+    .split(/\s+/)
+    .filter((part) => /[A-Za-z0-9ÄÖÜäöüß]/.test(part)).length
+}
+
+export function assessHeadlineTaste(headline: string): HeadlineTasteAssessment {
+  const normalized = normalizeHeadlineForStructure(headline)
+  if (!normalized) {
+    return { passes: true, reason: 'empty headline skipped', signals: [] }
+  }
+
+  const signals: string[] = []
+  const wordCount = countHeadlineWords(normalized)
+  if (wordCount > 18) {
+    signals.push(`too-long:${wordCount}`)
+  }
+
+  const explainerSignals = EXPLAINER_HEADLINE_PATTERNS.filter(({ pattern }) =>
+    pattern.test(normalized),
+  ).map(({ label }) => label)
+  signals.push(...explainerSignals)
+
+  if (POSSESSIVE_PLACE_HEADLINE_OPENING_PATTERN.test(normalized)) {
+    signals.push('possessive-place-opening')
+  }
+
+  const failingSignals = signals.filter((signal) => signal !== 'possessive-place-opening')
+  if (failingSignals.length > 0) {
+    return {
+      passes: false,
+      reason: `headline-taste: stale or over-explained title shape (${failingSignals.join(', ')})`,
+      signals,
+    }
+  }
+
+  return {
+    passes: true,
+    reason: signals.length > 0 ? `headline-taste warning: ${signals.join(', ')}` : 'accepted',
+    signals,
   }
 }
 
@@ -2602,6 +2680,8 @@ async function rewriteArticleFromCritique(args: {
     'Article to rewrite:',
     JSON.stringify(args.article),
     '',
+    CRAZY_HEADLINE_REQUIREMENTS,
+    '',
     'CRITICAL RULES:',
     '- Keep valid JSON schema.',
     '- Apply the revisionInstructions directly.',
@@ -2935,6 +3015,13 @@ async function shortenToSchema(args: {
 /******************* HEADLINE SIMILARITY VALIDATION ***********************/
 
 function assertHeadlineNotTooSimilar(headline: string, recentTitles: string[]): void {
+  const taste = assessHeadlineTaste(headline)
+  if (!taste.passes) {
+    throw new Error(
+      `${REPETITION_GUARD_PREFIX}: Generated headline failed title taste guard (${taste.reason}); headline="${headline.slice(0, 140)}"`,
+    )
+  }
+
   const assessment = assessHeadlineSimilarity({
     candidate: headline,
     recentTitles,
@@ -4110,6 +4197,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     MICRO_DETAIL_FORMULA_GUARD,
     '',
+    CRAZY_HEADLINE_REQUIREMENTS,
+    '',
     'WRITING STYLE NOTES:',
     '- Reduce usage of the word "vibes" or "vibe"—it is overused. Prefer more specific, evocative language.',
     '- Instead of "the vibe was off", try "the atmosphere felt wrong", "something was different", "the energy had shifted", etc.',
@@ -4439,6 +4528,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     outputSchemaMode === 'body-only-locked-draft'
       ? 'HEADLINE/SUBHEADLINE/EXCERPT are locked by server. Focus only on body quality and metadata.'
       : [
+          CRAZY_HEADLINE_REQUIREMENTS,
+          '',
           // Use strong headline guidance when drugs/techno is selected, mild otherwise
           useDrugsOrTechnoTopic || useDrugsOrTechnoScenario
             ? DRUGS_TECHNO_HEADLINES_STRONG

@@ -1,5 +1,6 @@
 import {
   assessHeadlineSimilarity,
+  assessHeadlineTaste,
   assessRecentCoverageOverlap,
   buildArticlePrimaryCheck,
   isRetryableGenerationError,
@@ -127,6 +128,22 @@ describe('generateArticle repetition guard helpers', () => {
 
     expect(assessment.tooSimilar).toBe(true)
     expect(assessment.reason).toContain('title-similarity')
+  })
+
+  it('rejects stale explainer headline formulas', () => {
+    const assessment = assessHeadlineTaste(
+      'Wedding’s Free Tree Giveaway Has Become a Loyalty Test for Residents the District Forgot',
+    )
+
+    expect(assessment.passes).toBe(false)
+    expect(assessment.reason).toContain('headline-taste')
+    expect(assessment.signals).toContain('has-become')
+  })
+
+  it('accepts stranger short headline shapes', () => {
+    const assessment = assessHeadlineTaste('The Trees Have Started Taking Names')
+
+    expect(assessment.passes).toBe(true)
   })
 
   it('uses an explicit slot-level humor perspective decision when provided', () => {

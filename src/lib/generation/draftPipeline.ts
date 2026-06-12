@@ -5,8 +5,10 @@ import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   ACID_HUMOR_REQUIREMENTS,
   analyzeHeadlineStructures,
+  assessHeadlineTaste,
   assessHeadlineSimilarity,
   assessRecentCoverageOverlap,
+  CRAZY_HEADLINE_REQUIREMENTS,
   HUMOR_PERSPECTIVE_METHOD,
   MICRO_DETAIL_FORMULA_GUARD,
   shouldIncludeHumorPerspectiveMethod,
@@ -408,6 +410,8 @@ export async function generateDraftCandidate(params: {
     '',
     MICRO_DETAIL_FORMULA_GUARD,
     '',
+    CRAZY_HEADLINE_REQUIREMENTS,
+    '',
     includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
   ].join('\n')
 
@@ -448,6 +452,7 @@ export async function generateDraftCandidate(params: {
         ].join('\n')
       : '',
     'Rules:',
+    CRAZY_HEADLINE_REQUIREMENTS,
     ...buildDraftPerspectiveRuleLines(includeHumorEngine),
     '- Do NOT use the exhausted micro-detail hook: tiny hidden object, exact mm/cm/Hz measurement, then scam reveal.',
     '- Avoid headlines shaped like "The [tiny thing] That..." or "How a [small measured thing]..." unless the story absolutely cannot work without it.',
@@ -566,6 +571,22 @@ export async function evaluateDraftCandidate(params: {
         specificityScore: 1,
         pass: false,
         reason: 'Tone evaluation skipped because headline similarity was rejected.',
+      },
+    }
+  }
+
+  const headlineTaste = assessHeadlineTaste(params.candidate.headline)
+  if (!headlineTaste.passes) {
+    return {
+      accepted: false,
+      reason: headlineTaste.reason,
+      repetition,
+      tone: {
+        funScore: 1,
+        mercilessScore: 1,
+        specificityScore: 1,
+        pass: false,
+        reason: 'Tone evaluation skipped because headline taste was rejected.',
       },
     }
   }
