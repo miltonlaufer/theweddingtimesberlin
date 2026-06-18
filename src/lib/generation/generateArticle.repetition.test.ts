@@ -1,4 +1,5 @@
 import {
+  assessLockedDraftCoherence,
   assessHeadlineSimilarity,
   assessHeadlineTaste,
   assessRecentCoverageOverlap,
@@ -140,10 +141,65 @@ describe('generateArticle repetition guard helpers', () => {
     expect(assessment.signals).toContain('has-become')
   })
 
+  it('rejects attributed quote headline formulas', () => {
+    const assessment = assessHeadlineTaste('‘Bring Your Own Proof,’ Says the Office Window')
+
+    expect(assessment.passes).toBe(false)
+    expect(assessment.signals).toContain('quote-attribution')
+  })
+
+  it('rejects attributed quote headlines without a comma', () => {
+    const assessment = assessHeadlineTaste('‘Please Remove Your Shoes’ Says the Mosque')
+
+    expect(assessment.passes).toBe(false)
+    expect(assessment.signals).toContain('quote-attribution')
+  })
+
+  it('accepts standalone quote headlines', () => {
+    const assessment = assessHeadlineTaste('“Everything Is Fine”')
+
+    expect(assessment.passes).toBe(true)
+  })
+
   it('accepts stranger short headline shapes', () => {
     const assessment = assessHeadlineTaste('The Trees Have Started Taking Names')
 
     expect(assessment.passes).toBe(true)
+  })
+
+  it('rejects locked draft body/image drift', () => {
+    const assessment = assessLockedDraftCoherence({
+      seedDraft: {
+        headline: 'Do Not Feed the Artists, Says the Museum',
+        subheadline:
+          'A museum access policy turns culture into a feeding schedule for patrons with clean shoes.',
+        excerpt: 'Artists are being treated as an exhibit that must stay hungry enough to perform.',
+      },
+      generatedText:
+        'At Gesundbrunnen, Deutsche Bahn passengers watched another delayed train disappear from the board while a transport spokesperson discussed resilience and infrastructure investment.',
+    })
+
+    expect(assessment.passes).toBe(false)
+    expect(assessment.missingTokens).toContain('artists')
+    expect(assessment.missingTokens).toContain('museum')
+  })
+
+  it('accepts locked draft body/image continuity', () => {
+    const assessment = assessLockedDraftCoherence({
+      seedDraft: {
+        headline: 'Do Not Feed the Artists, Says the Museum',
+        subheadline:
+          'A museum access policy turns culture into a feeding schedule for patrons with clean shoes.',
+        excerpt: 'Artists are being treated as an exhibit that must stay hungry enough to perform.',
+      },
+      generatedText:
+        'The museum introduced a new feeding schedule for artists after patrons complained that culture felt too alive. Curators said the exhibit works best when artists remain visible, hungry, and close enough to the donors to flatter them.',
+    })
+
+    expect(assessment.passes).toBe(true)
+    expect(assessment.overlapTokens).toEqual(
+      expect.arrayContaining(['museum', 'artists', 'feeding']),
+    )
   })
 
   it('uses an explicit slot-level humor perspective decision when provided', () => {

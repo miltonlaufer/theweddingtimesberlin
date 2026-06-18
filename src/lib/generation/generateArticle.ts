@@ -771,10 +771,12 @@ export const CRAZY_HEADLINE_REQUIREMENTS = [
   'CRAZY HEADLINE REQUIREMENTS (MANDATORY):',
   '- The headline must feel dangerous, funny, and slightly wrong in the mouth.',
   '- Prefer 5-12 words. Hard cap 18 words unless a named current-news entity truly requires more.',
-  '- Make the title a punchline, threat, confession, question, curse, quote, absurd official notice, or image the reader cannot immediately file away.',
+  '- Make the title a punchline, threat, confession, question, curse, quoted warning, absurd official notice, or image the reader cannot immediately file away.',
   '- Create curiosity before explanation. Do not summarize the whole thesis.',
   '- Avoid polished explainer formulas: "has become", "have become", "is really", "is just", "is mostly", "is now", "has turned", "have turned", "for people who", "for residents who", "for [group] who".',
-  '- Avoid starting by default with "Wedding’s" or "Berlin’s". Start with a person, object, quote, command, taboo image, or institutional sentence when possible.',
+  '- Quotes ARE allowed when the quote itself is the joke, a warning label, a confession, or a brutal found phrase.',
+  '- Avoid attributed quote headlines: no quoted phrase plus Says X, Claims X, Insists X, or similar attribution.',
+  '- Avoid starting by default with "Wedding’s" or "Berlin’s". Start with a person, object, command, quote, taboo image, or institutional sentence when possible.',
   '- If the title sounds like a think-piece subtitle, policy memo, or moral lesson, rewrite it.',
   '- Desired reaction: the reader pauses, feels accused, then clicks.',
 ].join('\n')
@@ -1251,6 +1253,14 @@ const EXPLAINER_HEADLINE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
     pattern:
       /\bfor\s+(?:people|residents|tenants|drivers|kids|cowards|men|women|anyone|the\s+[a-z]+)\s+who\b/i,
   },
+  {
+    label: 'quote-attribution',
+    pattern: /^[`'"“][^'"“”]+[`'"”]?,?\s+(?:says|claims|insists|admits|announces)\b/i,
+  },
+  {
+    label: 'comma-attribution',
+    pattern: /,\s+(?:says|claims|insists|admits|announces)\b/i,
+  },
 ]
 
 const POSSESSIVE_PLACE_HEADLINE_OPENING_PATTERN =
@@ -1707,6 +1717,82 @@ function buildArticleRepetitionFingerprint(article: GeneratedArticle): string {
     article.excerpt ?? '',
     article.bodyMarkdown.slice(0, 420),
   ].join(' ')
+}
+
+const LOCKED_DRAFT_COHERENCE_IGNORED_TOKENS = new Set([
+  ...OVERLAP_STOPWORDS,
+  'berlin',
+  'wedding',
+  'says',
+  'claims',
+  'insists',
+  'admits',
+  'announces',
+  'please',
+  'normal',
+  'official',
+  'local',
+])
+
+function getLockedDraftCoherenceTokens(text: string): string[] {
+  return Array.from(new Set(getSignificantTokenSequence(text))).filter(
+    (token) => token.length >= 4 && !LOCKED_DRAFT_COHERENCE_IGNORED_TOKENS.has(token),
+  )
+}
+
+export function assessLockedDraftCoherence(params: {
+  seedDraft: {
+    headline: string
+    subheadline?: string | null
+    excerpt?: string | null
+  }
+  generatedText: string
+}): {
+  passes: boolean
+  requiredOverlap: number
+  overlapTokens: string[]
+  missingTokens: string[]
+} {
+  const seedTokens = getLockedDraftCoherenceTokens(
+    [
+      params.seedDraft.headline,
+      params.seedDraft.subheadline ?? '',
+      params.seedDraft.excerpt ?? '',
+    ].join(' '),
+  )
+  if (seedTokens.length < 3) {
+    return { passes: true, requiredOverlap: 0, overlapTokens: [], missingTokens: [] }
+  }
+
+  const generatedTokens = new Set(getLockedDraftCoherenceTokens(params.generatedText))
+  const overlapTokens = seedTokens.filter((token) => generatedTokens.has(token))
+  const requiredOverlap = Math.min(3, Math.max(2, Math.ceil(seedTokens.length * 0.12)))
+  return {
+    passes: overlapTokens.length >= requiredOverlap,
+    requiredOverlap,
+    overlapTokens,
+    missingTokens: seedTokens.filter((token) => !generatedTokens.has(token)).slice(0, 12),
+  }
+}
+
+function assertLockedDraftMatchesArticle(
+  article: GeneratedArticle,
+  seedDraft: GenerateArticleInput['seedDraft'] | undefined,
+): void {
+  if (!seedDraft?.headline?.trim()) return
+
+  const generatedText = [
+    article.bodyMarkdown,
+    article.imageCaption ?? '',
+    article.imagePrompt ?? '',
+    article.categorySlug,
+  ].join(' ')
+  const assessment = assessLockedDraftCoherence({ seedDraft, generatedText })
+  if (assessment.passes) return
+
+  throw new Error(
+    `LOCKED_DRAFT_COHERENCE: Generated body/image do not match locked headline premise; requiredOverlap=${assessment.requiredOverlap}, overlap=${assessment.overlapTokens.join(',') || 'none'}, missing=${assessment.missingTokens.join(',')}`,
+  )
 }
 
 function assertArticleNotTooSimilarToRecentCoverage(params: {
@@ -3130,6 +3216,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const briefEnabled = isFlagEnabled(process.env.SATIRE_BRIEF_ENABLED, true)
   const critiqueEnabled = isFlagEnabled(process.env.SATIRE_CRITIQUE_ENABLED, true)
   const outputSchemaMode = resolveOutputSchemaMode(input)
+  const hasLockedSeedDraft = Boolean(input.seedDraft?.headline?.trim())
   const seedDraftTopicHint = input.seedDraft?.topicHint?.trim() || null
   const useRandomModes = input.manualOverrides?.useRandomModes !== false
   const includeBerlinThemes = input.manualOverrides?.includeBerlinThemes !== false
@@ -3161,7 +3248,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   let useCanonicalWeddingStoryStructure =
     !input.forceOpinion && useRandomModes && Math.random() < 0.3
 
-  if (input.seedDraft?.headline?.trim()) {
+  if (hasLockedSeedDraft) {
     // Keep continuity with accepted draft by disabling style pivots that can change premise.
     useFeatureStoryPrompt = false
     useCanonicalWeddingStoryStructure = false
@@ -3740,7 +3827,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     randomFocus = pickFromList(generalTopics, useRandomModes)
   }
 
-  if (input.seedDraft?.headline?.trim()) {
+  if (hasLockedSeedDraft && input.seedDraft) {
     const lockedPremise = [input.seedDraft.headline, input.seedDraft.excerpt ?? '']
       .filter((part) => typeof part === 'string' && part.trim().length > 0)
       .join(' — ')
@@ -3791,7 +3878,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     blacklistSummary: recentArticlesSummary,
     maxItems: 30,
   })
-  if (recentCoverageReferences.length > 0) {
+  if (!hasLockedSeedDraft && recentCoverageReferences.length > 0) {
     const scenarioPool = useDrugsOrTechnoScenario
       ? drugsAndTechnoScenarios
       : useStartupScenario
@@ -3873,18 +3960,22 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     ? Array.from(new Set([seedDraftManualTopicHint, ...manualTopics]))
     : manualTopics
 
-  const hasRssTopics =
-    (input.includeTopics && rssTopics.length > 0) || Boolean(seedDraftRssTopicHint)
+  const hasRssTopics = hasLockedSeedDraft
+    ? Boolean(seedDraftRssTopicHint)
+    : (input.includeTopics && rssTopics.length > 0) || Boolean(seedDraftRssTopicHint)
   const afdTriggeredRssTopic = hasRssTopics ? rssTopics.find((topic) => isAfDTopic(topic)) : null
   const selectedRssTopic = seedDraftRssTopicHint
     ? seedDraftRssTopicHint
     : hasRssTopics
       ? (afdTriggeredRssTopic ?? pickFromList(rssTopics, useRandomModes))
       : null
-  const selectedManualTopic =
-    !selectedRssTopic && effectiveManualTopics.length > 0
-      ? pickFromList(effectiveManualTopics, useRandomModes)
-      : null
+  const selectedManualTopic = !selectedRssTopic
+    ? hasLockedSeedDraft
+      ? seedDraftManualTopicHint
+      : effectiveManualTopics.length > 0
+        ? pickFromList(effectiveManualTopics, useRandomModes)
+        : null
+    : null
   if (selectedManualTopic) {
     randomFocus = selectedManualTopic
     selectedScenario = selectedManualTopic
@@ -4028,8 +4119,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- Start with a verb (imperative): "Forget Everything...", "Meet the Man..."',
           '- Start with an adjective: "Desperate Späti Owner...", "Mysterious Note..."',
           '- Start with a time reference: "After 3 Years...", "Since Tuesday..."',
-          '- Use quotation: ""I Regret Nothing," Says...", ""This Is Normal," Claims..."',
-          '- Use a punchline construction, quote, reported-action line, question, or fragment that does not resemble the recent list.',
+          '- Use a punchline construction, reported-action line, question, warning label, threat, confession, standalone quote, or fragment that does not resemble the recent list.',
+          '- Quotes are allowed when the quote itself carries the joke.',
+          '- Do NOT use attributed quote headlines: no quoted phrase plus Says X, Claims X, Insists X, or similar attribution.',
           '',
           'REMEMBER: if a reader could scan the homepage and feel this headline came from the same title mold, rewrite it.',
           '═══════════════════════════════════════════════════════════════════',
@@ -4424,6 +4516,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const seedDraftSection = input.seedDraft
     ? [
         'LOCKED DRAFT (MANDATORY):',
+        '- This locked draft is the PRIMARY source of truth for the article.',
+        '- If any topic direction, RSS topic, blacklist text, scenario, or style guidance conflicts with this locked draft, follow the locked draft.',
         `- Use this EXACT headline: "${input.seedDraft.headline.trim().slice(0, 140)}"`,
         lockedDraftSubheadline
           ? `- Use this EXACT subheadline: "${lockedDraftSubheadline}"`
@@ -4434,7 +4528,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         typeof input.seedDraft.topicHint === 'string' && input.seedDraft.topicHint.trim().length > 0
           ? `- Keep this SAME topic/news hook continuity: "${input.seedDraft.topicHint.trim().slice(0, 300)}"`
           : '',
-        '- Build a full body that matches this pitch and keeps the same core premise.',
+        '- Build a full bodyMarkdown that matches this pitch and keeps the same core premise.',
+        '- The imagePrompt and imageCaption must illustrate this locked headline/subheadline premise, not a different topic.',
         '- In LOCKED DRAFT mode, headline/subheadline/excerpt are server-owned and must not be rewritten.',
       ].join('\n')
     : ''
@@ -4697,6 +4792,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
     validated = enforceSourceRssTopic(validated, actuallyUsedRssTopic)
     validated = finalizeGeneratedExcerpt(applySeedDraft(validated, input.seedDraft))
+    assertLockedDraftMatchesArticle(validated, input.seedDraft)
 
     if (includeBerlinThemes) {
       // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
@@ -4750,6 +4846,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     const repairedWithSeed = finalizeGeneratedExcerpt(
       applySeedDraft(enforceSourceRssTopic(repaired, actuallyUsedRssTopic), input.seedDraft),
     )
+    assertLockedDraftMatchesArticle(repairedWithSeed, input.seedDraft)
 
     if (includeBerlinThemes) {
       // CRITICAL: Check for wedding ceremony content - "Wedding" is a neighborhood, not wedding ceremonies
