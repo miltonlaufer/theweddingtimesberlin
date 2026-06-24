@@ -151,8 +151,6 @@ export default async function HomePage() {
   const otherArticles = nonOpinionArticles.filter((a: IArticle) => a.id !== headlineId)
 
   const {
-    leftColumnArticles,
-    centerColumnArticles,
     rightColumnArticles,
     articlesWithImages,
     leftColumnTopArticles,

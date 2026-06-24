@@ -2,13 +2,13 @@
 /* Import Tailwind WITHOUT preflight to avoid conflicts with Payload admin */
 @layer theme, base, components, utilities;
 
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap');
+
 /* Import theme and utilities, but SKIP preflight */
 @import 'tailwindcss/theme.css' layer(theme);
 /* @import "tailwindcss/preflight.css" layer(base); <- DISABLED to not conflict with Payload */
 @import 'tailwindcss/utilities.css' layer(utilities) source(none);
-
-/* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap');
 
 /* Configure Tailwind to scan our source files */
 @source "../**/*.{js,ts,jsx,tsx}";

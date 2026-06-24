@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
   experimental: {
     reactCompiler: false,
   },
+  sassOptions: {
+    silenceDeprecations: ['legacy-js-api', 'import'],
+  },
   // Ensure Payload packages are transpiled correctly
   transpilePackages: ['@payloadcms/next', '@payloadcms/ui', '@payloadcms/richtext-lexical'],
   // Native Node addons must not be bundled by webpack (they are .node binaries)
