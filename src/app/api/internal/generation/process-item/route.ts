@@ -171,14 +171,13 @@ async function maybePublishInstagram(args: {
     }
   }
 
-  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN?.trim()
   const igUserId = process.env.INSTAGRAM_IG_USER_ID?.trim()
-  if (!accessToken || !igUserId) {
+  if (!igUserId) {
     return {
       attempted: false,
       queuedByArticleHook: false,
       skipped: true,
-      reason: 'Missing INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_IG_USER_ID',
+      reason: 'Missing INSTAGRAM_IG_USER_ID',
     }
   }
 

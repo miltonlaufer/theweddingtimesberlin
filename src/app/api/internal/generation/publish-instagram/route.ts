@@ -66,13 +66,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     })
   }
 
-  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN?.trim()
   const igUserId = process.env.INSTAGRAM_IG_USER_ID?.trim()
-  if (!accessToken || !igUserId) {
-    return NextResponse.json(
-      { ok: false, error: 'Missing INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_IG_USER_ID' },
-      { status: 503 },
-    )
+  if (!igUserId) {
+    return NextResponse.json({ ok: false, error: 'Missing INSTAGRAM_IG_USER_ID' }, { status: 503 })
   }
 
   let body: z.infer<typeof RequestSchema>

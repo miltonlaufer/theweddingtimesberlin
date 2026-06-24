@@ -30,15 +30,10 @@ export async function GET(
     return NextResponse.json({ error: 'Missing slug' }, { status: 400 })
   }
 
-  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN?.trim()
   const igUserId = process.env.INSTAGRAM_IG_USER_ID?.trim()
-  if (!accessToken || !igUserId) {
-    const missing = [
-      !accessToken && 'INSTAGRAM_ACCESS_TOKEN',
-      !igUserId && 'INSTAGRAM_IG_USER_ID',
-    ].filter(Boolean) as string[]
+  if (!igUserId) {
     return NextResponse.json(
-      { error: `Missing Instagram config: ${missing.join(', ')}` },
+      { error: 'Missing Instagram config: INSTAGRAM_IG_USER_ID' },
       { status: 503 },
     )
   }

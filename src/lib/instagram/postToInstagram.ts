@@ -1,6 +1,6 @@
 /**
  * Publish a single image with caption to Instagram using the Graph API.
- * Requires Instagram Business/Creator account linked to a Facebook Page.
+ * Uses the Instagram API with Instagram Login token flow.
  * See: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing
  */
 
@@ -15,7 +15,7 @@ export interface PostToInstagramParams {
   imageUrl: string
   caption: string
   altText?: string
-  /** Facebook Place/Page ID for post location (e.g. INSTAGRAM_LOCATION_ID for "Wedding, Berlin"). */
+  /** Optional Instagram location ID for post location tagging. */
   locationId?: string
 }
 
@@ -33,9 +33,27 @@ export interface PostToInstagramOptions {
   bypassEnabledFlag?: boolean
 }
 
+type ResolvedInstagramToken = {
+  accessToken: string
+  source: 'env' | 'stored'
+}
+
 function shouldRetryPublish(errorMessage?: string): boolean {
   const normalized = (errorMessage ?? '').toLowerCase()
   return normalized.includes('media id is not available')
+}
+
+function isTokenRejection(errorMessage?: string): boolean {
+  const normalized = (errorMessage ?? '').toLowerCase()
+  return (
+    normalized.includes('access token') &&
+    (normalized.includes('cannot parse') ||
+      normalized.includes('could not be decrypted') ||
+      normalized.includes('expired') ||
+      normalized.includes('invalid') ||
+      normalized.includes('malformed') ||
+      normalized.includes('error validating'))
+  )
 }
 
 function normalizeInstagramErrorMessage(errorMessage?: string): string {
@@ -58,6 +76,53 @@ function normalizeInstagramErrorMessage(errorMessage?: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function getStoredAccessToken(): Promise<ResolvedInstagramToken | null> {
+  try {
+    const tokenStore = await import('./instagramTokenStore')
+    const stored = await tokenStore.readStoredInstagramAccessToken()
+    if (!stored?.accessToken.trim()) return null
+    return {
+      accessToken: stored.accessToken.trim(),
+      source: 'stored',
+    }
+  } catch (error) {
+    console.warn('[Instagram] Stored token lookup failed:', error)
+    return null
+  }
+}
+
+async function getEnvAccessToken(): Promise<ResolvedInstagramToken | null> {
+  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN?.trim()
+  if (!accessToken) return null
+  return {
+    accessToken,
+    source: 'env',
+  }
+}
+
+async function resolveAccessToken(): Promise<ResolvedInstagramToken | null> {
+  return (await getStoredAccessToken()) ?? (await getEnvAccessToken())
+}
+
+async function refreshAccessToken(accessToken: string): Promise<ResolvedInstagramToken | null> {
+  try {
+    const tokenStore = await import('./instagramTokenStore')
+    const refreshed = await tokenStore.refreshInstagramAccessToken(accessToken)
+    if (!refreshed.ok) {
+      console.warn('[Instagram] Token refresh failed:', refreshed.error)
+      return null
+    }
+
+    return {
+      accessToken: refreshed.accessToken,
+      source: 'stored',
+    }
+  } catch (error) {
+    console.warn('[Instagram] Token refresh failed:', error)
+    return null
+  }
 }
 
 /**
@@ -96,15 +161,18 @@ async function publishContainer(
   accessToken: string,
   containerId: string,
 ): Promise<PostToInstagramResult> {
+  const body = new URLSearchParams({
+    creation_id: containerId,
+    access_token: accessToken,
+  })
   const publishRes = await fetch(
     `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${igUserId}/media_publish`,
     {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({ creation_id: containerId }),
+      body,
     },
   )
 
@@ -119,44 +187,35 @@ async function publishContainer(
   return { ok: true, mediaId: publishData.id }
 }
 
-/**
- * Create a media container and publish it to Instagram.
- * No-op if INSTAGRAM_ENABLED is not set or credentials are missing.
- */
-export async function postToInstagram(
+async function publishWithToken(
   params: PostToInstagramParams,
-  options?: PostToInstagramOptions,
+  igUserId: string,
+  accessToken: string,
 ): Promise<PostToInstagramResult> {
-  const enabled = process.env.INSTAGRAM_ENABLED === 'true'
-  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN
-  const igUserId = process.env.INSTAGRAM_IG_USER_ID
-
-  if ((!enabled && options?.bypassEnabledFlag !== true) || !accessToken || !igUserId) {
-    return { ok: false, error: 'Instagram posting is not configured' }
-  }
-
   const { imageUrl, caption, altText, locationId } = params
-  if (!imageUrl?.trim() || !caption?.trim()) {
-    return { ok: false, error: 'imageUrl and caption are required' }
-  }
-
   const locationIdToUse = locationId?.trim() || process.env.INSTAGRAM_LOCATION_ID?.trim()
 
   try {
+    const body = new URLSearchParams({
+      image_url: imageUrl.trim(),
+      caption: caption.trim().slice(0, 2200),
+      access_token: accessToken,
+    })
+    if (altText?.trim()) {
+      body.set('alt_text', altText.trim().slice(0, 100))
+    }
+    if (locationIdToUse) {
+      body.set('location_id', locationIdToUse)
+    }
+
     const createRes = await fetch(
       `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${igUserId}/media`,
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: JSON.stringify({
-          image_url: imageUrl.trim(),
-          caption: caption.trim().slice(0, 2200),
-          ...(altText?.trim() ? { alt_text: altText.trim().slice(0, 100) } : {}),
-          ...(locationIdToUse ? { location_id: locationIdToUse } : {}),
-        }),
+        body,
       },
     )
 
@@ -194,4 +253,64 @@ export async function postToInstagram(
     const message = err instanceof Error ? err.message : String(err)
     return { ok: false, error: normalizeInstagramErrorMessage(message) }
   }
+}
+
+/**
+ * Create a media container and publish it to Instagram.
+ * No-op if INSTAGRAM_ENABLED is not set or credentials are missing.
+ */
+export async function postToInstagram(
+  params: PostToInstagramParams,
+  options?: PostToInstagramOptions,
+): Promise<PostToInstagramResult> {
+  const enabled = process.env.INSTAGRAM_ENABLED === 'true'
+  const igUserId = process.env.INSTAGRAM_IG_USER_ID?.trim()
+  const token = await resolveAccessToken()
+
+  if ((!enabled && options?.bypassEnabledFlag !== true) || !token || !igUserId) {
+    return { ok: false, error: 'Instagram posting is not configured' }
+  }
+
+  const { imageUrl, caption, altText, locationId } = params
+  if (!imageUrl?.trim() || !caption?.trim()) {
+    return { ok: false, error: 'imageUrl and caption are required' }
+  }
+
+  const initial = await publishWithToken(
+    { imageUrl, caption, altText, locationId },
+    igUserId,
+    token.accessToken,
+  )
+  if (initial.ok || !isTokenRejection(initial.error)) {
+    return initial
+  }
+
+  const refreshed = await refreshAccessToken(token.accessToken)
+  if (refreshed) {
+    console.warn(
+      '[Instagram] Access token was rejected; refreshed token and retrying publish once.',
+    )
+    const retried = await publishWithToken(
+      { imageUrl, caption, altText, locationId },
+      igUserId,
+      refreshed.accessToken,
+    )
+    if (retried.ok || token.source === 'env') {
+      return retried
+    }
+  }
+
+  if (token.source === 'stored') {
+    const envToken = await getEnvAccessToken()
+    if (envToken && envToken.accessToken !== token.accessToken) {
+      console.warn('[Instagram] Stored token was rejected; falling back to env token once.')
+      return publishWithToken(
+        { imageUrl, caption, altText, locationId },
+        igUserId,
+        envToken.accessToken,
+      )
+    }
+  }
+
+  return initial
 }
