@@ -13,7 +13,8 @@ import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
 import type { DraftCandidate, DraftEvaluation, SlotConfig } from '@/lib/generation/pipelineTypes'
-import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
+import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   convertMarkdownToLexical,
@@ -537,19 +538,23 @@ export async function POST(req: Request) {
     })
   }
 
+  const normalizedSubheadline =
+    normalizeOptionalSubheadlineForStorage(generated.subheadline) ??
+    buildSummaryFromMarkdownContent(generated.bodyMarkdown, 220)
+  const normalizedExcerpt =
+    normalizeOptionalExcerptForStorage(generated.excerpt, 300) ??
+    buildSummaryFromMarkdownContent(generated.bodyMarkdown, 300)
+
   const created = await payload.create({
     collection: 'articles',
     data: {
       headline: generated.headline,
-      subheadline: normalizeOptionalSubheadlineForStorage(generated.subheadline),
+      subheadline: normalizedSubheadline,
       slug,
       featuredImageUrl,
       imageCaption: generated.imageCaption ?? undefined,
       content: lexical,
-      excerpt:
-        typeof generated.excerpt === 'string'
-          ? normalizeExcerptForStorage(generated.excerpt, 300)
-          : undefined,
+      excerpt: normalizedExcerpt,
       category: categoryDoc.id,
       author: authorDoc.id,
       publishedAt: articleStatus === 'published' ? new Date().toISOString() : undefined,

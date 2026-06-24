@@ -1,7 +1,11 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
-import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
+import {
+  normalizeExcerptForStorage,
+  normalizeOptionalExcerptForStorage,
+} from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 
 /******************* TYPES ***********************/
@@ -666,8 +670,8 @@ const JSON_SCHEMA = [
   'JSON schema:',
   '{',
   '  "headline": string,  // YOUR OWN original headline - DO NOT copy the topic direction (<= 140 chars)',
-  '  "subheadline": string|null,  // <= 220 chars; complete standalone sentence(s), never a cropped fragment',
-  '  "excerpt": string|null,  // <= 300 chars; complete standalone sentence(s), never a cropped fragment',
+  '  "subheadline": string|null,  // <= 220 chars; newspaper deck/summary, complete standalone sentence(s), never writer notes or a cropped fragment',
+  '  "excerpt": string|null,  // <= 300 chars; newspaper summary for feeds/social, complete standalone sentence(s), never writer notes or a cropped fragment',
   '  "bodyMarkdown": string,  // markdown with headings/paragraphs/lists; no code blocks',
   '  "categorySlug": string,  // existing slug OR new slug if creating category',
   '  "authorSlug": string,  // existing slug OR new slug if creating author',
@@ -3181,11 +3185,14 @@ function hydrateLockedDraftFields(args: {
 function finalizeGeneratedExcerpt(article: GeneratedArticle): GeneratedArticle {
   return {
     ...article,
-    subheadline: normalizeOptionalSubheadlineForStorage(article.subheadline) ?? null,
+    subheadline:
+      normalizeOptionalSubheadlineForStorage(article.subheadline) ??
+      buildSummaryFromMarkdownContent(article.bodyMarkdown, 220) ??
+      null,
     excerpt:
-      typeof article.excerpt === 'string'
-        ? normalizeExcerptForStorage(article.excerpt, 300) || null
-        : article.excerpt,
+      normalizeOptionalExcerptForStorage(article.excerpt, 300) ??
+      buildSummaryFromMarkdownContent(article.bodyMarkdown, 300) ??
+      null,
   }
 }
 
@@ -4557,7 +4564,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ].join('\n')
       : '',
     'Important: ALL text fields must be written in US English.',
-    'Subheadline and excerpt must be complete standalone sentence(s) under their limits. Never end either field with a comma, dash, connector word, dependent clause, or visibly cropped thought.',
+    'Subheadline and excerpt must read like a newspaper deck or summary under their limits. Never explain the joke, premise, satire, angle, or creative process. Forbidden openings: "The joke is not...", "This piece...", "This article...", "The satire is...", "The premise is...". Never end either field with a comma, dash, connector word, dependent clause, or visibly cropped thought.',
     SOURCE_ATTRIBUTION_RULES,
     '',
     ABSURD_ANONYMITY_RULES,

@@ -150,6 +150,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     : null
 
   const categoryUrl = `/section/${article.category.slug}`
+  const deck = article.subheadline || article.excerpt
 
   return (
     <div className="pt-20">
@@ -166,9 +167,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               {article.headline}
             </h1>
 
-            {article.subheadline && (
+            {deck && (
               <p className="font-serif text-xl md:text-2xl text-[#333] mt-6 mb-6 leading-snug">
-                {article.subheadline}
+                {deck}
               </p>
             )}
 

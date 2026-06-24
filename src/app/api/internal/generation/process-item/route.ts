@@ -15,7 +15,8 @@ import {
 import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
 import { tryFinalizeGenerationJob } from '@/lib/generation/runGenerationPipeline'
-import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
+import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import { CANONICAL_SITE_URL } from '@/lib/getBaseUrl'
 import { createAndUploadInstagramImage } from '@/lib/instagram/createInstagramImage'
@@ -708,11 +709,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     const slug = `${slugify(finalGenerated.headline)}-${Date.now()}-${body.itemId}`
     const imagePrompt =
       typeof finalGenerated.imagePrompt === 'string' ? finalGenerated.imagePrompt : ''
-    const normalizedSubheadline = normalizeOptionalSubheadlineForStorage(finalGenerated.subheadline)
+    const normalizedSubheadline =
+      normalizeOptionalSubheadlineForStorage(finalGenerated.subheadline) ??
+      buildSummaryFromMarkdownContent(finalGenerated.bodyMarkdown, 220)
     const normalizedExcerpt =
-      typeof finalGenerated.excerpt === 'string'
-        ? normalizeExcerptForStorage(finalGenerated.excerpt, 300) || undefined
-        : undefined
+      normalizeOptionalExcerptForStorage(finalGenerated.excerpt, 300) ??
+      buildSummaryFromMarkdownContent(finalGenerated.bodyMarkdown, 300)
     let featuredImageUrl: string | undefined
 
     const createdArticle = await payload.create({

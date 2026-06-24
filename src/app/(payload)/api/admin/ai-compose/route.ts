@@ -18,7 +18,8 @@ import {
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
 import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
-import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
+import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { CANONICAL_SITE_URL } from '@/lib/getBaseUrl'
@@ -975,20 +976,23 @@ export async function POST(request: Request): Promise<NextResponse> {
           sourceTopicCandidates
             .map((value) => normalizeSourceRssTopic(value))
             .find((value): value is string => typeof value === 'string' && value.length > 0) ?? null
+        const normalizedSubheadline =
+          normalizeOptionalSubheadlineForStorage(article.subheadline) ??
+          buildSummaryFromMarkdownContent(article.bodyMarkdown, 220)
+        const normalizedExcerpt =
+          normalizeOptionalExcerptForStorage(article.excerpt, 300) ??
+          buildSummaryFromMarkdownContent(article.bodyMarkdown, 300)
 
         const created = await payloadClient.create({
           collection: 'articles',
           data: {
             headline: article.headline,
-            subheadline: normalizeOptionalSubheadlineForStorage(article.subheadline),
+            subheadline: normalizedSubheadline,
             slug,
             featuredImageUrl: body.featuredImageUrl,
             imageCaption: article.imageCaption ?? undefined,
             content: lexical,
-            excerpt:
-              typeof article.excerpt === 'string'
-                ? normalizeExcerptForStorage(article.excerpt, 300)
-                : undefined,
+            excerpt: normalizedExcerpt,
             category: category.id,
             author: author.id,
             publishedAt: new Date().toISOString(),
@@ -1012,7 +1016,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         const instagramResult = await maybePublishInstagram({
           slug,
           headline: article.headline,
-          excerpt: article.excerpt ?? null,
+          excerpt: normalizedExcerpt ?? null,
           featuredImageUrl: body.featuredImageUrl,
         })
 

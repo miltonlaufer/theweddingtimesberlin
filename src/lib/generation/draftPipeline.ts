@@ -1,6 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
-import { normalizeExcerptForStorage } from '@/lib/text/excerptQuality'
+import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   ACID_HUMOR_REQUIREMENTS,
@@ -193,10 +193,7 @@ function normalizeDraft(candidate: DraftCandidate): DraftCandidate {
   return {
     headline: candidate.headline.trim().slice(0, 140),
     subheadline: normalizeOptionalSubheadlineForStorage(candidate.subheadline) ?? null,
-    excerpt:
-      typeof candidate.excerpt === 'string'
-        ? normalizeExcerptForStorage(candidate.excerpt, 300) || null
-        : null,
+    excerpt: normalizeOptionalExcerptForStorage(candidate.excerpt, 300) ?? null,
   }
 }
 
@@ -459,6 +456,9 @@ export async function generateDraftCandidate(params: {
     '- Prefer larger mechanisms: policy, staffing, paperwork, pricing, app settings, permits, queues, meetings, incentives, enforcement, social rituals.',
     '- Headline must be sharp and specific (not generic).',
     '- Subheadline and excerpt must be complete standalone sentence(s), not cropped fragments.',
+    '- Subheadline and excerpt must read like a newspaper deck or summary, not writer notes.',
+    '- Never explain the joke, premise, satire, angle, or creative process in subheadline or excerpt.',
+    '- Forbidden summary openings: "The joke is not...", "This piece...", "This article...", "The satire is...", "The premise is...".',
     '- Never end subheadline or excerpt with a comma, dash, connector word, dependent clause, or visibly unfinished thought.',
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',

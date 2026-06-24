@@ -34,6 +34,20 @@ function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
+const META_SUMMARY_VOICE_PATTERNS: RegExp[] = [
+  /\bthe\s+joke\s+is\s+not\b/i,
+  /\b(?:the\s+)?(?:joke|punchline)\s+(?:is|here|works|comes\s+from|lands|hinges\s+on)\b/i,
+  /\b(?:the\s+)?(?:satire|premise|bit|gag|angle|comic\s+engine)\s+(?:is|works|comes\s+from|lands|hinges\s+on)\b/i,
+  /\b(?:this|the)\s+(?:piece|article|story|essay|dispatch|satire)\s+(?:follows|tracks|explores|examines|argues|shows|reveals|satirizes|uses|turns|asks|is\s+about)\b/i,
+  /\b(?:explains?|unpacks?|summari[sz]es)\s+the\s+(?:joke|satire|premise|angle|creative\s+process)\b/i,
+]
+
+export function hasMetaSummaryVoice(value: string): boolean {
+  const normalized = collapseWhitespace(value)
+  if (!normalized) return false
+  return META_SUMMARY_VOICE_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
 export function hasTerminalExcerptEnding(value: string): boolean {
   const normalized = collapseWhitespace(value)
   if (/(?:\.\.\.|…)$/.test(normalized)) return false
@@ -96,6 +110,7 @@ function stripTrailingConnectors(value: string): string {
 
 export function normalizeSummaryForStorage(input: string, maxLength = 300): string {
   const normalized = collapseWhitespace(input)
+  if (hasMetaSummaryVoice(normalized)) return ''
   const base = trimToReadableLength(normalized, maxLength)
   if (!base) return ''
   const withoutDanglingClause = stripDanglingTrailingClause(base)
@@ -126,9 +141,26 @@ export function normalizeSummaryForStorage(input: string, maxLength = 300): stri
       .replace(/[,:;\-–—]+$/g, '')}.`
     finalText = trimToReadableLength(finalText, maxLength)
   }
+  if (hasMetaSummaryVoice(finalText)) return ''
   return finalText
+}
+
+export function normalizeOptionalSummaryForStorage(
+  input: string | null | undefined,
+  maxLength = 300,
+): string | undefined {
+  if (typeof input !== 'string') return undefined
+  const normalized = normalizeSummaryForStorage(input, maxLength)
+  return normalized.length > 0 ? normalized : undefined
 }
 
 export function normalizeExcerptForStorage(input: string, maxLength = 300): string {
   return normalizeSummaryForStorage(input, maxLength)
+}
+
+export function normalizeOptionalExcerptForStorage(
+  input: string | null | undefined,
+  maxLength = 300,
+): string | undefined {
+  return normalizeOptionalSummaryForStorage(input, maxLength)
 }
