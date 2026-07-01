@@ -16,6 +16,7 @@ import { PushSubscriptions } from './collections/PushSubscriptions'
 import { GenerationCache } from './collections/GenerationCache'
 import { GenerationJobs } from './collections/GenerationJobs'
 import { GenerationJobItems } from './collections/GenerationJobItems'
+import { buildPayloadPostgresPoolConfig } from './lib/payloadPostgresPool'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -73,9 +74,7 @@ export default buildConfig({
     return usePostgres
       ? postgresAdapter({
           migrationDir: path.resolve(dirname, 'migrations'),
-          pool: {
-            connectionString: databaseUri,
-          },
+          pool: buildPayloadPostgresPoolConfig(databaseUri),
         })
       : sqliteAdapter({
           client: {

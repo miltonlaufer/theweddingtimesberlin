@@ -293,18 +293,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.warn(
           `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} process-item failed (${processError})`,
         )
-        await markItemTerminalStatus({
-          itemId: body.itemId,
-          status: 'failed',
-          error: processError,
-        })
       }
-
-      await tryFinalizeGenerationJob({
-        baseUrl,
-        tokenForInternalCalls,
-        jobId: body.jobId,
-      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error(
