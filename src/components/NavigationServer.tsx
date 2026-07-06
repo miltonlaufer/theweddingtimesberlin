@@ -1,5 +1,6 @@
 import React from 'react'
 import { getPayload } from '@/lib/payload'
+import { isNextProductionBuild } from '@/lib/nextPhase'
 import { NavigationClient } from './Navigation'
 
 /******************* TYPES ***********************/
@@ -17,6 +18,10 @@ interface ArticleWithCategory {
 /******************* SERVER COMPONENT ***********************/
 
 export async function NavigationServer() {
+  if (isNextProductionBuild()) {
+    return <NavigationClient categories={[]} />
+  }
+
   const payload = await getPayload()
 
   // DB unavailable (build time) - return empty navigation
@@ -24,21 +29,28 @@ export async function NavigationServer() {
     return <NavigationClient categories={[]} />
   }
 
-  // Fetch categories and published articles in parallel (2 queries instead of N+1)
-  const [categoriesResult, articlesResult] = await Promise.all([
-    payload.find({
-      collection: 'categories',
-      limit: 100,
-    }),
-    // Fetch only the category field from published articles (minimal data)
-    payload.find({
-      collection: 'articles',
-      where: { status: { equals: 'published' } },
-      limit: 10000, // Get all published articles
-      depth: 0, // Don't populate relations - we just need the category ID
-      select: { category: true }, // Only fetch the category field
-    }),
-  ])
+  let categoriesResult
+  let articlesResult
+  try {
+    // Fetch categories and published articles in parallel (2 queries instead of N+1)
+    ;[categoriesResult, articlesResult] = await Promise.all([
+      payload.find({
+        collection: 'categories',
+        limit: 100,
+      }),
+      // Fetch only the category field from published articles (minimal data)
+      payload.find({
+        collection: 'articles',
+        where: { status: { equals: 'published' } },
+        limit: 10000, // Get all published articles
+        depth: 0, // Don't populate relations - we just need the category ID
+        select: { category: true }, // Only fetch the category field
+      }),
+    ])
+  } catch (error) {
+    console.warn('[NavigationServer] Failed to load navigation categories', error)
+    return <NavigationClient categories={[]} />
+  }
 
   // Build a map of category ID -> count
   const countByCategory = new Map<string | number, number>()

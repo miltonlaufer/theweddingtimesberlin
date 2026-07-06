@@ -716,6 +716,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       normalizeOptionalExcerptForStorage(finalGenerated.excerpt, 300) ??
       buildSummaryFromMarkdownContent(finalGenerated.bodyMarkdown, 300)
     let featuredImageUrl: string | undefined
+    let instagramPublishArgs: {
+      slug: string
+      headline: string
+      excerpt: string | null
+      featuredImageUrl: string
+    } | null = null
 
     const createdArticle = await payload.create({
       collection: 'articles',
@@ -758,21 +764,11 @@ export async function POST(request: Request): Promise<NextResponse> {
           },
         })
         if (body.publish && featuredImageUrl) {
-          try {
-            const instagramResult = await maybePublishInstagram({
-              slug,
-              headline: finalGenerated.headline,
-              excerpt: normalizedExcerpt ?? null,
-              featuredImageUrl,
-            })
-            console.log(
-              `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} instagram post status | attempted=${instagramResult.attempted} skipped=${instagramResult.skipped} hook=${instagramResult.queuedByArticleHook} reason=${instagramResult.reason ?? 'ok'}`,
-            )
-          } catch (instagramError) {
-            console.warn(
-              `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} instagram publish failed`,
-              instagramError,
-            )
+          instagramPublishArgs = {
+            slug,
+            headline: finalGenerated.headline,
+            excerpt: normalizedExcerpt ?? null,
+            featuredImageUrl,
           }
         }
         console.log(
@@ -813,6 +809,20 @@ export async function POST(request: Request): Promise<NextResponse> {
         `${LOG_PREFIX} Finalization attempt failed after item completion for job ${String(body.jobId)}`,
         finalizeError,
       )
+    }
+
+    if (instagramPublishArgs) {
+      try {
+        const instagramResult = await maybePublishInstagram(instagramPublishArgs)
+        console.log(
+          `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} instagram post status | attempted=${instagramResult.attempted} skipped=${instagramResult.skipped} hook=${instagramResult.queuedByArticleHook} reason=${instagramResult.reason ?? 'ok'}`,
+        )
+      } catch (instagramError) {
+        console.warn(
+          `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} instagram publish failed`,
+          instagramError,
+        )
+      }
     }
 
     return NextResponse.json({
