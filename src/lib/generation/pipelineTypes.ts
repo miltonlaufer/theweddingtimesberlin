@@ -6,11 +6,17 @@ export type SlotConfig = {
   includeTopics: boolean
   /** One slot-level roll shared by draft and article prompts. */
   useHumorPerspectiveMethod?: boolean
+  /** Planner bucket used for observability and editorial steering. */
+  themeBucket?: string
+  /** Slot-level editor instruction used by draft generation. */
+  editorDirection?: string
 }
 
 export type RecentCoverageItem = {
   headline: string
   excerpt: string
+  categorySlug?: string | null
+  sourceRssTopic?: string | null
 }
 
 export type DraftCandidate = {

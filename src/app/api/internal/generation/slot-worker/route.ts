@@ -20,6 +20,8 @@ const RequestSchema = z.object({
     forceOpinion: z.boolean(),
     includeTopics: z.boolean(),
     useHumorPerspectiveMethod: z.boolean().optional(),
+    themeBucket: z.string().max(80).optional(),
+    editorDirection: z.string().max(1200).optional(),
   }),
   topicSummary: z.string(),
   recentCoverage: z

@@ -52,6 +52,8 @@ function extractFirstJsonObject(text: string): string {
 
 type TopicSource = 'rss' | 'manual' | 'hint' | 'unknown'
 
+const RSS_TOPIC_SOURCE_TAGS = new Set(['rss', 'hint', 'nytimes', 'berliner-zeitung'])
+
 type ParsedTopicLine = {
   source: TopicSource
   value: string
@@ -70,8 +72,11 @@ function parseTopicLine(line: string): ParsedTopicLine | null {
   const value = sourceTagged[2].trim()
   if (!value) return null
 
-  if (sourceRaw === 'rss' || sourceRaw === 'manual' || sourceRaw === 'hint') {
-    return { source: sourceRaw, value }
+  if (RSS_TOPIC_SOURCE_TAGS.has(sourceRaw)) {
+    return { source: sourceRaw === 'hint' ? 'hint' : 'rss', value }
+  }
+  if (sourceRaw === 'manual') {
+    return { source: 'manual', value }
   }
   return { source: 'unknown', value }
 }
@@ -379,7 +384,7 @@ export async function generateDraftCandidate(params: {
     recentCoverage: params.recentCoverage,
     acceptedDrafts: params.acceptedDrafts,
   })
-  const editorDirection = params.editorDirection?.trim()
+  const editorDirection = (params.editorDirection ?? params.slot.editorDirection)?.trim()
   const hasEditorDirection = typeof editorDirection === 'string' && editorDirection.length > 0
 
   // Only include the full, heavy HUMOR engine in the slot-level sample to vary tone.

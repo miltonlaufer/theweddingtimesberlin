@@ -9,9 +9,10 @@ import {
 } from '@/lib/generation/generateArticle'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
+import { planEditorialSlots } from '@/lib/generation/editorialPlanner'
 import { sendPushNotifications } from '@/lib/push/sendNotifications'
 import { buildInternalAuthHeaders } from '@/lib/generation/internalAuth'
-import type { RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
+import type { RecentCoverageItem } from '@/lib/generation/pipelineTypes'
 
 /******************* LOGGING ***********************/
 
@@ -36,7 +37,6 @@ const MIN_AUTHOR_POOL = Number(process.env.MIN_AUTHOR_POOL ?? 8)
 const MAX_NEW_AUTHORS_PER_RUN = Number(process.env.MAX_NEW_AUTHORS_PER_RUN ?? 3)
 export const ARTICLES_PER_RUN = Number(process.env.ARTICLES_PER_RUN ?? 8)
 const MAX_DRAFT_RETRIES = Number(process.env.DRAFT_MAX_RETRIES ?? 2)
-const FORCED_RSS_SLOTS = 2
 
 const BASELINE_CATEGORIES = [
   { name: 'Bureaucracy', slug: 'bureaucracy', order: 1 },
@@ -54,88 +54,6 @@ const BASELINE_CATEGORIES = [
 ]
 
 /******************* HELPERS ***********************/
-
-function pickTwoThirds(): boolean {
-  return Math.random() < 2 / 3
-}
-
-function computeSlotConfigs(
-  count: number,
-  hasRssTopics: boolean,
-  forceOpinionFirst: boolean,
-): SlotConfig[] {
-  const guaranteed: SlotConfig[] = []
-
-  const withToneRoll = (slot: Omit<SlotConfig, 'useHumorPerspectiveMethod'>): SlotConfig => ({
-    ...slot,
-    useHumorPerspectiveMethod: shouldIncludeHumorPerspectiveMethod(),
-  })
-
-  if (forceOpinionFirst) {
-    guaranteed.push(
-      withToneRoll({
-        forceDrugsTechno: false,
-        forceStartup: false,
-        forceRss: false,
-        forceOpinion: true,
-        includeTopics: false,
-      }),
-    )
-  }
-
-  guaranteed.push(
-    withToneRoll({
-      forceDrugsTechno: true,
-      forceStartup: false,
-      forceRss: false,
-      forceOpinion: false,
-      includeTopics: false,
-    }),
-  )
-
-  guaranteed.push(
-    withToneRoll({
-      forceDrugsTechno: false,
-      forceStartup: false,
-      forceRss: false,
-      forceOpinion: false,
-      includeTopics: false,
-    }),
-  )
-
-  if (hasRssTopics) {
-    for (let i = 0; i < FORCED_RSS_SLOTS; i++) {
-      guaranteed.push(
-        withToneRoll({
-          forceDrugsTechno: i === 0,
-          forceStartup: false,
-          forceRss: true,
-          forceOpinion: false,
-          includeTopics: true,
-        }),
-      )
-    }
-  }
-
-  const slots: SlotConfig[] = []
-  for (let i = 0; i < count; i++) {
-    if (i < guaranteed.length) {
-      slots.push(guaranteed[i])
-    } else {
-      slots.push(
-        withToneRoll({
-          forceDrugsTechno: undefined,
-          forceStartup: undefined,
-          forceRss: undefined,
-          forceOpinion: false,
-          includeTopics: pickTwoThirds(),
-        }),
-      )
-    }
-  }
-
-  return slots
-}
 
 function extractTextFromLexical(content: unknown): string {
   if (!content || typeof content !== 'object') return ''
@@ -161,16 +79,40 @@ function extractTextFromLexical(content: unknown): string {
   return extractFromNodes(root.root.children).replace(/\s+/g, ' ').trim()
 }
 
-function toRecentCoverageItems(docs: unknown[]): RecentCoverageItem[] {
-  return docs
-    .map((a) => {
-      const doc = a as { headline?: string; excerpt?: string }
-      const headline = typeof doc.headline === 'string' ? doc.headline.trim() : ''
-      if (!headline) return null
-      const excerpt = typeof doc.excerpt === 'string' ? doc.excerpt.trim() : ''
-      return { headline, excerpt }
-    })
-    .filter((item): item is RecentCoverageItem => item !== null && item.headline.length > 0)
+function relationId(value: unknown): string | number | null {
+  if (typeof value === 'string' || typeof value === 'number') return value
+  if (value && typeof value === 'object') {
+    const relation = value as { id?: string | number | null }
+    return relation.id ?? null
+  }
+  return null
+}
+
+function toRecentCoverageItems(
+  docs: unknown[],
+  categorySlugById?: Map<string, string>,
+): RecentCoverageItem[] {
+  const items: RecentCoverageItem[] = []
+  for (const article of docs) {
+    const doc = article as {
+      headline?: string
+      excerpt?: string
+      category?: unknown
+      sourceRssTopic?: string | null
+    }
+    const headline = typeof doc.headline === 'string' ? doc.headline.trim() : ''
+    if (!headline) continue
+    const excerpt = typeof doc.excerpt === 'string' ? doc.excerpt.trim() : ''
+    const categoryId = relationId(doc.category)
+    const categorySlug =
+      categoryId != null ? (categorySlugById?.get(String(categoryId)) ?? null) : null
+    const sourceRssTopic =
+      typeof doc.sourceRssTopic === 'string' && doc.sourceRssTopic.trim().length > 0
+        ? doc.sourceRssTopic.trim()
+        : null
+    items.push({ headline, excerpt, categorySlug, sourceRssTopic })
+  }
+  return items
 }
 
 function normalizeTopicIdentity(topic: string): string {
@@ -587,7 +529,10 @@ export async function runGenerationPipeline(params: {
       `JOB ${String(jobId)}: rss topic filtering | fetched=${rssTopicsResult.topics.length} fresh=${freshTopics.length} lockedFromRecent=${recentlyUsedRssTopics.size}`,
     )
 
-    const recentCoverage = toRecentCoverageItems(recentArticlesRes.docs)
+    const categorySlugById = new Map(
+      categories.map((category) => [String(category.id), category.slug]),
+    )
+    const recentCoverage = toRecentCoverageItems(recentArticlesRes.docs, categorySlugById)
     const recentArticleTitles = recentCoverage.map((x) => x.headline)
     const recentArticleExcerpts = recentCoverage.map((x) => x.excerpt)
 
@@ -655,9 +600,16 @@ export async function runGenerationPipeline(params: {
     currentStage = 'prepare-slots'
     CRON_LOG.info(`JOB ${String(jobId)}: stage=${currentStage}`)
     const precomputedBlacklistSummary = blacklistCache.summary
-    const slotConfigs = computeSlotConfigs(ARTICLES_PER_RUN, hasRssTopics, forceOpinionThisRun)
+    const editorialPlan = planEditorialSlots({
+      count: ARTICLES_PER_RUN,
+      hasRssTopics,
+      forceOpinionFirst: forceOpinionThisRun,
+      recentCoverage,
+      includeHumorPerspectiveMethod: shouldIncludeHumorPerspectiveMethod,
+    })
+    const slotConfigs = editorialPlan.slots
     CRON_LOG.info(
-      `JOB ${String(jobId)}: prepared ${slotConfigs.length} slots | hasRssTopics=${hasRssTopics} forceOpinion=${forceOpinionThisRun} blacklistCache=${blacklistCache.cacheHit ? 'HIT' : 'MISS'}`,
+      `JOB ${String(jobId)}: prepared ${slotConfigs.length} slots | hasRssTopics=${hasRssTopics} forceOpinion=${forceOpinionThisRun} saturated=${editorialPlan.summary.saturatedThemes.join(',') || 'none'} blacklistCache=${blacklistCache.cacheHit ? 'HIT' : 'MISS'}`,
     )
 
     await payload.update({
@@ -671,6 +623,7 @@ export async function runGenerationPipeline(params: {
           hasRssTopics,
           forceOpinionThisRun,
           slotConfigs,
+          editorialPlan: editorialPlan.summary,
           blacklistCacheHit: blacklistCache.cacheHit,
           blacklistSignature: blacklistCache.signature,
         },
@@ -830,6 +783,7 @@ export async function runGenerationPipeline(params: {
           hasRssTopics,
           forceOpinionThisRun,
           slotConfigs,
+          editorialPlan: editorialPlan.summary,
           blacklistCacheHit: blacklistCache.cacheHit,
           blacklistSignature: blacklistCache.signature,
           dispatchQueuedAt: new Date().toISOString(),

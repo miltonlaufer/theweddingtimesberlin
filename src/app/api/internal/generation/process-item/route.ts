@@ -67,6 +67,8 @@ const RequestSchema = z.object({
     forceOpinion: z.boolean(),
     includeTopics: z.boolean(),
     useHumorPerspectiveMethod: z.boolean().optional(),
+    themeBucket: z.string().max(80).optional(),
+    editorDirection: z.string().max(1200).optional(),
   }),
   topicSummary: z.string(),
   recentArticleTitles: z.array(z.string()).default([]),
@@ -422,6 +424,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       forceOpinion: body.slot.forceOpinion,
       includeTopics: body.slot.includeTopics,
       useHumorPerspectiveMethod: body.slot.useHumorPerspectiveMethod,
+      themeBucket: body.slot.themeBucket,
+      editorDirection: body.slot.editorDirection,
     }
 
     let generated: Awaited<ReturnType<typeof generateArticle>>['article'] | undefined
@@ -464,6 +468,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           forceRss: slot.forceRss,
           forceOpinion: slot.forceOpinion,
           useHumorPerspectiveMethod: slot.useHumorPerspectiveMethod,
+          editorDirection: slot.editorDirection,
           seedDraft: {
             headline: seedDraft.headline,
             subheadline: seedDraft.subheadline,

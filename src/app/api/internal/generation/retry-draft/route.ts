@@ -18,6 +18,8 @@ const RequestSchema = z.object({
     forceOpinion: z.boolean(),
     includeTopics: z.boolean(),
     useHumorPerspectiveMethod: z.boolean().optional(),
+    themeBucket: z.string().max(80).optional(),
+    editorDirection: z.string().max(1200).optional(),
   }),
   topicSummary: z.string(),
   recentCoverage: z
@@ -121,6 +123,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       forceOpinion: body.slot.forceOpinion,
       includeTopics: body.slot.includeTopics,
       useHumorPerspectiveMethod: body.slot.useHumorPerspectiveMethod,
+      themeBucket: body.slot.themeBucket,
+      editorDirection: body.slot.editorDirection,
     }
     const recentCoverage: RecentCoverageItem[] = body.recentCoverage.map((entry) => ({
       headline: entry.headline,
