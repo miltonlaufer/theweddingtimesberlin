@@ -182,6 +182,25 @@ describe('generateDraftCandidate', () => {
     expect(mocks.invoke).not.toHaveBeenCalled()
   })
 
+  it('fails closed on evaluator outage when a headline has no deterministic English evidence', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockRejectedValue(new Error('evaluator unavailable'))
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'KINDER STREIKEN HEUTE',
+        subheadline: 'The campaign packages delay as public service.',
+        excerpt: 'The hospital turns waiting into a branded moral hierarchy.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.reason).toContain('headline-language:')
+    expect(mocks.invoke).toHaveBeenCalledOnce()
+  })
+
   it('retains the tone fallback for an ambiguous draft after deterministic checks pass', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockRejectedValue(new Error('evaluator unavailable'))

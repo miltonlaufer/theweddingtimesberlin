@@ -9,6 +9,7 @@ import {
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   assertArticleLanguagePolicy,
+  assessHeadlineLanguage,
   HEADLINE_LANGUAGE_GUARD_PREFIX,
   HEADLINE_LANGUAGE_POLICY_PROMPT,
 } from './headlineLanguage'
@@ -3278,6 +3279,12 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
   } catch (error) {
     if (error instanceof Error && error.message.startsWith(`${HEADLINE_LANGUAGE_GUARD_PREFIX}:`)) {
       throw error
+    }
+    const headlineLanguage = assessHeadlineLanguage(params.article.headline)
+    if (headlineLanguage.englishWordCount === 0) {
+      throw new Error(
+        `${HEADLINE_LANGUAGE_GUARD_PREFIX}: headline headline-language: evaluator unavailable and no deterministic English evidence`,
+      )
     }
     console.warn(
       `${LOG.prefix} Final language evaluator unavailable; deterministic language guard passed`,

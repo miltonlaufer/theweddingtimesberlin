@@ -23,6 +23,8 @@ describe('headline language policy', () => {
     'LEIHFAHRRÄDER, PARKE, DANN SCHÄM DICH',
     'VOM HAUSEINGANG AUF DIE STREAMING-PRIVATJET-LISTE',
     '„ICH FÜRCHTE AM MEISTEN MEINEN VATER“',
+    'ÄRZTE STREIKEN HEUTE',
+    'Schüler Protestieren Gegen Kürzungen',
   ])('rejects uppercase German-dominant production headline %s', (headline) => {
     const result = assessHeadlineLanguage(headline)
 
@@ -109,6 +111,16 @@ describe('headline language policy', () => {
   ])('does not treat English suffix collisions or named entities as German in %s', (headline) => {
     expect(assessHeadlineLanguage(headline).passes).toBe(true)
   })
+
+  it.each(['The die is cast', 'Die Hard Returns to Berlin'])(
+    'counts contextual English die correctly in headline %s',
+    (headline) => {
+      const result = assessHeadlineLanguage(headline)
+
+      expect(result.passes).toBe(true)
+      expect(result.germanWordCount).toBe(0)
+    },
+  )
 
   it('does not pair possessive and contraction apostrophes as quotation marks', () => {
     const result = assessHeadlineLanguage("Berlin's Späti Isn't Bürgeramt Logic at Midnight")

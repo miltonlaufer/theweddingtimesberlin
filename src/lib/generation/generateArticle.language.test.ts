@@ -153,6 +153,16 @@ describe('generateArticle final article-language guard', () => {
     expect(mocks.invoke).toHaveBeenCalledTimes(2)
   })
 
+  it('fails closed when the final evaluator is unavailable and the headline has no English evidence', async () => {
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({ ...fullArticle, headline: 'KINDER STREIKEN HEUTE' }),
+    })
+    mocks.invoke.mockRejectedValueOnce(new Error('language evaluator unavailable'))
+
+    await expect(generateArticle(makeInput())).rejects.toThrow('HEADLINE_LANGUAGE_GUARD: headline')
+    expect(mocks.invoke).toHaveBeenCalledTimes(2)
+  })
+
   it.each([
     {
       path: 'normal',

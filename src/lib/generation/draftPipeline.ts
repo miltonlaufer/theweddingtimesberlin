@@ -659,15 +659,20 @@ export async function evaluateDraftCandidate(params: {
   try {
     tone = await evaluateDraftTone(params.candidate)
   } catch {
+    const hasDeterministicEnglishEvidence = headlineLanguage.englishWordCount > 0
     tone = {
       funScore: 7,
       mercilessScore: 7,
       specificityScore: 7,
-      languagePass: true,
+      languagePass: hasDeterministicEnglishEvidence,
       englishShare: headlineLanguage.englishShare,
-      germanUsageSummary: 'Deterministic language gate passed; evaluator unavailable.',
-      pass: true,
-      reason: 'Tone evaluator unavailable; accepted by fallback.',
+      germanUsageSummary: hasDeterministicEnglishEvidence
+        ? 'Deterministic language gate passed; evaluator unavailable.'
+        : 'No deterministic English evidence; evaluator unavailable.',
+      pass: hasDeterministicEnglishEvidence,
+      reason: hasDeterministicEnglishEvidence
+        ? 'Tone evaluator unavailable; accepted by fallback.'
+        : 'Tone evaluator unavailable; rejected because the headline has no English evidence.',
     }
   }
 

@@ -145,7 +145,9 @@ const NEUTRAL_EVIDENCE = new Set([
   'müller',
   'münchen',
   'söder',
+  'samsung',
   'wedding',
+  'zürich',
 ])
 const GERMAN_CLAUSE_DETERMINERS = new Set(['das', 'dem', 'den', 'der', 'des', 'die', 'ein', 'eine'])
 const GERMAN_CLAUSE_PRONOUNS = new Set(['du', 'ich', 'ihr', 'sie', 'wir'])
@@ -236,10 +238,10 @@ function classifyWord(raw: string): Language {
   if (ENGLISH_EVIDENCE.has(normalized)) return 'english'
   if (GERMAN_EVIDENCE.has(normalized)) return 'german'
   if (NEUTRAL_EVIDENCE.has(normalized)) return 'neutral'
-  if (/^[A-ZÄÖÜẞ]{2,5}$/u.test(raw)) return 'neutral'
-  if (/^\p{Lu}[\p{Ll}\p{M}]+$/u.test(raw)) return 'neutral'
   if (/[äöüß]/u.test(normalized)) return 'german'
   if (normalized.length >= 6 && GERMAN_SUFFIX_PATTERN.test(normalized)) return 'german'
+  if (/^[A-Z]{2,5}$/u.test(raw)) return 'neutral'
+  if (/^\p{Lu}[\p{Ll}\p{M}]+$/u.test(raw)) return 'neutral'
   return 'neutral'
 }
 
@@ -331,8 +333,15 @@ export function assessHeadlineLanguage(headline: string): HeadlineLanguageAssess
   const normalizedHeadline = headline.normalize('NFC')
   const tokens = tokenize(normalizedHeadline)
   const ranges = quoteRanges(normalizedHeadline)
-  const english = tokens.filter((token) => token.language === 'english')
-  const german = tokens.filter((token) => token.language === 'german')
+  const contextualEnglishDieIndexes = new Set(
+    tokens.flatMap((_, index) => (isContextualEnglishDie(tokens, index) ? [index] : [])),
+  )
+  const english = tokens.filter(
+    (token, index) => token.language === 'english' || contextualEnglishDieIndexes.has(index),
+  )
+  const german = tokens.filter(
+    (token, index) => token.language === 'german' && !contextualEnglishDieIndexes.has(index),
+  )
   const germanQuoteRanges = ranges.filter((range) =>
     german.some((token) => token.start >= range.start && token.end <= range.end),
   )
