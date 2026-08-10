@@ -16,6 +16,7 @@ import {
 } from '@/lib/generation/generateArticle'
 import {
   assessHeadlineLanguage,
+  assessSupportingTextLanguage,
   HEADLINE_LANGUAGE_POLICY_PROMPT,
 } from '@/lib/generation/headlineLanguage'
 import type {
@@ -586,6 +587,27 @@ export async function evaluateDraftCandidate(params: {
         germanUsageSummary: headlineLanguage.signals.join(', '),
         pass: false,
         reason: 'Tone evaluation skipped because headline language was rejected.',
+      },
+    }
+  }
+
+  const supportingTextLanguage = [params.candidate.subheadline, params.candidate.excerpt]
+    .map((text) => assessSupportingTextLanguage(text))
+    .find((assessment) => !assessment.passes)
+  if (supportingTextLanguage) {
+    return {
+      accepted: false,
+      reason: supportingTextLanguage.reason,
+      repetition,
+      tone: {
+        funScore: 1,
+        mercilessScore: 1,
+        specificityScore: 1,
+        languagePass: false,
+        englishShare: headlineLanguage.englishShare,
+        germanUsageSummary: supportingTextLanguage.signals.join(', '),
+        pass: false,
+        reason: 'Tone evaluation skipped because supporting text language was rejected.',
       },
     }
   }

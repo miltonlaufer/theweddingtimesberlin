@@ -21,6 +21,13 @@ export type HeadlineLanguageAssessment = {
   reason: string
 }
 
+export type SupportingTextLanguageAssessment = {
+  passes: boolean
+  germanWordCount: number
+  signals: string[]
+  reason: string
+}
+
 type Language = 'english' | 'german' | 'neutral'
 type WordToken = { raw: string; normalized: string; start: number; end: number; language: Language }
 type QuoteRange = { start: number; end: number }
@@ -200,6 +207,23 @@ export function assessHeadlineLanguage(headline: string): HeadlineLanguageAssess
     germanQuoteCount: germanQuoteRanges.length,
     maxGermanQuoteWords,
     isolatedGermanWordCount: isolatedGerman.length,
+    signals,
+    reason: passes ? 'headline-language: accepted' : `headline-language: ${signals.join(', ')}`,
+  }
+}
+
+export function assessSupportingTextLanguage(
+  text: string | null,
+): SupportingTextLanguageAssessment {
+  const germanWordCount = text
+    ? tokenize(text).filter((token) => token.language === 'german').length
+    : 0
+  const signals = germanWordCount > 0 ? ['german-words-in-supporting-text'] : []
+  const passes = signals.length === 0
+
+  return {
+    passes,
+    germanWordCount,
     signals,
     reason: passes ? 'headline-language: accepted' : `headline-language: ${signals.join(', ')}`,
   }

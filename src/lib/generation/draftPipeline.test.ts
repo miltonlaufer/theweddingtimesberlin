@@ -129,4 +129,45 @@ describe('generateDraftCandidate', () => {
     expect(evaluation.accepted).toBe(false)
     expect(evaluation.reason).toContain('headline-language:')
   })
+
+  it.each([
+    {
+      field: 'subheadline',
+      subheadline: 'Die crowd packages brutality as authenticity.',
+      excerpt: 'Campaigners hope the crowd mistakes bullying for courage.',
+    },
+    {
+      field: 'excerpt',
+      subheadline: 'Campaigners package brutality as authenticity.',
+      excerpt: 'Die crowd mistakes bullying for courage.',
+    },
+  ])('rejects a German $field before invoking the tone evaluator', async (candidate) => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        languagePass: true,
+        englishShare: 1,
+        germanUsageSummary: '',
+        pass: true,
+        reason: 'Accepted.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Ashtray Diplomacy Controls the Night Shift',
+        subheadline: candidate.subheadline,
+        excerpt: candidate.excerpt,
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.reason).toContain('headline-language:')
+    expect(mocks.invoke).not.toHaveBeenCalled()
+  })
 })

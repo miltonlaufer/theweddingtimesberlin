@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { assessHeadlineLanguage, assertHeadlineLanguagePolicy } from './headlineLanguage'
+import {
+  assessHeadlineLanguage,
+  assessSupportingTextLanguage,
+  assertHeadlineLanguagePolicy,
+} from './headlineLanguage'
 
 describe('headline language policy', () => {
   it.each([
@@ -52,5 +56,12 @@ describe('headline language policy', () => {
     expect(() => assertHeadlineLanguagePolicy('Du Arschloch, jetzt bitte mit Applaus')).toThrow(
       'HEADLINE_LANGUAGE_GUARD:',
     )
+  })
+
+  it('rejects classified German words in supporting text', () => {
+    const result = assessSupportingTextLanguage('The crowd says bitte warten.')
+
+    expect(result.passes).toBe(false)
+    expect(result.reason).toContain('headline-language:')
   })
 })
