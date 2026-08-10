@@ -38,6 +38,9 @@ export type DraftEvaluation = {
     funScore: number
     mercilessScore: number
     specificityScore: number
+    languagePass: boolean
+    englishShare: number
+    germanUsageSummary: string
     pass: boolean
     reason: string
   }

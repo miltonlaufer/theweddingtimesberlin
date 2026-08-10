@@ -14,6 +14,10 @@ import {
   shouldIncludeHumorPerspectiveMethod,
   WEDDING_REMINDER_SHORT,
 } from '@/lib/generation/generateArticle'
+import {
+  assessHeadlineLanguage,
+  HEADLINE_LANGUAGE_POLICY_PROMPT,
+} from '@/lib/generation/headlineLanguage'
 import type {
   DraftCandidate,
   DraftEvaluation,
@@ -37,6 +41,9 @@ const DraftToneSchema = z.object({
   funScore: z.number().int().min(1).max(10),
   mercilessScore: z.number().int().min(1).max(10),
   specificityScore: z.number().int().min(1).max(10),
+  languagePass: z.boolean(),
+  englishShare: z.number().min(0).max(1),
+  germanUsageSummary: z.string().max(200),
   pass: z.boolean(),
   reason: z.string().max(300),
 })
@@ -396,6 +403,7 @@ export async function generateDraftCandidate(params: {
     includeBerlinThemes
       ? 'You are writing one satirical NEWSPAPER PITCH for The Wedding Times (Berlin satire).'
       : 'You are writing one satirical NEWSPAPER PITCH for a satirical newspaper covering global current events.',
+    HEADLINE_LANGUAGE_POLICY_PROMPT,
     'Output strict JSON only.',
     'Be original, topical, and mercilessly funny.',
     '',
@@ -424,6 +432,8 @@ export async function generateDraftCandidate(params: {
       : 'QUALITY RULE: the pitch must have a specific satirical angle with concrete stakes and social bite.',
     'Return JSON schema:',
     '{ "headline": string, "subheadline": string|null, "excerpt": string|null }',
+    '',
+    HEADLINE_LANGUAGE_POLICY_PROMPT,
     '',
     `Mode: ${buildModeInstruction(params.slot, includeBerlinThemes)}`,
     topic ? `Assigned topic/news hook: ${topic}` : 'No fixed topic: choose a fresh one.',
@@ -474,7 +484,6 @@ export async function generateDraftCandidate(params: {
       ? '- In startup/gentrification mode: prefer co-working, venture capital, workplace theater, expat behavior, or wellness-capitalism angles before rent/housing. Rent is allowed only if the premise is unusually specific and not a default Berlin-housing joke.'
       : '',
     rentThemeBiasInstruction,
-    '- US English only.',
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -518,15 +527,18 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
 
   const systemPrompt = [
     'You are a satire pitch evaluator.',
+    HEADLINE_LANGUAGE_POLICY_PROMPT,
     'Output strict JSON only.',
     'Score if the pitch is funny, merciless, and specific.',
+    'For headline language, count only classified English/German words and treat proper names as neutral.',
+    'Set languagePass=false when the 60%/quotation/isolated-term policy fails or when the subheadline or excerpt are not US English.',
   ].join('\n')
   const userPrompt = [
     'Evaluate this draft pitch JSON:',
     JSON.stringify(candidate),
     '',
     'JSON schema:',
-    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "pass": boolean, "reason": string }',
+    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "languagePass": boolean, "englishShare": number, "germanUsageSummary": string, "pass": boolean, "reason": string }',
     '',
     'Set pass=true only when all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
   ].join('\n')
@@ -559,6 +571,25 @@ export async function evaluateDraftCandidate(params: {
     references: referenceTexts,
   })
 
+  const headlineLanguage = assessHeadlineLanguage(params.candidate.headline)
+  if (!headlineLanguage.passes) {
+    return {
+      accepted: false,
+      reason: headlineLanguage.reason,
+      repetition,
+      tone: {
+        funScore: 1,
+        mercilessScore: 1,
+        specificityScore: 1,
+        languagePass: false,
+        englishShare: headlineLanguage.englishShare,
+        germanUsageSummary: headlineLanguage.signals.join(', '),
+        pass: false,
+        reason: 'Tone evaluation skipped because headline language was rejected.',
+      },
+    }
+  }
+
   const headlineSimilarity = assessHeadlineSimilarityForDraft({
     candidate: params.candidate,
     recentCoverage: params.recentCoverage,
@@ -574,6 +605,9 @@ export async function evaluateDraftCandidate(params: {
         funScore: 1,
         mercilessScore: 1,
         specificityScore: 1,
+        languagePass: true,
+        englishShare: headlineLanguage.englishShare,
+        germanUsageSummary: headlineLanguage.signals.join(', '),
         pass: false,
         reason: 'Tone evaluation skipped because headline similarity was rejected.',
       },
@@ -590,6 +624,9 @@ export async function evaluateDraftCandidate(params: {
         funScore: 1,
         mercilessScore: 1,
         specificityScore: 1,
+        languagePass: true,
+        englishShare: headlineLanguage.englishShare,
+        germanUsageSummary: headlineLanguage.signals.join(', '),
         pass: false,
         reason: 'Tone evaluation skipped because headline taste was rejected.',
       },
@@ -604,6 +641,9 @@ export async function evaluateDraftCandidate(params: {
       funScore: 7,
       mercilessScore: 7,
       specificityScore: 7,
+      languagePass: true,
+      englishShare: headlineLanguage.englishShare,
+      germanUsageSummary: 'Deterministic language gate passed; evaluator unavailable.',
       pass: true,
       reason: 'Tone evaluator unavailable; accepted by fallback.',
     }
@@ -612,6 +652,15 @@ export async function evaluateDraftCandidate(params: {
   const minFun = Number(process.env.DRAFT_MIN_FUN_SCORE ?? 7)
   const minMerciless = Number(process.env.DRAFT_MIN_MERCILESS_SCORE ?? 7)
   const minSpecificity = Number(process.env.DRAFT_MIN_SPECIFICITY_SCORE ?? 6)
+
+  if (!tone.languagePass || tone.englishShare < 0.6) {
+    return {
+      accepted: false,
+      reason: `headline-language: ${tone.germanUsageSummary || tone.reason}`,
+      repetition,
+      tone,
+    }
+  }
 
   const tonePass =
     tone.pass &&
