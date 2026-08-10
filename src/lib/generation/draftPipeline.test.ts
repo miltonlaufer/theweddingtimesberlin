@@ -80,6 +80,9 @@ describe('generateDraftCandidate', () => {
     const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
     const combined = messages.map((message) => message.content).join('\n')
     expect(combined).toContain('at least 60% of classified language words must be English')
+    expect(combined).toContain(
+      'Proper names, place names, acronyms, numbers, and punctuation are excluded from the denominator',
+    )
     expect(combined.indexOf('HEADLINE LANGUAGE POLICY')).toBeLessThan(
       combined.indexOf('Assigned topic/news hook'),
     )
@@ -128,6 +131,73 @@ describe('generateDraftCandidate', () => {
 
     expect(evaluation.accepted).toBe(false)
     expect(evaluation.reason).toContain('headline-language:')
+  })
+
+  it('rejects evaluator-detected non-English supporting text that passes local heuristics', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        languagePass: false,
+        englishShare: 1,
+        germanUsageSummary: 'The subheadline is Italian rather than US English.',
+        pass: false,
+        reason: 'Supporting text language policy failed.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Ashtray Diplomacy Controls the Night Shift',
+        subheadline: 'I pazienti aspettano mentre lo sportello chiude.',
+        excerpt: 'The hospital turns waiting into a branded public service.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.reason).toContain('headline-language:')
+    expect(evaluation.reason).toContain('subheadline')
+  })
+
+  it('does not let evaluator outage fallback override an uppercase deterministic rejection', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockRejectedValue(new Error('evaluator unavailable'))
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'DU ARSCHLOCH, JETZT BITTE MIT APPLAUS',
+        subheadline: 'The campaign packages brutality as authenticity.',
+        excerpt: 'The crowd mistakes bullying for courage.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.reason).toContain('headline-language:')
+    expect(mocks.invoke).not.toHaveBeenCalled()
+  })
+
+  it('retains the tone fallback for an ambiguous draft after deterministic checks pass', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockRejectedValue(new Error('evaluator unavailable'))
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Nachtschicht Rules the Founder Economy',
+        subheadline: 'A startup discovers that exhaustion can be invoiced.',
+        excerpt: 'Founders turn late work into a branded moral hierarchy.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(true)
+    expect(evaluation.tone.reason).toContain('evaluator unavailable')
   })
 
   it.each([

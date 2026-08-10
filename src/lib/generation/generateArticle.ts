@@ -7,7 +7,11 @@ import {
   normalizeOptionalExcerptForStorage,
 } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
-import { assertHeadlineLanguagePolicy, HEADLINE_LANGUAGE_GUARD_PREFIX } from './headlineLanguage'
+import {
+  assertArticleLanguagePolicy,
+  HEADLINE_LANGUAGE_GUARD_PREFIX,
+  HEADLINE_LANGUAGE_POLICY_PROMPT,
+} from './headlineLanguage'
 
 /******************* TYPES ***********************/
 
@@ -136,6 +140,14 @@ const SatireCritiqueSchema = z.object({
 })
 
 type SatireCritique = z.infer<typeof SatireCritiqueSchema>
+
+const FinalArticleLanguageSchema = z.object({
+  languagePass: z.boolean(),
+  englishShare: z.number().min(0).max(1),
+  invalidField: z.enum(['headline', 'subheadline', 'excerpt', 'none']).optional().default('none'),
+  germanUsageSummary: z.string().max(300),
+  reason: z.string().max(300),
+})
 
 /******************* LOGGING ***********************/
 
@@ -3210,6 +3222,70 @@ function enforceSourceRssTopic(
   }
 }
 
+async function assertSemanticFinalArticleLanguagePolicy(params: {
+  article: GeneratedArticle
+  apiKey: string
+}): Promise<void> {
+  const modelName = process.env.OPENAI_DRAFT_EVAL_MODEL?.trim() || 'gpt-4o-mini'
+  const llm = new ChatOpenAI({
+    apiKey: params.apiKey,
+    model: modelName,
+    temperature: 0,
+  })
+
+  const systemPrompt = [
+    'You are the final publication language evaluator for a US-English newspaper.',
+    HEADLINE_LANGUAGE_POLICY_PROMPT,
+    'Inspect only headline, subheadline, and excerpt.',
+    'Unknown proper names, place names, company names, titles, and acronyms are neutral rather than German or English.',
+    'Set invalidField to the first failing field in headline, subheadline, excerpt order, or none when every field passes.',
+    'Output strict JSON only.',
+  ].join('\n')
+  const userPrompt = [
+    'Evaluate this finalized article metadata JSON:',
+    JSON.stringify({
+      headline: params.article.headline,
+      subheadline: params.article.subheadline ?? null,
+      excerpt: params.article.excerpt ?? null,
+    }),
+    '',
+    'JSON schema:',
+    '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "reason": string }',
+    '',
+    'languagePass must be true only when the headline satisfies the full headline policy and both supporting fields are entirely in US English.',
+  ].join('\n')
+
+  try {
+    const raw = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ])
+    const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
+    const parsed = JSON.parse(extractFirstJsonObject(text)) as unknown
+    const verdict = FinalArticleLanguageSchema.parse(parsed)
+
+    if (!verdict.languagePass || verdict.englishShare < 0.6) {
+      const invalidField =
+        verdict.invalidField === 'none'
+          ? verdict.englishShare < 0.6
+            ? 'headline'
+            : 'article'
+          : verdict.invalidField
+      throw new Error(
+        `${HEADLINE_LANGUAGE_GUARD_PREFIX}: ${invalidField} headline-language: ${verdict.germanUsageSummary || verdict.reason}`,
+      )
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith(`${HEADLINE_LANGUAGE_GUARD_PREFIX}:`)) {
+      throw error
+    }
+    console.warn(
+      `${LOG.prefix} Final language evaluator unavailable; deterministic language guard passed`,
+      error,
+    )
+  }
+}
+
 /******************* MAIN ***********************/
 
 export async function generateArticle(input: GenerateArticleInput): Promise<GenerateArticleResult> {
@@ -4801,7 +4877,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
     validated = enforceSourceRssTopic(validated, actuallyUsedRssTopic)
     validated = finalizeGeneratedExcerpt(applySeedDraft(validated, input.seedDraft))
-    assertHeadlineLanguagePolicy(validated.headline)
+    assertArticleLanguagePolicy(validated)
+    await assertSemanticFinalArticleLanguagePolicy({ article: validated, apiKey })
     assertLockedDraftMatchesArticle(validated, input.seedDraft)
 
     if (includeBerlinThemes) {
@@ -4856,7 +4933,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     const repairedWithSeed = finalizeGeneratedExcerpt(
       applySeedDraft(enforceSourceRssTopic(repaired, actuallyUsedRssTopic), input.seedDraft),
     )
-    assertHeadlineLanguagePolicy(repairedWithSeed.headline)
+    assertArticleLanguagePolicy(repairedWithSeed)
+    await assertSemanticFinalArticleLanguagePolicy({ article: repairedWithSeed, apiKey })
     assertLockedDraftMatchesArticle(repairedWithSeed, input.seedDraft)
 
     if (includeBerlinThemes) {

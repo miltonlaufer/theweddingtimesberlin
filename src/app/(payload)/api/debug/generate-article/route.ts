@@ -280,6 +280,7 @@ export async function POST(req: Request) {
     let selectedDraft: DraftCandidate | null = null
     let selectedEvaluation: DraftEvaluation | null = null
     let selectedTopicHint: string | null = null
+    let lastEvaluation: DraftEvaluation | null = null
 
     for (let attempt = 1; attempt <= draftAttempts; attempt++) {
       const generatedDraft = await generateDraftCandidate({
@@ -303,14 +304,9 @@ export async function POST(req: Request) {
         recentCoverage,
         acceptedDrafts: attemptedDrafts,
       })
+      lastEvaluation = evaluation
 
       attemptedDrafts.push(generatedDraft.draft)
-
-      if (!selectedDraft) {
-        selectedDraft = generatedDraft.draft
-        selectedEvaluation = evaluation
-        selectedTopicHint = generatedDraft.sourceRssTopic
-      }
 
       if (evaluation.accepted) {
         selectedDraft = generatedDraft.draft
@@ -320,20 +316,25 @@ export async function POST(req: Request) {
       }
     }
 
-    if (selectedDraft && selectedEvaluation) {
-      seedDraftForGeneration = {
-        headline: selectedDraft.headline,
-        subheadline: selectedDraft.subheadline,
-        excerpt: selectedDraft.excerpt,
-        topicHint: selectedTopicHint,
-      }
-      draftPathDebug = {
-        enabled: true,
-        accepted: selectedEvaluation.accepted,
-        attempts: attemptedDrafts.length,
-        selectedDraft,
-        selectedEvaluation,
-      }
+    if (!selectedDraft || !selectedEvaluation) {
+      const lastReason = lastEvaluation?.reason ?? 'no draft evaluation was produced'
+      throw new Error(
+        `Draft pipeline exhausted ${attemptedDrafts.length} attempt(s) without an accepted draft: ${lastReason}`,
+      )
+    }
+
+    seedDraftForGeneration = {
+      headline: selectedDraft.headline,
+      subheadline: selectedDraft.subheadline,
+      excerpt: selectedDraft.excerpt,
+      topicHint: selectedTopicHint,
+    }
+    draftPathDebug = {
+      enabled: true,
+      accepted: selectedEvaluation.accepted,
+      attempts: attemptedDrafts.length,
+      selectedDraft,
+      selectedEvaluation,
     }
   }
 
