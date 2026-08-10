@@ -48,3 +48,4 @@ public/robots.txt
 public/sw.js
 public/swe*.js
 test-results/
+.worktrees/
