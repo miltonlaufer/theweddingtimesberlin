@@ -7,6 +7,7 @@ import {
   normalizeOptionalExcerptForStorage,
 } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
+import { assertHeadlineLanguagePolicy, HEADLINE_LANGUAGE_GUARD_PREFIX } from './headlineLanguage'
 
 /******************* TYPES ***********************/
 
@@ -179,6 +180,7 @@ export function isRetryableGenerationError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   // Retry on repetition guard errors
   if (error.message.includes(REPETITION_GUARD_PREFIX)) return true
+  if (error.message.includes(HEADLINE_LANGUAGE_GUARD_PREFIX)) return true
   // Retry on wedding ceremony content errors (article was about weddings instead of Wedding neighborhood)
   if (isWeddingCeremonyError(error)) return true
   return false
@@ -4799,6 +4801,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
     validated = enforceSourceRssTopic(validated, actuallyUsedRssTopic)
     validated = finalizeGeneratedExcerpt(applySeedDraft(validated, input.seedDraft))
+    assertHeadlineLanguagePolicy(validated.headline)
     assertLockedDraftMatchesArticle(validated, input.seedDraft)
 
     if (includeBerlinThemes) {
@@ -4853,6 +4856,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     const repairedWithSeed = finalizeGeneratedExcerpt(
       applySeedDraft(enforceSourceRssTopic(repaired, actuallyUsedRssTopic), input.seedDraft),
     )
+    assertHeadlineLanguagePolicy(repairedWithSeed.headline)
     assertLockedDraftMatchesArticle(repairedWithSeed, input.seedDraft)
 
     if (includeBerlinThemes) {

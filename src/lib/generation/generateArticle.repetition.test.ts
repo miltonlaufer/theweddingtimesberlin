@@ -8,6 +8,7 @@ import {
   shouldIncludeHumorPerspectiveMethod,
 } from './generateArticle'
 import { buildDraftPerspectiveRuleLines, evaluateDraftCandidate } from './draftPipeline'
+import { assertHeadlineLanguagePolicy } from './headlineLanguage'
 import { describe, expect, it } from 'vitest'
 
 describe('generateArticle repetition guard helpers', () => {
@@ -80,6 +81,18 @@ describe('generateArticle repetition guard helpers', () => {
   it('identifies retryable repetition-guard errors', () => {
     expect(isRetryableGenerationError(new Error('REPETITION_GUARD: overlap detected'))).toBe(true)
     expect(isRetryableGenerationError(new Error('different error'))).toBe(false)
+  })
+
+  it('treats a locked-headline language guard failure as retryable', () => {
+    let caught: unknown
+    try {
+      assertHeadlineLanguagePolicy('Du Arschloch, jetzt bitte mit Applaus')
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    expect(isRetryableGenerationError(caught)).toBe(true)
   })
 
   it('allows a repeated word when the full title is not too similar', () => {
