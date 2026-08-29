@@ -31,7 +31,7 @@ type PlanEditorialSlotsArgs = {
   forcedRssSlots?: number
 }
 
-const DEFAULT_FORCED_RSS_SLOTS = 2
+const DEFAULT_FORCED_RSS_RATIO = 0.66
 const RECENT_WINDOW_SIZE = 20
 const DRUGS_NIGHTLIFE_SATURATION_COUNT = 4
 const DRUGS_NIGHTLIFE_SATURATION_RATIO = 0.25
@@ -192,14 +192,15 @@ export function planEditorialSlots(args: PlanEditorialSlotsArgs): EditorialPlan 
     saturatedThemes.add('drugs-nightlife')
   }
 
-  const plannedThemes: EditorialTheme[] = []
-  if (args.forceOpinionFirst) plannedThemes.push('opinion')
+  const rssSlots = args.hasRssTopics
+    ? Math.min(args.forcedRssSlots ?? Math.ceil(count * DEFAULT_FORCED_RSS_RATIO), count)
+    : 0
 
-  if (args.hasRssTopics) {
-    const rssSlots = Math.min(args.forcedRssSlots ?? DEFAULT_FORCED_RSS_SLOTS, count)
-    for (let i = 0; i < rssSlots; i++) {
-      plannedThemes.push('rss-current-news')
-    }
+  const plannedThemes: EditorialTheme[] = []
+  if (args.forceOpinionFirst && rssSlots < count) plannedThemes.push('opinion')
+
+  for (let i = 0; i < rssSlots; i++) {
+    plannedThemes.push('rss-current-news')
   }
 
   const fillThemes = rankFillThemes(themeCounts, saturatedThemes)
