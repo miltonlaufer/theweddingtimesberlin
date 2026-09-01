@@ -52,13 +52,14 @@ vi.mock('@payloadcms/richtext-lexical', () => ({
   sanitizeServerEditorConfig: async () => ({}),
 }))
 
-function makeRequest(): Request {
+function makeRequest(options?: { forceAfR?: boolean }): Request {
   return new Request('https://example.test/api/internal/generation/process-item', {
     method: 'POST',
     body: JSON.stringify({
       jobId: 258,
       itemId: 609,
       slot: {
+        forceAfR: options?.forceAfR,
         forceOpinion: false,
         includeTopics: true,
       },
@@ -177,6 +178,17 @@ describe('process-item route', () => {
     expect(mocks.callOrder).toContain('instagram-post')
     expect(mocks.callOrder.indexOf('item-completed')).toBeLessThan(
       mocks.callOrder.indexOf('instagram-post'),
+    )
+  })
+
+  it('passes forced AfR mode into full-article generation', async () => {
+    const response = await POST(makeRequest({ forceAfR: true }))
+
+    expect(response.status).toBe(200)
+    expect(mocks.generateArticle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        forceAfR: true,
+      }),
     )
   })
 })

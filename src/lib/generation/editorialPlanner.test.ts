@@ -67,4 +67,73 @@ describe('planEditorialSlots', () => {
     expect(plan.slots.some((slot) => slot.editorDirection?.includes('bureaucracy'))).toBe(true)
     expect(plan.slots.some((slot) => slot.editorDirection?.includes('Kiez'))).toBe(true)
   })
+
+  it('makes every non-RSS slot cruel, surreal, and structurally bizarre', () => {
+    const plan = planEditorialSlots({
+      count: 6,
+      hasRssTopics: false,
+      forceOpinionFirst: true,
+      recentCoverage: [],
+      includeHumorPerspectiveMethod: () => false,
+    })
+
+    const nonRssSlots = plan.slots.filter((slot) => !slot.forceRss)
+
+    expect(nonRssSlots).toHaveLength(6)
+    for (const slot of nonRssSlots) {
+      expect(slot.editorDirection).toMatch(/cruel/i)
+      expect(slot.editorDirection).toMatch(/surreal/i)
+      expect(slot.editorDirection).toMatch(/impossible/i)
+    }
+  })
+
+  it('reserves exactly one AfR slot without reducing the RSS quota', () => {
+    const plan = planEditorialSlots({
+      count: 8,
+      hasRssTopics: true,
+      forceOpinionFirst: false,
+      previousBatchMetadata: { afrScheduledThisRun: false },
+      recentCoverage: [],
+      includeHumorPerspectiveMethod: () => false,
+    })
+
+    expect(plan.slots.filter((slot) => slot.forceRss)).toHaveLength(6)
+    expect(plan.slots.filter((slot) => slot.themeBucket === 'afr-politics')).toHaveLength(1)
+  })
+
+  it('gives a forced AfR story priority over an optional opinion slot', () => {
+    const plan = planEditorialSlots({
+      count: 3,
+      hasRssTopics: true,
+      forceOpinionFirst: true,
+      previousBatchMetadata: { afrScheduledThisRun: false },
+      recentCoverage: [],
+      includeHumorPerspectiveMethod: () => false,
+    })
+
+    expect(plan.slots.filter((slot) => slot.themeBucket === 'afr-politics')).toHaveLength(1)
+    expect(plan.slots.filter((slot) => slot.forceOpinion)).toHaveLength(0)
+  })
+
+  it.each([
+    { previousBatchMetadata: undefined, expectedAfRSlots: 1 },
+    { previousBatchMetadata: { afrScheduledThisRun: false }, expectedAfRSlots: 1 },
+    { previousBatchMetadata: { afrScheduledThisRun: true }, expectedAfRSlots: 0 },
+  ])(
+    'alternates AfR scheduling from persisted batch metadata',
+    ({ previousBatchMetadata, expectedAfRSlots }) => {
+      const plan = planEditorialSlots({
+        count: 8,
+        hasRssTopics: true,
+        forceOpinionFirst: false,
+        previousBatchMetadata,
+        recentCoverage: [],
+        includeHumorPerspectiveMethod: () => false,
+      })
+
+      expect(plan.slots.filter((slot) => slot.themeBucket === 'afr-politics')).toHaveLength(
+        expectedAfRSlots,
+      )
+    },
+  )
 })

@@ -435,19 +435,30 @@ export async function runGenerationPipeline(params: {
 
     currentStage = 'load-context'
     CRON_LOG.info(`JOB ${String(jobId)}: stage=${currentStage}`)
-    const [authorsRes, recentArticlesRes, rssTopicsResult] = await Promise.all([
-      payload.find({ collection: 'authors', limit: 100, sort: 'name' }),
-      payload.find({
-        collection: 'articles',
-        where: { status: { equals: 'published' } },
-        limit: 50,
-        sort: '-publishedAt',
-        depth: 0,
-      }),
-      fetchRssTopics(),
-    ])
+    const [authorsRes, recentArticlesRes, rssTopicsResult, previousCompletedJobsRes] =
+      await Promise.all([
+        payload.find({ collection: 'authors', limit: 100, sort: 'name' }),
+        payload.find({
+          collection: 'articles',
+          where: { status: { equals: 'published' } },
+          limit: 50,
+          sort: '-publishedAt',
+          depth: 0,
+        }),
+        fetchRssTopics(),
+        payload.find({
+          collection: 'generation-jobs',
+          where: { status: { equals: 'completed' } },
+          limit: 1,
+          sort: '-completedAt',
+          depth: 0,
+        }),
+      ])
+    const previousCompletedJob = previousCompletedJobsRes.docs[0] as
+      | { metadata?: unknown }
+      | undefined
     CRON_LOG.info(
-      `JOB ${String(jobId)}: context loaded | categories=${categoriesForCheck.totalDocs ?? 0} authors=${authorsRes.totalDocs ?? 0} recentArticles=${recentArticlesRes.totalDocs ?? 0} rssTopics=${rssTopicsResult.topics.length}`,
+      `JOB ${String(jobId)}: context loaded | categories=${categoriesForCheck.totalDocs ?? 0} authors=${authorsRes.totalDocs ?? 0} recentArticles=${recentArticlesRes.totalDocs ?? 0} rssTopics=${rssTopicsResult.topics.length} previousCompletedBatch=${previousCompletedJob ? 'yes' : 'none'}`,
     )
 
     currentStage = 'seed-checks'
@@ -606,10 +617,12 @@ export async function runGenerationPipeline(params: {
       forceOpinionFirst: forceOpinionThisRun,
       recentCoverage,
       includeHumorPerspectiveMethod: shouldIncludeHumorPerspectiveMethod,
+      previousBatchMetadata: previousCompletedJob?.metadata,
     })
     const slotConfigs = editorialPlan.slots
+    const afrScheduledThisRun = editorialPlan.summary.plannedThemes.includes('afr-politics')
     CRON_LOG.info(
-      `JOB ${String(jobId)}: prepared ${slotConfigs.length} slots | hasRssTopics=${hasRssTopics} forceOpinion=${forceOpinionThisRun} saturated=${editorialPlan.summary.saturatedThemes.join(',') || 'none'} blacklistCache=${blacklistCache.cacheHit ? 'HIT' : 'MISS'}`,
+      `JOB ${String(jobId)}: prepared ${slotConfigs.length} slots | hasRssTopics=${hasRssTopics} forceOpinion=${forceOpinionThisRun} forceAfR=${afrScheduledThisRun} saturated=${editorialPlan.summary.saturatedThemes.join(',') || 'none'} blacklistCache=${blacklistCache.cacheHit ? 'HIT' : 'MISS'}`,
     )
 
     await payload.update({
@@ -622,6 +635,7 @@ export async function runGenerationPipeline(params: {
         metadata: {
           hasRssTopics,
           forceOpinionThisRun,
+          afrScheduledThisRun,
           slotConfigs,
           editorialPlan: editorialPlan.summary,
           blacklistCacheHit: blacklistCache.cacheHit,
@@ -782,6 +796,7 @@ export async function runGenerationPipeline(params: {
         metadata: {
           hasRssTopics,
           forceOpinionThisRun,
+          afrScheduledThisRun,
           slotConfigs,
           editorialPlan: editorialPlan.summary,
           blacklistCacheHit: blacklistCache.cacheHit,

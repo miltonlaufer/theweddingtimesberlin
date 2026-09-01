@@ -153,6 +153,48 @@ describe('generateArticle final article-language guard', () => {
     expect(mocks.invoke).toHaveBeenCalledTimes(2)
   })
 
+  it('activates AfR rules and explanation when AfR mode is explicitly forced', async () => {
+    const ratPartyBody = [
+      'The fictional rat party arrived at the central sewer before sunrise and declared every blocked drain a protected national border.',
+      'Officials issued heritage certificates while party delegates demanded purity inspections for every tunnel resident and blamed foreign rodents for municipal corrosion.',
+      'By noon, the sewer authority had surrendered its maintenance budget to a patriotic cheese tribunal chaired by the party leader.',
+    ].join('\n\n')
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        ...bodyOnlyArticle,
+        bodyMarkdown: ratPartyBody,
+        imageCaption: 'Rat-party delegates inspect a sewer border.',
+        imagePrompt: 'A documentary photograph of rat-party delegates inside a Berlin sewer.',
+      }),
+    })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: true,
+        englishShare: 1,
+        invalidField: 'none',
+        germanUsageSummary: '',
+        reason: 'All fields pass.',
+      }),
+    })
+
+    const result = await generateArticle({
+      ...makeInput(),
+      forceAfR: true,
+      seedDraft: {
+        headline: 'Rat Party Demands Heritage Status for Sewer Borders',
+        subheadline: 'The party turns a blocked drain into a nationalist emergency.',
+        excerpt: 'The fictional rat party promises purity checks beneath the central sewer.',
+      },
+    })
+
+    const generationMessages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const generationPrompt = generationMessages.map((message) => message.content).join('\n')
+
+    expect(generationPrompt).toContain('AFR RECURRING STORY MODE (MANDATORY WHEN ACTIVE)')
+    expect(generationPrompt).toContain('The tone must MOCK and CRITICIZE these positions')
+    expect(result.article.bodyMarkdown).toContain('AfR (Alternativ für Ratten)')
+  })
+
   it('fails closed when the final evaluator is unavailable and the headline has no English evidence', async () => {
     mocks.invoke.mockResolvedValueOnce({
       content: JSON.stringify({ ...fullArticle, headline: 'KINDER STREIKEN HEUTE' }),

@@ -2,6 +2,8 @@ export type SlotConfig = {
   forceDrugsTechno: boolean | undefined
   forceStartup: boolean | undefined
   forceRss: boolean | undefined
+  /** Force the fictional Alternativ für Ratten political-satire mode. */
+  forceAfR?: boolean
   forceOpinion: boolean
   includeTopics: boolean
   /** One slot-level roll shared by draft and article prompts. */

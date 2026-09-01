@@ -2,6 +2,7 @@ import type { RecentCoverageItem, SlotConfig } from './pipelineTypes'
 
 export type EditorialTheme =
   | 'rss-current-news'
+  | 'afr-politics'
   | 'drugs-nightlife'
   | 'bureaucracy-civic'
   | 'kiez-local'
@@ -29,12 +30,15 @@ type PlanEditorialSlotsArgs = {
   recentCoverage: RecentCoverageItem[]
   includeHumorPerspectiveMethod?: () => boolean
   forcedRssSlots?: number
+  previousBatchMetadata?: unknown
 }
 
 const DEFAULT_FORCED_RSS_RATIO = 0.66
 const RECENT_WINDOW_SIZE = 20
 const DRUGS_NIGHTLIFE_SATURATION_COUNT = 4
 const DRUGS_NIGHTLIFE_SATURATION_RATIO = 0.25
+const NON_RSS_EXTREME_STYLE_DIRECTION =
+  'Extreme non-RSS style: make the premise cruel, surreal, and structurally bizarre, not merely quirky. Start from one concrete Berlin truth, introduce one impossible institutional rule or physical fact, then escalate its consequences with deadpan journalistic logic. Aim cruelty upward at hypocrisy, vanity, power, cowardice, and fake compassion; never at protected traits or people suffering for reasons they cannot control. Do not explain the surrealism.'
 
 const THEME_ORDER: EditorialTheme[] = [
   'bureaucracy-civic',
@@ -47,6 +51,7 @@ const THEME_ORDER: EditorialTheme[] = [
 
 const EMPTY_COUNTS: Record<EditorialTheme, number> = {
   'rss-current-news': 0,
+  'afr-politics': 0,
   'drugs-nightlife': 0,
   'bureaucracy-civic': 0,
   'kiez-local': 0,
@@ -70,6 +75,11 @@ const FOOD_CULTURE_PATTERN =
 
 function normalizeCategorySlug(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+function previousBatchScheduledAfR(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
+  return (metadata as Record<string, unknown>).afrScheduledThisRun === true
 }
 
 export function classifyRecentCoverage(item: RecentCoverageItem): EditorialTheme[] {
@@ -137,20 +147,22 @@ function editorialDirection(theme: EditorialTheme): string {
   switch (theme) {
     case 'rss-current-news':
       return 'Use the assigned current-news topic directly. Keep it current-news first; do not pivot to drugs/nightlife unless the news item itself is explicitly about that.'
+    case 'afr-politics':
+      return `Write exactly one new political story about the fictional far-right rat party Alternativ für Ratten (AfR), led by Alice Rattenweidel. Mock and criticize its hypocrisy, racism, authoritarianism, pro-Russia opportunism, and culture-war theater; never endorse those positions. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
     case 'bureaucracy-civic':
-      return 'Choose a bureaucracy or civic-life premise: offices, permits, queues, BVG, schools, health systems, inspections, paperwork, or district politics. Avoid clubs and drugs.'
+      return `Choose a bureaucracy or civic-life premise: offices, permits, queues, BVG, schools, health systems, inspections, paperwork, or district politics. Avoid clubs and drugs. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
     case 'kiez-local':
-      return 'Choose a concrete Kiez/local-life premise: street behavior, neighbors, public space, shops, weather, trash, courtyards, noise, or everyday Wedding friction. Avoid clubs and drugs.'
+      return `Choose a concrete Kiez/local-life premise: street behavior, neighbors, public space, shops, weather, trash, courtyards, noise, or everyday Wedding friction. Avoid clubs and drugs. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
     case 'food-culture':
-      return 'Choose a food, drink, arts, culture, market, kiosk, cafe, museum, or local commerce premise. Avoid clubs and drugs.'
+      return `Choose a food, drink, arts, culture, market, kiosk, cafe, museum, or local commerce premise. Avoid clubs and drugs. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
     case 'gentrification-startup':
-      return 'Choose a startup, expat, co-working, wellness-capitalism, VC, or gentrification premise. Do not default to generic rent pain unless the angle is unusually specific.'
+      return `Choose a startup, expat, co-working, wellness-capitalism, VC, or gentrification premise. Do not default to generic rent pain unless the angle is unusually specific. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
     case 'drugs-nightlife':
-      return 'Use drugs/nightlife only for this slot. Make it specific and avoid repeating recent dealer, bouncer, door-policy, ketamine, or club-bathroom premises.'
+      return `Use drugs/nightlife only for this slot. Make it specific and avoid repeating recent dealer, bouncer, door-policy, ketamine, or club-bathroom premises. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
     case 'opinion':
-      return 'Write an opinion/editorial premise with a clear point of view and a concrete local target.'
+      return `Write an opinion/editorial premise with a clear point of view and a concrete local target. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
     case 'general-local':
-      return 'Choose a fresh local Berlin/Wedding premise outside saturated recent themes. Prefer concrete institutions, rituals, places, and consequences.'
+      return `Choose a fresh local Berlin/Wedding premise outside saturated recent themes. Prefer concrete institutions, rituals, places, and consequences. ${NON_RSS_EXTREME_STYLE_DIRECTION}`
   }
 }
 
@@ -162,6 +174,7 @@ function slotForTheme(
     forceDrugsTechno: theme === 'drugs-nightlife' ? true : false,
     forceStartup: theme === 'gentrification-startup' ? true : false,
     forceRss: theme === 'rss-current-news',
+    forceAfR: theme === 'afr-politics',
     forceOpinion: theme === 'opinion',
     includeTopics: theme === 'rss-current-news',
     useHumorPerspectiveMethod: includeHumorPerspectiveMethod(),
@@ -195,9 +208,15 @@ export function planEditorialSlots(args: PlanEditorialSlotsArgs): EditorialPlan 
   const rssSlots = args.hasRssTopics
     ? Math.min(args.forcedRssSlots ?? Math.ceil(count * DEFAULT_FORCED_RSS_RATIO), count)
     : 0
+  const nonRssCapacity = count - rssSlots
+  const forceAfRThisRun =
+    !previousBatchScheduledAfR(args.previousBatchMetadata) && nonRssCapacity > 0
 
   const plannedThemes: EditorialTheme[] = []
-  if (args.forceOpinionFirst && rssSlots < count) plannedThemes.push('opinion')
+  if (args.forceOpinionFirst && nonRssCapacity > 0 && (!forceAfRThisRun || nonRssCapacity > 1)) {
+    plannedThemes.push('opinion')
+  }
+  if (forceAfRThisRun) plannedThemes.push('afr-politics')
 
   for (let i = 0; i < rssSlots; i++) {
     plannedThemes.push('rss-current-news')

@@ -152,6 +152,9 @@ function pickTopicForSlot(
 }
 
 function buildModeInstruction(slot: SlotConfig, includeBerlinThemes: boolean): string {
+  if (slot.forceAfR) {
+    return 'This pitch must center the fictional far-right rat party Alternativ für Ratten (AfR), led by Alice Rattenweidel, and mock its politics without endorsement.'
+  }
   if (slot.forceOpinion) {
     return 'This pitch must be an opinion/editorial angle with strong, direct point of view.'
   }

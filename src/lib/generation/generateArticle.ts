@@ -47,6 +47,7 @@ export interface GenerateArticleInput {
   forceDrugsTechno?: boolean // Force drugs/techno topic (true) or force non-drugs/techno (false), undefined = random
   forceStartup?: boolean // Force startup/gentrification topic (true) or force non-startup (false), undefined = random
   forceRss?: boolean // Force using RSS topic if available
+  forceAfR?: boolean // Force the fictional Alternativ für Ratten political-satire mode
   forceOpinion?: boolean // Force opinion/editorial piece (categorySlug "opinion", layout "opinion")
   /** Optional slot-level tone decision shared with draft generation. Undefined rolls at the default rate. */
   useHumorPerspectiveMethod?: boolean
@@ -3332,10 +3333,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     temperature: 1,
   })
 
-  // 33% chance to use the new feature/soft news/local/crime/news story prompt type
-  // When forceRss or forceOpinion is true, skip feature story
+  // 33% chance to use the new feature/soft news/local/crime/news story prompt type.
+  // Forced topic modes must not be displaced by a random feature-story scenario.
   let useFeatureStoryPrompt =
-    input.forceRss || input.forceOpinion ? false : useRandomModes && Math.random() < 0.33
+    input.forceRss || input.forceAfR || input.forceOpinion
+      ? false
+      : useRandomModes && Math.random() < 0.33
   // 30% chance to force a canonical Western-story adaptation for non-opinion pieces
   let useCanonicalWeddingStoryStructure =
     !input.forceOpinion && useRandomModes && Math.random() < 0.3
@@ -4082,9 +4085,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const actuallyUsedRssTopic =
     !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
   const useAfRRssMode = Boolean(actuallyUsedRssTopic && isAfDTopic(actuallyUsedRssTopic))
+  const useAfRTopicMode =
+    input.forceAfR === true ||
+    useAfRRssMode ||
+    isAfRTheme(randomFocus) ||
+    isAfRTheme(selectedScenario)
 
   LOG.step(
-    `STEP 2: topic/scenario selected | featureStory=${useFeatureStoryPrompt} | rss=${!!actuallyUsedRssTopic} | afr=${useAfRRssMode} | drugsTechno=${useDrugsOrTechnoTopic || useDrugsOrTechnoScenario} | startup=${useStartupTopic || useStartupScenario}`,
+    `STEP 2: topic/scenario selected | featureStory=${useFeatureStoryPrompt} | rss=${!!actuallyUsedRssTopic} | afr=${useAfRTopicMode} | drugsTechno=${useDrugsOrTechnoTopic || useDrugsOrTechnoScenario} | startup=${useStartupTopic || useStartupScenario}`,
   )
   if (actuallyUsedRssTopic) {
     console.log(`${LOG.prefix} RSS topic: ${actuallyUsedRssTopic.slice(0, 80)}...`)
@@ -4241,8 +4249,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '═══════════════════════════════════════════════════════════════════',
         ].join('\n')
       : ''
-
-  const useAfRTopicMode = useAfRRssMode || isAfRTheme(randomFocus) || isAfRTheme(selectedScenario)
 
   // Determine topic instruction based on article type
   const topicInstruction = useFeatureStoryPrompt

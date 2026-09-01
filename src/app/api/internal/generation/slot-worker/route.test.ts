@@ -36,13 +36,14 @@ vi.mock('@/lib/generation/runGenerationPipeline', () => ({
   tryFinalizeGenerationJob: mocks.tryFinalizeGenerationJob,
 }))
 
-function makeRequest(): Request {
+function makeRequest(options?: { forceAfR?: boolean }): Request {
   return new Request('https://example.test/api/internal/generation/slot-worker', {
     method: 'POST',
     body: JSON.stringify({
       jobId: 123,
       itemId: 456,
       slot: {
+        forceAfR: options?.forceAfR,
         forceOpinion: false,
         includeTopics: true,
       },
@@ -89,5 +90,24 @@ describe('slot-worker route', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(2)
     expect(mocks.tryFinalizeGenerationJob).not.toHaveBeenCalled()
+  })
+
+  it('preserves forced AfR mode across draft and article requests', async () => {
+    const response = await POST(makeRequest({ forceAfR: true }))
+    expect(response.status).toBe(200)
+
+    await mocks.scheduledAfter?.()
+
+    const fetchCalls = vi.mocked(globalThis.fetch).mock.calls
+    const requestBodies = fetchCalls.map(([, init]) => JSON.parse(String(init?.body)) as unknown)
+
+    expect(requestBodies).toHaveLength(2)
+    for (const body of requestBodies) {
+      expect(body).toEqual(
+        expect.objectContaining({
+          slot: expect.objectContaining({ forceAfR: true }),
+        }),
+      )
+    }
   })
 })

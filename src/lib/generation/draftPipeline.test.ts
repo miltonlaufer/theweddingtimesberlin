@@ -52,6 +52,41 @@ describe('generateDraftCandidate', () => {
     )
   })
 
+  it('activates explicit AfR pitch mode for a forced AfR slot', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        headline: 'Rat Party Demands Heritage Status for Sewer Borders',
+        subheadline: 'Alice Rattenweidel promises purity checks beneath the central sewer.',
+        excerpt: 'The fictional AfR turns a blocked drain into a nationalist emergency.',
+      }),
+    })
+
+    await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: false,
+        forceAfR: true,
+        forceOpinion: false,
+        includeTopics: false,
+      },
+      topicSummary: '- [nytimes] An unrelated current-news topic',
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      useRandomModes: false,
+    })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toContain(
+      'Mode: This pitch must center the fictional far-right rat party Alternativ für Ratten (AfR)',
+    )
+    expect(combined).toContain('No fixed topic: choose a fresh one.')
+  })
+
   it('puts the English-led policy before a German RSS topic', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
