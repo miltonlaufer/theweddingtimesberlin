@@ -22,6 +22,10 @@ import { CANONICAL_SITE_URL } from '@/lib/getBaseUrl'
 import { createAndUploadInstagramImage } from '@/lib/instagram/createInstagramImage'
 import { postToInstagram } from '@/lib/instagram/postToInstagram'
 import {
+  recordInstagramIntegrationFailure,
+  recordInstagramIntegrationRecovery,
+} from '@/lib/instagram/instagramAlerts'
+import {
   convertMarkdownToLexical,
   defaultEditorConfig,
   sanitizeServerEditorConfig,
@@ -204,6 +208,19 @@ async function maybePublishInstagram(args: {
     caption,
     altText: args.headline,
   })
+
+  try {
+    if (result.ok) {
+      await recordInstagramIntegrationRecovery('publish')
+    } else {
+      await recordInstagramIntegrationFailure(
+        'publish',
+        result.error ?? 'Instagram publishing failed',
+      )
+    }
+  } catch (alertError) {
+    console.warn(`${LOG_PREFIX} Instagram alert delivery failed`, alertError)
+  }
 
   return {
     attempted: true,
@@ -830,6 +847,14 @@ export async function POST(request: Request): Promise<NextResponse> {
           `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} instagram publish failed`,
           instagramError,
         )
+        try {
+          await recordInstagramIntegrationFailure(
+            'publish',
+            instagramError instanceof Error ? instagramError.message : String(instagramError),
+          )
+        } catch (alertError) {
+          console.warn(`${LOG_PREFIX} Instagram alert delivery failed`, alertError)
+        }
       }
     }
 

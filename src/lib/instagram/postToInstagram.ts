@@ -8,6 +8,7 @@ const INSTAGRAM_API_VERSION = 'v21.0'
 const INSTAGRAM_GRAPH_BASE = 'https://graph.instagram.com'
 const CONTAINER_POLL_INTERVAL_MS = 2500
 const CONTAINER_POLL_TIMEOUT_MS = 120000
+const API_REQUEST_TIMEOUT_MS = 10_000
 const PUBLISH_RETRY_INTERVAL_MS = 2000
 const PUBLISH_RETRY_ATTEMPTS = 4
 
@@ -78,6 +79,38 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+async function fetchInstagramJson<T>(
+  input: string,
+  init: RequestInit | undefined,
+  deadlineMs: number,
+): Promise<{ response: Response; data: T }> {
+  const remainingMs = deadlineMs - Date.now()
+  if (remainingMs <= 0) throw new Error('Instagram request timed out')
+
+  const controller = new AbortController()
+  const timeoutMs = Math.min(API_REQUEST_TIMEOUT_MS, remainingMs)
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort()
+      reject(new Error('Instagram request timed out'))
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(input, { ...init, signal: controller.signal })
+        const data = (await response.json()) as T
+        return { response, data }
+      })(),
+      timeoutPromise,
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
 async function getStoredAccessToken(): Promise<ResolvedInstagramToken | null> {
   try {
     const tokenStore = await import('./instagramTokenStore')
@@ -125,19 +158,39 @@ async function refreshAccessToken(accessToken: string): Promise<ResolvedInstagra
   }
 }
 
+async function persistReplacementEnvToken(accessToken: string): Promise<void> {
+  try {
+    const tokenStore = await import('./instagramTokenStore')
+    const persisted = await tokenStore.writeStoredInstagramAccessToken({
+      accessToken,
+      refreshedAt: null,
+      nextRefreshAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    })
+    if (!persisted) {
+      console.warn('[Instagram] Replacement environment token worked but was not persisted.')
+    }
+  } catch (error) {
+    console.warn('[Instagram] Replacement environment token could not be persisted:', error)
+  }
+}
+
 /**
  * Poll container status until FINISHED or ERROR/EXPIRED. Required before media_publish.
  */
 async function waitForContainerReady(
   containerId: string,
   accessToken: string,
+  deadlineMs: number,
 ): Promise<{ ok: boolean; error?: string }> {
-  const deadline = Date.now() + CONTAINER_POLL_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    const res = await fetch(
+  while (Date.now() < deadlineMs) {
+    const { data } = await fetchInstagramJson<{
+      status_code?: string
+      error?: { message: string }
+    }>(
       `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`,
+      undefined,
+      deadlineMs,
     )
-    const data = (await res.json()) as { status_code?: string; error?: { message: string } }
     if (data.error) {
       return { ok: false, error: normalizeInstagramErrorMessage(data.error.message) }
     }
@@ -160,12 +213,16 @@ async function publishContainer(
   igUserId: string,
   accessToken: string,
   containerId: string,
+  deadlineMs: number,
 ): Promise<PostToInstagramResult> {
   const body = new URLSearchParams({
     creation_id: containerId,
     access_token: accessToken,
   })
-  const publishRes = await fetch(
+  const { response: publishRes, data: publishData } = await fetchInstagramJson<{
+    id?: string
+    error?: { message: string }
+  }>(
     `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${igUserId}/media_publish`,
     {
       method: 'POST',
@@ -174,9 +231,8 @@ async function publishContainer(
       },
       body,
     },
+    deadlineMs,
   )
-
-  const publishData = (await publishRes.json()) as { id?: string; error?: { message: string } }
   if (!publishRes.ok || !publishData.id) {
     const msg = normalizeInstagramErrorMessage(
       publishData.error?.message ?? publishRes.statusText ?? 'Publish failed',
@@ -191,6 +247,7 @@ async function publishWithToken(
   params: PostToInstagramParams,
   igUserId: string,
   accessToken: string,
+  deadlineMs: number,
 ): Promise<PostToInstagramResult> {
   const { imageUrl, caption, altText, locationId } = params
   const locationIdToUse = locationId?.trim() || process.env.INSTAGRAM_LOCATION_ID?.trim()
@@ -208,7 +265,10 @@ async function publishWithToken(
       body.set('location_id', locationIdToUse)
     }
 
-    const createRes = await fetch(
+    const { response: createRes, data: createData } = await fetchInstagramJson<{
+      id?: string
+      error?: { message: string }
+    }>(
       `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${igUserId}/media`,
       {
         method: 'POST',
@@ -217,9 +277,8 @@ async function publishWithToken(
         },
         body,
       },
+      deadlineMs,
     )
-
-    const createData = (await createRes.json()) as { id?: string; error?: { message: string } }
     if (!createRes.ok || !createData.id) {
       const msg = normalizeInstagramErrorMessage(
         createData.error?.message ?? createRes.statusText ?? 'Create container failed',
@@ -229,14 +288,14 @@ async function publishWithToken(
 
     const containerId = createData.id
 
-    const ready = await waitForContainerReady(containerId, accessToken)
+    const ready = await waitForContainerReady(containerId, accessToken, deadlineMs)
     if (!ready.ok) {
       return { ok: false, error: ready.error }
     }
 
     let lastError: string | undefined
     for (let attempt = 0; attempt <= PUBLISH_RETRY_ATTEMPTS; attempt += 1) {
-      const published = await publishContainer(igUserId, accessToken, containerId)
+      const published = await publishContainer(igUserId, accessToken, containerId, deadlineMs)
       if (published.ok) {
         return published
       }
@@ -275,11 +334,13 @@ export async function postToInstagram(
   if (!imageUrl?.trim() || !caption?.trim()) {
     return { ok: false, error: 'imageUrl and caption are required' }
   }
+  const deadlineMs = Date.now() + CONTAINER_POLL_TIMEOUT_MS
 
   const initial = await publishWithToken(
     { imageUrl, caption, altText, locationId },
     igUserId,
     token.accessToken,
+    deadlineMs,
   )
   if (initial.ok || !isTokenRejection(initial.error)) {
     return initial
@@ -294,6 +355,7 @@ export async function postToInstagram(
       { imageUrl, caption, altText, locationId },
       igUserId,
       refreshed.accessToken,
+      deadlineMs,
     )
     if (retried.ok || token.source === 'env') {
       return retried
@@ -304,11 +366,16 @@ export async function postToInstagram(
     const envToken = await getEnvAccessToken()
     if (envToken && envToken.accessToken !== token.accessToken) {
       console.warn('[Instagram] Stored token was rejected; falling back to env token once.')
-      return publishWithToken(
+      const fallbackResult = await publishWithToken(
         { imageUrl, caption, altText, locationId },
         igUserId,
         envToken.accessToken,
+        deadlineMs,
       )
+      if (fallbackResult.ok) {
+        await persistReplacementEnvToken(envToken.accessToken)
+      }
+      return fallbackResult
     }
   }
 

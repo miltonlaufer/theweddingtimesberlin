@@ -2,6 +2,10 @@ import type { CollectionConfig } from 'payload'
 import { CANONICAL_SITE_URL } from '@/lib/getBaseUrl'
 import { createAndUploadInstagramImage } from '@/lib/instagram/createInstagramImage'
 import { postToInstagram } from '@/lib/instagram/postToInstagram'
+import {
+  recordInstagramIntegrationFailure,
+  recordInstagramIntegrationRecovery,
+} from '@/lib/instagram/instagramAlerts'
 
 type ArticleDoc = {
   headline?: string
@@ -27,6 +31,59 @@ function shouldPostToInstagram(
   if (!isInstagramReady(doc)) return false
   if (operation === 'create') return true
   return !isInstagramReady(previousDoc)
+}
+
+export async function publishArticleToInstagram(doc: ArticleDoc): Promise<void> {
+  const imageUrl = doc.featuredImageUrl?.trim()
+  const slug = doc.slug?.trim()
+  const headline = doc.headline?.trim()
+  const excerpt = doc.excerpt?.trim() ?? null
+  if (!imageUrl || !slug || !headline) return
+
+  const articleUrl = `${CANONICAL_SITE_URL}/article/${slug}`
+  const caption = excerpt
+    ? `${headline}\n\n${excerpt}\n\n${articleUrl}`
+    : `${headline}\n\n${articleUrl}`
+
+  let result: Awaited<ReturnType<typeof postToInstagram>>
+  try {
+    const { publicUrl } = await createAndUploadInstagramImage({ imageUrl, headline, excerpt }, slug)
+    result = await postToInstagram({
+      imageUrl: publicUrl,
+      caption,
+      altText: headline,
+    })
+  } catch (error) {
+    console.warn('[Instagram] Create/upload or post failed:', error)
+    try {
+      await recordInstagramIntegrationFailure(
+        'publish',
+        error instanceof Error ? error.message : String(error),
+      )
+    } catch (alertError) {
+      console.warn('[Instagram] Alert delivery failed:', alertError)
+    }
+    return
+  }
+
+  if (result.ok) {
+    try {
+      await recordInstagramIntegrationRecovery('publish')
+    } catch (alertError) {
+      console.warn('[Instagram] Recovery alert delivery failed:', alertError)
+    }
+    return
+  }
+
+  console.warn('[Instagram] Post failed:', result.error)
+  try {
+    await recordInstagramIntegrationFailure(
+      'publish',
+      result.error ?? 'Instagram publishing failed',
+    )
+  } catch (alertError) {
+    console.warn('[Instagram] Alert delivery failed:', alertError)
+  }
 }
 
 export const Articles: CollectionConfig = {
@@ -192,35 +249,7 @@ export const Articles: CollectionConfig = {
         const prev = (previousDoc ?? null) as ArticleDoc | null
         if (!shouldPostToInstagram(d, prev, operation as 'create' | 'update' | 'delete')) return
 
-        const imageUrl = d.featuredImageUrl?.trim()
-        const slug = d.slug?.trim()
-        const headline = d.headline?.trim()
-        const excerpt = d.excerpt?.trim() ?? null
-        if (!imageUrl || !slug || !headline) return
-
-        const articleUrl = `${CANONICAL_SITE_URL}/article/${slug}`
-        const caption = excerpt
-          ? `${headline}\n\n${excerpt}\n\n${articleUrl}`
-          : `${headline}\n\n${articleUrl}`
-
-        setTimeout(() => {
-          createAndUploadInstagramImage({ imageUrl, headline, excerpt }, slug)
-            .then(({ publicUrl }) =>
-              postToInstagram({
-                imageUrl: publicUrl,
-                caption,
-                altText: headline,
-              }),
-            )
-            .then((result) => {
-              if (!result.ok) {
-                console.warn('[Instagram] Post failed:', result.error)
-              }
-            })
-            .catch((err) => {
-              console.warn('[Instagram] Create/upload or post failed:', err)
-            })
-        }, 0)
+        return publishArticleToInstagram(d)
       },
     ],
   },

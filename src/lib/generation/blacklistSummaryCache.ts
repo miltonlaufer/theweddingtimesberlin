@@ -50,6 +50,7 @@ export function buildBlacklistSummarySignature(params: {
 
 type CacheDoc = {
   id: string | number
+  cacheKey?: string
   summary?: string
   expiresAt?: string | null
 }
@@ -66,6 +67,10 @@ async function pruneExpiredCache(payload: Payload): Promise<number> {
 
   const docs = scanned.docs as CacheDoc[]
   const expired = docs.filter((doc) => {
+    const isPrunable =
+      doc.cacheKey?.startsWith(`${CACHE_TYPE}:${CACHE_VERSION}:`) ||
+      doc.cacheKey?.startsWith('instagram-alert:')
+    if (!isPrunable) return false
     if (!doc.expiresAt) return false
     const ms = new Date(doc.expiresAt).getTime()
     return Number.isFinite(ms) && ms < nowMs

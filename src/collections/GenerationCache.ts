@@ -7,10 +7,10 @@ export const GenerationCache: CollectionConfig = {
     defaultColumns: ['cacheType', 'cacheKey', 'articleCount', 'expiresAt', 'updatedAt'],
   },
   access: {
-    read: () => true,
-    create: () => true,
-    update: () => true,
-    delete: () => true,
+    read: () => false,
+    create: () => false,
+    update: () => false,
+    delete: () => false,
   },
   fields: [
     {

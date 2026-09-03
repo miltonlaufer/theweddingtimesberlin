@@ -5,6 +5,10 @@ import { getPayload } from '@/lib/payload'
 const CACHE_KEY = 'instagram-token-state:v1'
 const CACHE_TYPE = 'blacklist-summary'
 const ENCRYPTION_VERSION = 'v1'
+const TOKEN_REFRESH_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000
+const TOKEN_EXPIRY_SAFETY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const FAILED_REFRESH_RETRY_MS = 24 * 60 * 60 * 1000
+const META_REQUEST_TIMEOUT_MS = 10_000
 
 type GenerationCacheDoc = {
   id: string | number
@@ -15,14 +19,14 @@ type StoredInstagramTokenState = {
   encryptedAccessToken: string
   expiresAt?: string | null
   refreshedAt?: string | null
-  tokenLength?: number
-  tokenPrefix?: string
+  nextRefreshAt?: string | null
 }
 
 export type InstagramStoredAccessToken = {
   accessToken: string
   expiresAt?: string | null
   refreshedAt?: string | null
+  nextRefreshAt?: string | null
   source: 'stored'
 }
 
@@ -31,17 +35,56 @@ export type InstagramTokenRefreshResult =
       ok: true
       accessToken: string
       expiresAt?: string
+      persisted: boolean
     }
   | {
       ok: false
       error: string
     }
 
+export type InstagramTokenMaintenanceResult =
+  | { ok: true; action: 'seeded' | 'fresh' | 'refreshed' }
+  | { ok: false; action: 'failed'; error: string }
+
+export function isInstagramTokenRefreshDue(
+  token: {
+    refreshedAt?: string | null
+    expiresAt?: string | null
+    nextRefreshAt?: string | null
+  },
+  now = new Date(),
+): boolean {
+  const nowMs = now.getTime()
+  if (token.nextRefreshAt) {
+    const nextRefreshAtMs = new Date(token.nextRefreshAt).getTime()
+    if (!Number.isFinite(nextRefreshAtMs)) return true
+    if (nextRefreshAtMs > nowMs) return false
+  }
+
+  if (!token.refreshedAt) return true
+
+  const refreshedAtMs = new Date(token.refreshedAt).getTime()
+  if (!Number.isFinite(refreshedAtMs)) return true
+
+  if (refreshedAtMs > nowMs) return true
+
+  if (token.expiresAt) {
+    const expiresAtMs = new Date(token.expiresAt).getTime()
+    if (!Number.isFinite(expiresAtMs)) return true
+    if (expiresAtMs - nowMs <= TOKEN_EXPIRY_SAFETY_WINDOW_MS) return true
+  }
+
+  return nowMs - refreshedAtMs >= TOKEN_REFRESH_INTERVAL_MS
+}
+
 function getEncryptionKey(): Buffer {
+  const dedicatedSecret = process.env.INSTAGRAM_TOKEN_ENCRYPTION_KEY?.trim()
+  if (!dedicatedSecret && process.env.NODE_ENV === 'production') {
+    throw new Error('INSTAGRAM_TOKEN_ENCRYPTION_KEY must be set in production')
+  }
+
   const secret =
-    process.env.INSTAGRAM_TOKEN_ENCRYPTION_KEY?.trim() ||
-    process.env.PAYLOAD_SECRET?.trim() ||
-    'instagram-token-dev-fallback'
+    dedicatedSecret || process.env.PAYLOAD_SECRET?.trim() || 'instagram-token-dev-fallback'
 
   return createHash('sha256').update(secret).digest()
 }
@@ -89,8 +132,7 @@ function parseStoredState(summary: string | null | undefined): StoredInstagramTo
       encryptedAccessToken: parsed.encryptedAccessToken,
       expiresAt: typeof parsed.expiresAt === 'string' ? parsed.expiresAt : null,
       refreshedAt: typeof parsed.refreshedAt === 'string' ? parsed.refreshedAt : null,
-      tokenLength: typeof parsed.tokenLength === 'number' ? parsed.tokenLength : undefined,
-      tokenPrefix: typeof parsed.tokenPrefix === 'string' ? parsed.tokenPrefix : undefined,
+      nextRefreshAt: typeof parsed.nextRefreshAt === 'string' ? parsed.nextRefreshAt : null,
     }
   } catch {
     return null
@@ -124,6 +166,7 @@ export async function readStoredInstagramAccessToken(): Promise<InstagramStoredA
       accessToken: accessToken.trim(),
       expiresAt: state.expiresAt ?? null,
       refreshedAt: state.refreshedAt ?? null,
+      nextRefreshAt: state.nextRefreshAt ?? null,
       source: 'stored',
     }
   } catch (error) {
@@ -134,20 +177,21 @@ export async function readStoredInstagramAccessToken(): Promise<InstagramStoredA
 
 export async function writeStoredInstagramAccessToken(args: {
   accessToken: string
-  expiresAt?: string
-}): Promise<void> {
+  expiresAt?: string | null
+  refreshedAt?: string | null
+  nextRefreshAt?: string | null
+}): Promise<boolean> {
   const accessToken = args.accessToken.trim()
-  if (!accessToken) return
+  if (!accessToken) return false
 
   const payload = await getPayload()
-  if (!payload) return
+  if (!payload) return false
 
   const summary = JSON.stringify({
     encryptedAccessToken: encryptToken(accessToken),
     expiresAt: args.expiresAt ?? null,
-    refreshedAt: new Date().toISOString(),
-    tokenLength: accessToken.length,
-    tokenPrefix: accessToken.slice(0, 4),
+    refreshedAt: args.refreshedAt === undefined ? new Date().toISOString() : args.refreshedAt,
+    nextRefreshAt: args.nextRefreshAt ?? null,
   } satisfies StoredInstagramTokenState)
 
   const data = {
@@ -156,7 +200,7 @@ export async function writeStoredInstagramAccessToken(args: {
     signature: CACHE_KEY,
     summary,
     articleCount: 0,
-    expiresAt: args.expiresAt,
+    expiresAt: args.expiresAt ?? null,
   }
 
   try {
@@ -167,15 +211,114 @@ export async function writeStoredInstagramAccessToken(args: {
         id: existing.id,
         data,
       })
-      return
+      return true
     }
 
     await payload.create({
       collection: 'generation-cache',
       data,
     })
+    return true
   } catch (error) {
     console.warn('[Instagram] Stored token write failed:', error)
+    return false
+  }
+}
+
+export async function maintainInstagramAccessToken(): Promise<InstagramTokenMaintenanceResult> {
+  const stored = await readStoredInstagramAccessToken()
+  if (stored) {
+    if (!isInstagramTokenRefreshDue(stored)) {
+      return { ok: true, action: 'fresh' }
+    }
+
+    const refreshed = await refreshInstagramAccessToken(stored.accessToken)
+    if (!refreshed.ok) {
+      await writeStoredInstagramAccessToken({
+        accessToken: stored.accessToken,
+        expiresAt: stored.expiresAt,
+        refreshedAt: stored.refreshedAt,
+        nextRefreshAt: new Date(Date.now() + FAILED_REFRESH_RETRY_MS).toISOString(),
+      })
+      return { ok: false, action: 'failed', error: refreshed.error }
+    }
+    if (!refreshed.persisted) {
+      return {
+        ok: false,
+        action: 'failed',
+        error: 'Instagram token refreshed but could not be persisted',
+      }
+    }
+
+    return { ok: true, action: 'refreshed' }
+  }
+
+  const envToken = process.env.INSTAGRAM_ACCESS_TOKEN?.trim()
+  if (!envToken) {
+    return { ok: false, action: 'failed', error: 'Missing Instagram access token' }
+  }
+
+  const refreshed = await refreshInstagramAccessToken(envToken)
+  if (!refreshed.ok) {
+    const validation = await validateInstagramAccessToken(envToken)
+    if (!validation.ok) {
+      return { ok: false, action: 'failed', error: validation.error || refreshed.error }
+    }
+
+    const persisted = await writeStoredInstagramAccessToken({
+      accessToken: envToken,
+      refreshedAt: null,
+      nextRefreshAt: new Date(Date.now() + FAILED_REFRESH_RETRY_MS).toISOString(),
+    })
+    if (!persisted) {
+      return {
+        ok: false,
+        action: 'failed',
+        error: 'Could not persist validated Instagram access token',
+      }
+    }
+    return { ok: true, action: 'seeded' }
+  }
+  if (!refreshed.persisted) {
+    return {
+      ok: false,
+      action: 'failed',
+      error: 'Instagram token refreshed but could not be persisted',
+    }
+  }
+
+  return { ok: true, action: 'refreshed' }
+}
+
+async function validateInstagramAccessToken(
+  accessToken: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const url = new URL('https://graph.instagram.com/me')
+  url.searchParams.set('fields', 'id')
+  url.searchParams.set('access_token', accessToken)
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(META_REQUEST_TIMEOUT_MS),
+    })
+    const data = (await response.json().catch(() => ({}))) as {
+      id?: string
+      error?: { message?: string }
+    }
+    if (!response.ok || !data.id) {
+      return {
+        ok: false,
+        error: data.error?.message ?? response.statusText ?? 'Instagram token validation failed',
+      }
+    }
+    return { ok: true }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Instagram token validation failed',
+    }
   }
 }
 
@@ -190,7 +333,11 @@ export async function refreshInstagramAccessToken(
   url.searchParams.set('access_token', token)
 
   try {
-    const response = await fetch(url.toString(), { method: 'GET', cache: 'no-store' })
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(META_REQUEST_TIMEOUT_MS),
+    })
     const data = (await response.json().catch(() => ({}))) as {
       access_token?: string
       expires_in?: number
@@ -210,7 +357,7 @@ export async function refreshInstagramAccessToken(
         ? new Date(Date.now() + data.expires_in * 1000).toISOString()
         : undefined
 
-    await writeStoredInstagramAccessToken({
+    const persisted = await writeStoredInstagramAccessToken({
       accessToken: refreshedToken,
       expiresAt,
     })
@@ -219,6 +366,7 @@ export async function refreshInstagramAccessToken(
       ok: true,
       accessToken: refreshedToken,
       expiresAt,
+      persisted,
     }
   } catch (error) {
     return {

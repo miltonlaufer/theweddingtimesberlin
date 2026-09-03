@@ -7,8 +7,11 @@ const mocks = vi.hoisted(() => ({
   generateArticle: vi.fn(),
   createAndUploadInstagramImage: vi.fn(),
   postToInstagram: vi.fn(),
+  recordInstagramIntegrationFailure: vi.fn(),
+  recordInstagramIntegrationRecovery: vi.fn(),
   tryFinalizeGenerationJob: vi.fn(),
   callOrder: [] as string[],
+  alertEvents: [] as Array<{ kind: string; error?: string }>,
 }))
 
 vi.mock('@/lib/payload', () => ({
@@ -44,6 +47,11 @@ vi.mock('@/lib/instagram/createInstagramImage', () => ({
 
 vi.mock('@/lib/instagram/postToInstagram', () => ({
   postToInstagram: mocks.postToInstagram,
+}))
+
+vi.mock('@/lib/instagram/instagramAlerts', () => ({
+  recordInstagramIntegrationFailure: mocks.recordInstagramIntegrationFailure,
+  recordInstagramIntegrationRecovery: mocks.recordInstagramIntegrationRecovery,
 }))
 
 vi.mock('@payloadcms/richtext-lexical', () => ({
@@ -87,11 +95,14 @@ describe('process-item route', () => {
       INSTAGRAM_AUTO_POST_ON_ARTICLE_CREATE: 'false',
     }
     mocks.callOrder.length = 0
+    mocks.alertEvents.length = 0
     mocks.getPayload.mockReset()
     mocks.generateAndUploadImage.mockReset()
     mocks.generateArticle.mockReset()
     mocks.createAndUploadInstagramImage.mockReset()
     mocks.postToInstagram.mockReset()
+    mocks.recordInstagramIntegrationFailure.mockReset()
+    mocks.recordInstagramIntegrationRecovery.mockReset()
     mocks.tryFinalizeGenerationJob.mockReset()
 
     mocks.generateAndUploadImage.mockResolvedValue({ publicUrl: 'https://cdn.example/image.png' })
@@ -101,6 +112,16 @@ describe('process-item route', () => {
     mocks.postToInstagram.mockImplementation(async () => {
       mocks.callOrder.push('instagram-post')
       return { ok: true }
+    })
+    mocks.recordInstagramIntegrationFailure.mockImplementation(
+      async (kind: string, error: string) => {
+        mocks.alertEvents.push({ kind, error })
+        return { sent: true, deduplicated: false }
+      },
+    )
+    mocks.recordInstagramIntegrationRecovery.mockImplementation(async (kind: string) => {
+      mocks.alertEvents.push({ kind })
+      return { sent: false, deduplicated: true }
     })
     mocks.tryFinalizeGenerationJob.mockResolvedValue({ finalized: false, pending: true })
     mocks.generateArticle.mockResolvedValue({
@@ -190,5 +211,36 @@ describe('process-item route', () => {
         forceAfR: true,
       }),
     )
+  })
+
+  it('records an alert when Instagram publishing fails', async () => {
+    mocks.postToInstagram.mockResolvedValue({ ok: false, error: 'Access token rejected' })
+
+    const response = await POST(makeRequest())
+
+    expect(response.status).toBe(200)
+    expect(mocks.alertEvents).toContainEqual({
+      kind: 'publish',
+      error: 'Access token rejected',
+    })
+  })
+
+  it('records recovery after Instagram publishing succeeds', async () => {
+    const response = await POST(makeRequest())
+
+    expect(response.status).toBe(200)
+    expect(mocks.alertEvents).toContainEqual({ kind: 'publish' })
+  })
+
+  it('records an alert when preparing the Instagram image fails', async () => {
+    mocks.createAndUploadInstagramImage.mockRejectedValue(new Error('Image preparation failed'))
+
+    const response = await POST(makeRequest())
+
+    expect(response.status).toBe(200)
+    expect(mocks.alertEvents).toContainEqual({
+      kind: 'publish',
+      error: 'Image preparation failed',
+    })
   })
 })
