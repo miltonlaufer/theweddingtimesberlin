@@ -17,6 +17,7 @@ import { GenerationCache } from './collections/GenerationCache'
 import { GenerationJobs } from './collections/GenerationJobs'
 import { GenerationJobItems } from './collections/GenerationJobItems'
 import { buildPayloadPostgresPoolConfig } from './lib/payloadPostgresPool'
+import { getResendFromAddress } from './lib/resend'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -53,7 +54,7 @@ export default buildConfig({
   editor: lexicalEditor(),
   email: resendAdapter({
     apiKey: process.env.RESEND_API_KEY!,
-    defaultFromAddress: process.env.RESEND_FROM_ADDRESS!,
+    defaultFromAddress: getResendFromAddress(),
     defaultFromName: 'Wedding Times Berlin',
   }),
   secret: process.env.PAYLOAD_SECRET || 'your-super-secret-key-change-in-production',

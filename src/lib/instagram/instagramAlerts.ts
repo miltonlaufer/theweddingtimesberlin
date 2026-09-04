@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import { getPayload } from '@/lib/payload'
+import { getResendFromAddress } from '@/lib/resend'
 
 export type InstagramAlertKind = 'publish' | 'refresh'
 const DEFAULT_ALERT_EMAIL = 'miltonlaufer@gmail.com'
@@ -189,7 +190,7 @@ async function writeDeliveryClaim(
 }
 
 function hasDirectResendCredentials(): boolean {
-  return Boolean(process.env.RESEND_API_KEY?.trim() && process.env.RESEND_FROM_ADDRESS?.trim())
+  return Boolean(process.env.RESEND_API_KEY?.trim())
 }
 
 function canRetryPendingClaim(state: DeliveryClaimState, nowMs: number): boolean {
@@ -255,11 +256,12 @@ async function sendAlertEmail(
 ): Promise<void> {
   const { message } = state
   const apiKey = process.env.RESEND_API_KEY?.trim()
-  const fromAddress = process.env.RESEND_FROM_ADDRESS?.trim()
-  if (!apiKey || !fromAddress) {
+  if (!apiKey) {
     await withTimeout(payload.sendEmail(message), EMAIL_TIMEOUT_MS, 'Instagram alert email')
     return
   }
+
+  const fromAddress = getResendFromAddress()
 
   const controller = new AbortController()
   let response: Response

@@ -19,6 +19,7 @@ describe('Instagram integration alerts', () => {
       INSTAGRAM_ALERT_EMAIL: 'milton@example.com',
       RESEND_API_KEY: '',
       RESEND_FROM_ADDRESS: '',
+      VERCEL_PROJECT_PRODUCTION_URL: '',
     }
     mocks.getPayload.mockReset()
   })
@@ -280,8 +281,8 @@ describe('Instagram integration alerts', () => {
         docs[index] = { ...docs[index], ...data }
         return docs[index]
       }),
-      delete: vi.fn(),
-      sendEmail: vi.fn(),
+      delete: vi.fn(async () => undefined),
+      sendEmail: vi.fn(async () => ({ id: 'payload-email' })),
     })
 
     const alerts = await import('./instagramAlerts')
@@ -293,6 +294,85 @@ describe('Instagram integration alerts', () => {
       expect.objectContaining({
         Authorization: 'Bearer re_test',
         'Idempotency-Key': expect.stringMatching(/^wtb-instagram-/),
+      }),
+    )
+    expect(JSON.parse(String(init.body))).toEqual(
+      expect.objectContaining({
+        from: 'Wedding Times Berlin <alerts@example.com>',
+      }),
+    )
+  })
+
+  it('derives the direct Resend sender from the Vercel production custom domain', async () => {
+    process.env.RESEND_API_KEY = 're_test'
+    delete process.env.RESEND_FROM_ADDRESS
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = 'theweddingtimesberlin.de'
+    const docs: Array<Record<string, unknown>> = []
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 'email-1' }))
+    vi.stubGlobal('fetch', fetchMock)
+    mocks.getPayload.mockResolvedValue({
+      find: vi.fn(async ({ where }: { where?: { cacheKey?: { equals?: string } } }) => ({
+        docs: docs.filter((doc) => doc.cacheKey === where?.cacheKey?.equals),
+      })),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        const created = { id: docs.length + 1, ...data }
+        docs.push(created)
+        return created
+      }),
+      update: vi.fn(async ({ id, data }: { id: number; data: Record<string, unknown> }) => {
+        const index = docs.findIndex((doc) => doc.id === id)
+        docs[index] = { ...docs[index], ...data }
+        return docs[index]
+      }),
+      delete: vi.fn(async () => undefined),
+      sendEmail: vi.fn(async () => ({ id: 'payload-email' })),
+    })
+
+    const alerts = await import('./instagramAlerts')
+    await alerts.recordInstagramIntegrationFailure('refresh', 'Refresh rejected')
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual(
+      expect.objectContaining({
+        from: 'Wedding Times Berlin <no-reply@theweddingtimesberlin.de>',
+      }),
+    )
+  })
+
+  it('does not use a generated vercel.app domain as the Resend sender', async () => {
+    process.env.RESEND_API_KEY = 're_test'
+    delete process.env.RESEND_FROM_ADDRESS
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = 'theweddingtimesberlin.vercel.app'
+    const docs: Array<Record<string, unknown>> = []
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 'email-1' }))
+    vi.stubGlobal('fetch', fetchMock)
+    mocks.getPayload.mockResolvedValue({
+      find: vi.fn(async ({ where }: { where?: { cacheKey?: { equals?: string } } }) => ({
+        docs: docs.filter((doc) => doc.cacheKey === where?.cacheKey?.equals),
+      })),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        const created = { id: docs.length + 1, ...data }
+        docs.push(created)
+        return created
+      }),
+      update: vi.fn(async ({ id, data }: { id: number; data: Record<string, unknown> }) => {
+        const index = docs.findIndex((doc) => doc.id === id)
+        docs[index] = { ...docs[index], ...data }
+        return docs[index]
+      }),
+      delete: vi.fn(async () => undefined),
+      sendEmail: vi.fn(async () => ({ id: 'payload-email' })),
+    })
+
+    const alerts = await import('./instagramAlerts')
+    await alerts.recordInstagramIntegrationFailure('refresh', 'Refresh rejected')
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual(
+      expect.objectContaining({
+        from: 'Wedding Times Berlin <no-reply@theweddingtimesberlin.de>',
       }),
     )
   })

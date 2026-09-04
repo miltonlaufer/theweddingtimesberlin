@@ -67,7 +67,7 @@ Minimum:
 - `PAYLOAD_SECRET` (required)
 - `DATABASE_URI` (optional locally; required for Postgres)
 - `RESEND_API_KEY` (required for password reset emails)
-- `RESEND_FROM_ADDRESS` (required; must be a verified sender in Resend)
+- `RESEND_FROM_ADDRESS` (optional sender override)
 
 Example local `.env.local` (SQLite):
 
@@ -81,7 +81,7 @@ Example `.env.local` (Supabase Postgres):
 PAYLOAD_SECRET="change-me"
 DATABASE_URI="postgres://USER:PASSWORD@HOST:5432/DBNAME"
 RESEND_API_KEY="re_xxxxxxxxxxxxx"
-RESEND_FROM_ADDRESS="admin@yourdomain.com"
+# Optional: RESEND_FROM_ADDRESS="no-reply@theweddingtimesberlin.de"
 ```
 
 ## Email Configuration (Resend)
@@ -95,7 +95,12 @@ Payload CMS uses **Resend** for sending password reset emails and other transact
 3. Add and verify a sender domain/email address in the Resend dashboard
 4. Set the following environment variables:
    - `RESEND_API_KEY` - Your Resend API key
-   - `RESEND_FROM_ADDRESS` - A verified sender email address
+   - `RESEND_FROM_ADDRESS` - Optional verified sender override
+
+Without an override, the sender is `no-reply@<production-domain>`. On Vercel, the
+domain comes from `VERCEL_PROJECT_PRODUCTION_URL`, which prefers the shortest custom
+production domain. Generated `*.vercel.app` domains are rejected; local and fallback
+execution uses the canonical site domain.
 
 **Note:** Resend offers a generous free tier (3,000 emails/month) which is perfect for development and small projects.
 
@@ -301,7 +306,6 @@ The service worker (`src/sw.ts`) handles:
 - `PAYLOAD_SECRET` - Payload CMS secret key
 - `OPENAI_API_KEY` - OpenAI API key for article generation
 - `RESEND_API_KEY` - Resend API key for emails
-- `RESEND_FROM_ADDRESS` - Verified sender email address
 - `CRON_SECRET` - Secret for protecting cron endpoints (production)
 
 ### Storage (one provider required)
@@ -323,6 +327,7 @@ The service worker (`src/sw.ts`) handles:
 ### Optional
 
 - `DATABASE_URI` - Database connection string (defaults to SQLite locally)
+- `RESEND_FROM_ADDRESS` - Verified sender override (defaults to `no-reply@<production-domain>`)
 - `STORAGE_PROVIDER` - Storage provider: `supabase` (default) or `cloudflare`
 - `IMAGE_PROXY_ENABLED` - Enable image proxy to hide bucket URLs (default: `false`)
 - `OPENAI_MODEL` - OpenAI model (default: `gpt-4o-mini`)
