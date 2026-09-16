@@ -50,6 +50,21 @@ const DraftToneSchema = z.object({
   reason: z.string().max(300),
 })
 
+function normalizeDraftTonePayload(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+
+  const payload = value as Record<string, unknown>
+  const englishShare = payload.englishShare
+  if (typeof englishShare !== 'number' || englishShare <= 1 || englishShare > 100) {
+    return value
+  }
+
+  return {
+    ...payload,
+    englishShare: englishShare / 100,
+  }
+}
+
 function extractFirstJsonObject(text: string): string {
   const firstBrace = text.indexOf('{')
   const lastBrace = text.lastIndexOf('}')
@@ -542,6 +557,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
     'The headline, subheadline, and excerpt must express one coherent conceptual mechanism and the same social accusation.',
     'For headline language, count only classified English/German words and treat proper names as neutral.',
     'Set languagePass=false when the 60%/quotation/isolated-term policy fails or when the subheadline or excerpt are not US English.',
+    'Return englishShare as a decimal from 0 to 1 (for example 0.67), never as a percentage from 0 to 100.',
   ].join('\n')
   const userPrompt = [
     'Evaluate this draft pitch JSON:',
@@ -561,7 +577,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
 
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const parsed = JSON.parse(extractFirstJsonObject(text)) as unknown
-  const tone = DraftToneSchema.parse(parsed)
+  const tone = DraftToneSchema.parse(normalizeDraftTonePayload(parsed))
   return tone
 }
 
@@ -668,7 +684,11 @@ export async function evaluateDraftCandidate(params: {
   let tone: DraftEvaluation['tone']
   try {
     tone = await evaluateDraftTone(params.candidate)
-  } catch {
+  } catch (error) {
+    console.warn(
+      '[DRAFT-PIPELINE] Tone evaluator failed',
+      error instanceof Error ? error.message : String(error),
+    )
     const hasDeterministicEnglishEvidence = headlineLanguage.englishWordCount > 0
     tone = {
       funScore: 7,

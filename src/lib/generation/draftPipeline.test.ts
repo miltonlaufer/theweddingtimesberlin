@@ -191,6 +191,69 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/(?:reject|pass=false).*merely.*(?:dirty word|suggestive phrase)/i)
   })
 
+  it('normalizes evaluator percentage-shaped English shares before validation', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        languagePass: true,
+        englishShare: 66.67,
+        germanUsageSummary: 'One isolated German term used.',
+        pass: true,
+        reason: 'Accepted.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Hospital Queue Demands Firmer Submission Before Opening',
+        subheadline: 'Patients discover the waiting policy prefers those willing to submit.',
+        excerpt: 'Administrators promise satisfaction once everyone accepts a firmer grip.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(true)
+    expect(evaluation.tone.englishShare).toBeCloseTo(0.6667)
+  })
+
+  it('logs evaluator parse failures before using the fail-closed fallback', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        languagePass: true,
+        englishShare: 'sixty-seven percent',
+        germanUsageSummary: '',
+        pass: true,
+        reason: 'Accepted.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Hospital Queue Demands Firmer Submission Before Opening',
+        subheadline: 'Patients discover the waiting policy prefers those willing to submit.',
+        excerpt: 'Administrators promise satisfaction once everyone accepts a firmer grip.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(warn).toHaveBeenCalledWith(
+      '[DRAFT-PIPELINE] Tone evaluator failed',
+      expect.stringContaining('englishShare'),
+    )
+    warn.mockRestore()
+  })
+
   it('rejects a German-dominant draft before invoking the tone evaluator', async () => {
     const evaluation = await evaluateDraftCandidate({
       candidate: {
