@@ -4,6 +4,7 @@ import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   ACID_HUMOR_REQUIREMENTS,
+  ANTI_META_COMMENTARY_RULES,
   analyzeHeadlineStructures,
   assessHeadlineTaste,
   assessHeadlineSimilarity,
@@ -440,6 +441,8 @@ export async function generateDraftCandidate(params: {
     '',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     '',
+    ANTI_META_COMMENTARY_RULES,
+    '',
     MICRO_DETAIL_FORMULA_GUARD,
     '',
     CRAZY_HEADLINE_REQUIREMENTS,
@@ -494,8 +497,7 @@ export async function generateDraftCandidate(params: {
     '- Headline must be sharp and specific (not generic).',
     '- Subheadline and excerpt must be complete standalone sentence(s), not cropped fragments.',
     '- Subheadline and excerpt must read like a newspaper deck or summary, not writer notes.',
-    '- Never explain the joke, premise, satire, angle, or creative process in subheadline or excerpt.',
-    '- Forbidden summary openings: "The joke is not...", "This piece...", "This article...", "The satire is...", "The premise is...".',
+    ANTI_META_COMMENTARY_RULES,
     '- Never end subheadline or excerpt with a comma, dash, connector word, dependent clause, or visibly unfinished thought.',
     '- Excerpt should preview a concrete absurd premise in 1-2 sentences.',
     '- Do not reuse the same core premise as anything listed above.',
@@ -553,6 +555,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
     'Output strict JSON only.',
     'Score if the pitch is funny, merciless, and specific.',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    ANTI_META_COMMENTARY_RULES,
     'The headline must carry the story’s conceptual sexual double meaning, not merely contain a dirty word or disconnected suggestive phrase.',
     'The headline, subheadline, and excerpt must express one coherent conceptual mechanism and the same social accusation.',
     'For headline language, count only classified English/German words and treat proper names as neutral.',
@@ -567,6 +570,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
     '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "languagePass": boolean, "englishShare": number, "germanUsageSummary": string, "pass": boolean, "reason": string }',
     '',
     'Set pass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
+    'Set pass=false if any field contains meta-commentary, breaks the fourth wall, labels itself as satire/comedy, or explains the joke, premise, angle, genre, intent, or audience reaction.',
     'Set pass=true only when all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
   ].join('\n')
 

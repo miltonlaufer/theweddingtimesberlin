@@ -39,6 +39,7 @@ const META_SUMMARY_VOICE_PATTERNS: RegExp[] = [
   /\b(?:the\s+)?(?:joke|punchline)\s+(?:is|here|works|comes\s+from|lands|hinges\s+on)\b/i,
   /\b(?:the\s+)?(?:satire|premise|bit|gag|angle|comic\s+engine)\s+(?:is|works|comes\s+from|lands|hinges\s+on)\b/i,
   /\b(?:this|the)\s+(?:piece|article|story|essay|dispatch|satire)\s+(?:follows|tracks|explores|examines|argues|shows|reveals|satirizes|uses|turns|asks|is\s+about)\b/i,
+  /\b(?:this|the)\s+(?:piece|article|story|essay|dispatch)\s+(?:would|will|aims?\s+to|tries?\s+to|seeks?\s+to|is\s+(?:meant|intended|designed)\s+to)\s+(?:satiri[sz]e|parody|mock|lampoon|explore|examine|show|reveal|comment\s+on)\b/i,
   /\b(?:explains?|unpacks?|summari[sz]es)\s+the\s+(?:joke|satire|premise|angle|creative\s+process)\b/i,
 ]
 

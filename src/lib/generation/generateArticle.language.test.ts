@@ -174,6 +174,8 @@ describe('generateArticle final article-language guard', () => {
     expect(combined).toMatch(/power dynamics.*escalation.*(?:ending|conclusion)/i)
     expect(combined).toMatch(/headline.*(?:same|central).*double meaning/i)
     expect(combined).not.toContain('Include 4-6 double entendres')
+    expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
+    expect(combined).toMatch(/all reader-visible text/i)
   })
 
   it('makes critique and rewrite preserve conceptual innuendo in the headline and story', async () => {
@@ -216,12 +218,15 @@ describe('generateArticle final article-language guard', () => {
     )
     expect(critiquePrompt).toContain('suggestive rather than pornographically explicit')
     expect(critiquePrompt).toContain('word-count quota')
+    expect(critiquePrompt).toContain('NEVER BREAK THE FOURTH WALL')
+    expect(critiquePrompt).toMatch(/passes=false.*meta-commentary/i)
     expect(rewritePrompt).toMatch(
       /(?:rebuild|rewrite).*sexual double meaning.*(?:premise|structure)/i,
     )
     expect(rewritePrompt).toMatch(/headline.*(?:same|central).*double meaning/i)
     expect(rewritePrompt).toContain('suggestive rather than pornographically explicit')
     expect(rewritePrompt).toContain('word-count quota')
+    expect(rewritePrompt).toContain('NEVER BREAK THE FOURTH WALL')
   })
 
   it('keeps locked headline fields immutable during critique rewrites', async () => {
@@ -302,6 +307,7 @@ describe('generateArticle final article-language guard', () => {
     expect(translationPrompt).toContain('JSON schema (LOCKED DRAFT MODE)')
     expect(translationPrompt).not.toContain('"headline": string')
     expect(translationPrompt).toContain('CONCEPTUAL SEXUAL INNUENDO')
+    expect(translationPrompt).toContain('NEVER BREAK THE FOURTH WALL')
     expect(result.article.headline).toBe(seedDraft.headline)
     expect(result.article.subheadline).toBe(seedDraft.subheadline)
     expect(result.article.excerpt).toBe(seedDraft.excerpt)
@@ -337,6 +343,7 @@ describe('generateArticle final article-language guard', () => {
     expect(repairPrompt).toContain(`Exact locked subheadline: "${seedDraft.subheadline}"`)
     expect(repairPrompt).toContain(`Exact locked excerpt: "${seedDraft.excerpt}"`)
     expect(repairPrompt).toMatch(/body.*same.*(?:double meaning|concept)/i)
+    expect(repairPrompt).toContain('NEVER BREAK THE FOURTH WALL')
   })
 
   it('runs a parse-error repair through the satire critique gate', async () => {
@@ -411,6 +418,40 @@ describe('generateArticle final article-language guard', () => {
     expect(shortenPrompt).toContain('CONCEPTUAL SEXUAL INNUENDO')
     expect(shortenPrompt).toContain(`Exact locked headline: "${seedDraft.headline}"`)
     expect(shortenPrompt).toMatch(/body.*same.*(?:double meaning|concept)/i)
+    expect(shortenPrompt).toContain('NEVER BREAK THE FOURTH WALL')
+  })
+
+  it('rejects meta-commentary identified semantically even when it evades the narrow fallback', async () => {
+    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(fullArticle) })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: true,
+        englishShare: 1,
+        invalidField: 'none',
+        germanUsageSummary: '',
+        metaCommentaryPass: false,
+        invalidMetaField: 'bodyMarkdown',
+        reason: 'The body addresses readers as an audience for a comic treatment.',
+      }),
+    })
+
+    await expect(generateArticle(makeInput())).rejects.toThrow(
+      'META_COMMENTARY_GUARD: bodyMarkdown',
+    )
+  })
+
+  it('blocks known explicit self-description even when the semantic evaluator is unavailable', async () => {
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        ...fullArticle,
+        bodyMarkdown: `${coherentBody}\n\nThe piece would satirize the civic habit of declaring danger solved from a safe studio chair.`,
+      }),
+    })
+
+    await expect(generateArticle(makeInput())).rejects.toThrow(
+      'META_COMMENTARY_GUARD: bodyMarkdown',
+    )
+    expect(mocks.invoke).toHaveBeenCalledOnce()
   })
 
   it('activates AfR rules and explanation when AfR mode is explicitly forced', async () => {

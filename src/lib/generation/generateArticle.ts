@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
 import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
 import {
+  hasMetaSummaryVoice,
   normalizeExcerptForStorage,
   normalizeOptionalExcerptForStorage,
 } from '@/lib/text/excerptQuality'
@@ -148,6 +149,20 @@ const FinalArticleLanguageSchema = z.object({
   englishShare: z.number().min(0).max(1),
   invalidField: z.enum(['headline', 'subheadline', 'excerpt', 'none']).optional().default('none'),
   germanUsageSummary: z.string().max(300),
+  metaCommentaryPass: z.boolean().optional().default(true),
+  invalidMetaField: z
+    .enum([
+      'headline',
+      'subheadline',
+      'excerpt',
+      'bodyMarkdown',
+      'imageCaption',
+      'newAuthorTitle',
+      'newAuthorBio',
+      'none',
+    ])
+    .optional()
+    .default('none'),
   reason: z.string().max(300),
 })
 
@@ -195,6 +210,7 @@ export function isRetryableGenerationError(error: unknown): boolean {
   // Retry on repetition guard errors
   if (error.message.includes(REPETITION_GUARD_PREFIX)) return true
   if (error.message.includes(HEADLINE_LANGUAGE_GUARD_PREFIX)) return true
+  if (error.message.includes(META_COMMENTARY_GUARD_PREFIX)) return true
   // Retry on wedding ceremony content errors (article was about weddings instead of Wedding neighborhood)
   if (isWeddingCeremonyError(error)) return true
   return false
@@ -894,6 +910,17 @@ const ANTI_META_SURREAL_RULES = [
   '- Never explain that the story is absurd. Report events plainly; let absurdity emerge from facts and reactions.',
   '- Replace meta framing with concrete observable detail (actions, quotes, consequences).',
 ].join('\n')
+
+export const ANTI_META_COMMENTARY_RULES = [
+  'NO META-COMMENTARY — NEVER BREAK THE FOURTH WALL (ABSOLUTE):',
+  '- Stay entirely inside the reported world. Never discuss the writing, genre, comic intent, or audience response.',
+  '- Never label or describe the output as an article, piece, story, satire, comedy, parody, joke, premise, bit, gag, angle, or creative exercise.',
+  '- Never say what the article/piece/story would, will, aims to, or tries to satirize, show, explore, mock, or reveal.',
+  '- Never explain where the joke, satire, absurdity, or humor lies, and never tell readers what they should notice or laugh at.',
+  '- In headline, subheadline, excerpt, bodyMarkdown, imageCaption, and all reader-visible text, report claims, actions, quotes, and consequences directly; the reader must infer the satire and comedy.',
+].join('\n')
+
+const META_COMMENTARY_GUARD_PREFIX = 'META_COMMENTARY_GUARD'
 
 const AFR_RECURRING_STORY_RULES = [
   'AFR RECURRING STORY MODE (MANDATORY WHEN ACTIVE):',
@@ -2651,6 +2678,7 @@ async function critiqueSatireArticle(args: {
     'Penalize innuendo that is merely decorative wordplay or isolated suggestive phrases instead of a structural comic concept.',
     'The headline must carry the same central double meaning that drives the story’s premise, power dynamics, escalation, and ending.',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    ANTI_META_COMMENTARY_RULES,
     'No score inflation.',
     '',
     args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
@@ -2688,6 +2716,7 @@ async function critiqueSatireArticle(args: {
     '',
     'Set passes=true only if ALL scores are at least 9.',
     'Set passes=false when the article is missing a conceptual sexual double meaning, or when its headline does not carry that same concept.',
+    'Set passes=false if any reader-visible field contains meta-commentary, breaks the fourth wall, names the output as satire/comedy, or explains its joke or intent.',
     'revisionInstructions should be concrete and directly actionable.',
   ].join('\n')
 
@@ -2776,6 +2805,7 @@ async function rewriteArticleFromCritique(args: {
     'Target institutions and ideology performance, not identity-based attacks.',
     'No slurs, hate speech, or calls for harm.',
     'Output MUST be strict JSON only.',
+    ANTI_META_COMMENTARY_RULES,
     '',
     args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
     args.includeBerlinThemes
@@ -3029,6 +3059,8 @@ async function translateToEnglish(args: {
     '',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     '',
+    ANTI_META_COMMENTARY_RULES,
+    '',
     WEDDING_REMINDER_SHORT,
   ].join('\n')
 
@@ -3146,6 +3178,8 @@ async function repairToSchema(args: {
     '- Do not sanitize edgy political satire unless required to remove explicit policy violations.',
     '',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    '',
+    ANTI_META_COMMENTARY_RULES,
     '',
     WEDDING_REMINDER_SHORT,
   ].join('\n')
@@ -3268,6 +3302,8 @@ async function shortenToSchema(args: {
     'If the input has a new authorSlug but is missing newAuthorName/Title/Bio, GENERATE them based on the slug.',
     '',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    '',
+    ANTI_META_COMMENTARY_RULES,
     '',
     WEDDING_REMINDER_SHORT,
   ].join('\n')
@@ -3415,6 +3451,26 @@ function finalizeGeneratedExcerpt(article: GeneratedArticle): GeneratedArticle {
   }
 }
 
+function assertNoKnownMetaCommentary(article: GeneratedArticle): void {
+  const readerVisibleFields = {
+    headline: article.headline,
+    subheadline: article.subheadline,
+    excerpt: article.excerpt,
+    bodyMarkdown: article.bodyMarkdown,
+    imageCaption: article.imageCaption,
+    newAuthorTitle: article.newAuthorTitle,
+    newAuthorBio: article.newAuthorBio,
+  }
+
+  for (const [field, value] of Object.entries(readerVisibleFields)) {
+    if (typeof value === 'string' && hasMetaSummaryVoice(value)) {
+      throw new Error(
+        `${META_COMMENTARY_GUARD_PREFIX}: ${field} contains explicit self-referential commentary`,
+      )
+    }
+  }
+}
+
 function enforceSourceRssTopic(
   article: GeneratedArticle,
   usedRssTopic: string | null,
@@ -3439,11 +3495,14 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
   })
 
   const systemPrompt = [
-    'You are the final publication language evaluator for a US-English newspaper.',
+    'You are the final publication language and editorial-voice evaluator for a US-English newspaper.',
     HEADLINE_LANGUAGE_POLICY_PROMPT,
-    'Inspect only headline, subheadline, and excerpt.',
+    'Inspect headline, subheadline, and excerpt for language policy.',
+    ANTI_META_COMMENTARY_RULES,
+    'Inspect every supplied reader-visible field for meta-commentary, including bodyMarkdown, imageCaption, and author copy.',
     'Unknown proper names, place names, company names, titles, and acronyms are neutral rather than German or English.',
     'Set invalidField to the first failing field in headline, subheadline, excerpt order, or none when every field passes.',
+    'Set metaCommentaryPass=false and invalidMetaField to the first failing field if any text breaks the fourth wall, labels itself as satire/comedy, or explains the joke, premise, angle, genre, intent, or desired audience reaction.',
     'Output strict JSON only.',
   ].join('\n')
   const userPrompt = [
@@ -3452,12 +3511,17 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
       headline: params.article.headline,
       subheadline: params.article.subheadline ?? null,
       excerpt: params.article.excerpt ?? null,
+      bodyMarkdown: params.article.bodyMarkdown,
+      imageCaption: params.article.imageCaption ?? null,
+      newAuthorTitle: params.article.newAuthorTitle ?? null,
+      newAuthorBio: params.article.newAuthorBio ?? null,
     }),
     '',
     'JSON schema:',
-    '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "reason": string }',
+    '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "metaCommentaryPass": boolean, "invalidMetaField": "headline" | "subheadline" | "excerpt" | "bodyMarkdown" | "imageCaption" | "newAuthorTitle" | "newAuthorBio" | "none", "reason": string }',
     '',
     'languagePass must be true only when the headline satisfies the full headline policy and both supporting fields are entirely in US English.',
+    'metaCommentaryPass must be true only when every supplied reader-visible field stays inside the reported world and contains no meta-commentary.',
   ].join('\n')
 
   try {
@@ -3468,6 +3532,14 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
     const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
     const parsed = JSON.parse(extractFirstJsonObject(text)) as unknown
     const verdict = FinalArticleLanguageSchema.parse(parsed)
+
+    if (!verdict.metaCommentaryPass) {
+      const invalidMetaField =
+        verdict.invalidMetaField === 'none' ? 'article' : verdict.invalidMetaField
+      throw new Error(
+        `${META_COMMENTARY_GUARD_PREFIX}: ${invalidMetaField} ${verdict.reason || 'contains meta-commentary'}`,
+      )
+    }
 
     if (!verdict.languagePass || verdict.englishShare < 0.6) {
       const invalidField =
@@ -3481,7 +3553,11 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
       )
     }
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith(`${HEADLINE_LANGUAGE_GUARD_PREFIX}:`)) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith(`${HEADLINE_LANGUAGE_GUARD_PREFIX}:`) ||
+        error.message.startsWith(`${META_COMMENTARY_GUARD_PREFIX}:`))
+    ) {
       throw error
     }
     const headlineLanguage = assessHeadlineLanguage(params.article.headline)
@@ -4618,6 +4694,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     '',
     ANTI_META_SURREAL_RULES,
     '',
+    ANTI_META_COMMENTARY_RULES,
+    '',
     useFeatureStoryPrompt
       ? [
           'Tone: Deadpan, serious journalism about absurd situations rooted in REAL social truths. Write with the straight-faced seriousness of a real news reporter, but the humor comes from brutal honesty about how people actually behave—the hypocrisy, the self-deception, the contradictions nobody wants to acknowledge. Think Louis CK doing journalism: the comedy is in naming what everyone sees but nobody says.',
@@ -4858,7 +4936,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         ].join('\n')
       : '',
     'Important: ALL text fields must be written in US English.',
-    'Subheadline and excerpt must read like a newspaper deck or summary under their limits. Never explain the joke, premise, satire, angle, or creative process. Forbidden openings: "The joke is not...", "This piece...", "This article...", "The satire is...", "The premise is...". Never end either field with a comma, dash, connector word, dependent clause, or visibly cropped thought.',
+    ANTI_META_COMMENTARY_RULES,
+    'Subheadline and excerpt must read like a newspaper deck or summary under their limits. Never end either field with a comma, dash, connector word, dependent clause, or visibly cropped thought.',
     SOURCE_ATTRIBUTION_RULES,
     '',
     ABSURD_ANONYMITY_RULES,
@@ -4917,6 +4996,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     NEWSPAPER_VARIANT_GUIDE,
     '',
     ANTI_META_SURREAL_RULES,
+    '',
+    ANTI_META_COMMENTARY_RULES,
     '',
     !useFeatureStoryPrompt
       ? [
@@ -5065,6 +5146,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
     validated = enforceSourceRssTopic(validated, actuallyUsedRssTopic)
     validated = finalizeGeneratedExcerpt(applySeedDraft(validated, input.seedDraft))
+    assertNoKnownMetaCommentary(validated)
     assertArticleLanguagePolicy(validated)
     await assertSemanticFinalArticleLanguagePolicy({ article: validated, apiKey })
     assertLockedDraftMatchesArticle(validated, input.seedDraft)
@@ -5152,6 +5234,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     const repairedWithSeed = finalizeGeneratedExcerpt(
       applySeedDraft(enforceSourceRssTopic(repaired, actuallyUsedRssTopic), input.seedDraft),
     )
+    assertNoKnownMetaCommentary(repairedWithSeed)
     assertArticleLanguagePolicy(repairedWithSeed)
     await assertSemanticFinalArticleLanguagePolicy({ article: repairedWithSeed, apiKey })
     assertLockedDraftMatchesArticle(repairedWithSeed, input.seedDraft)

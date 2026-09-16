@@ -58,6 +58,14 @@ describe('normalizeExcerptForStorage', () => {
     expect(normalizeExcerptForStorage(value, 300)).toBe('')
   })
 
+  it('rejects conditional self-description instead of storing it as a summary', () => {
+    const value =
+      'The piece would satirize the civic habit of declaring danger solved from a safe studio chair.'
+
+    expect(hasMetaSummaryVoice(value)).toBe(true)
+    expect(normalizeExcerptForStorage(value, 300)).toBe('')
+  })
+
   it('keeps newspaper-style summaries that describe the story directly', () => {
     const value =
       'Wedding clerks turned a noon appointment window into the district’s latest test of patience, paperwork, and civic humiliation.'

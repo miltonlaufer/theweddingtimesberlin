@@ -154,6 +154,8 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/sexual double meaning.*(?:premise|comedic engine)/i)
     expect(combined).toMatch(/headline.*(?:carry|express).*(?:same|central).*double meaning/i)
     expect(combined).toMatch(/not.*(?:dirty words|suggestive phrases|word-count quota)/i)
+    expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
+    expect(combined).toMatch(/headline, subheadline, excerpt.*reader.*infer/i)
   })
 
   it('makes conceptual headline innuendo part of draft tone evaluation', async () => {
@@ -189,6 +191,8 @@ describe('generateDraftCandidate', () => {
       /headline, subheadline, and excerpt.*one coherent.*(?:mechanism|concept)/i,
     )
     expect(combined).toMatch(/(?:reject|pass=false).*merely.*(?:dirty word|suggestive phrase)/i)
+    expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
+    expect(combined).toMatch(/pass=false.*meta-commentary/i)
   })
 
   it('normalizes evaluator percentage-shaped English shares before validation', async () => {
