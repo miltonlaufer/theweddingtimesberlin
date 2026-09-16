@@ -497,25 +497,17 @@ const AVOID_OVERUSED_THEMES = [
   '- Prefer other angles: bureaucracy, nightlife specifics, food, neighborhood politics, expat hypocrisy, tech/startups, local characters, crime, absurd local events. Use authenticity and rent sparingly.',
 ].join('\n')
 
-const SPICE_IT_UP = [
-  'SPICE IT UP (subtle sexual innuendo):',
-  '- Include 4-6 double entendres or sexual innuendo that can be read innocently or suggestively',
-  '- Make them more noticeable than before: still clever, but not so faint that readers miss them.',
-  '- At least one should land in a line that also advances the satire, not just decorate it.',
-  '- Use phrases that have a second, sexual meaning when read carefully. VARY YOUR CHOICES widely from examples like:',
-  '  * "penetrating the bureaucracy", "deep dive into the matter", "hard to swallow", "stiff resistance"',
-  '  * "coming from behind in the polls", "a firm grip on the situation", "going down in the rankings"',
-  '  * "mounting pressure", "climaxing at the wrong moment", "throbbing nightlife scene"',
-  '  * "slippery when wet (the Leopoldplatz fountain)", "getting into tight spaces", "a long and arduous entry process"',
-  '  * "blowing the budget", "stroking egos", "rubbing residents the wrong way"',
-  '  * "erected overnight", "the long-awaited opening", "pulling out of the deal at the last second"',
-  '  * "getting on top of the housing crisis", "riding the wave of gentrification", "finishing too quickly"',
-  '  * "exposed positions", "a backdoor arrangement", "stimulating the local economy"',
-  '  * "laying pipe (construction)", "going all the way to the Bürgeramt", "a satisfying resolution"',
-  '  * "grinding to a halt", "the tip of the iceberg", "sliding into new territory"',
-  '- DO NOT reuse the same innuendo across articles. Each article should have FRESH double entendres.',
-  '- Keep it clever, but sharper and dirtier than before—readers should definitely catch the double meaning.',
-  '- NOT explicit pornographic detail, but you may be a little filthier, meaner, and more libidinal in the phrasing.',
+export const CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS = [
+  'CONCEPTUAL SEXUAL INNUENDO (MANDATORY — PRIMARY COMEDIC LAYER):',
+  '- Build one coherent sexual double meaning into the story’s core structural comedic premise.',
+  '- Let that same double meaning reveal the target’s real power dynamics and shape the mechanism, escalation, and ending or conclusion.',
+  '- The headline must carry the same central double meaning while still working as a literal news headline.',
+  '- Develop the concept through callbacks, consequences, character behavior, and institutional language; make it recur naturally across the story.',
+  '- Do not bolt on dirty words, isolated suggestive phrases, or a word-count quota. Those are decoration, not conceptual innuendo.',
+  '- The literal and sexual readings must strengthen the same social accusation instead of competing with the actual topic.',
+  '- Make this layer roughly three times more prominent than faint background innuendo: readers should recognize the governing double meaning early and feel it deepen.',
+  '- Invent a fresh conceptual metaphor for every article. Do not recycle stock phrases or previous sexual mechanisms.',
+  '- Keep it suggestive rather than pornographically explicit; filthier and more libidinal is welcome when it sharpens the satire.',
 ].join('\n')
 
 const WEDDING_NEIGHBORHOOD_CONTEXT = [
@@ -790,6 +782,7 @@ const INTELLECTUAL_HEADLINE_REFERENCES = [
 export const CRAZY_HEADLINE_REQUIREMENTS = [
   'CRAZY HEADLINE REQUIREMENTS (MANDATORY):',
   '- The headline must feel dangerous, funny, and slightly wrong in the mouth.',
+  '- The title must express the story’s central sexual double meaning; adding a random dirty word or disconnected suggestive phrase does not count.',
   '- Prefer 5-12 words. Hard cap 18 words unless a named current-news entity truly requires more.',
   '- Make the title a punchline, threat, confession, question, curse, quoted warning, absurd official notice, or image the reader cannot immediately file away.',
   '- Create curiosity before explanation. Do not summarize the whole thesis.',
@@ -2655,7 +2648,9 @@ async function critiqueSatireArticle(args: {
     'Penalize vagueness and generic absurdism. Reward specificity and social observation.',
     'Penalize pieces that merely describe a mechanism or scam without humiliating a recognizable target.',
     'If the article reads like clever reportage rather than acidic satire, score it down hard.',
-    'Penalize prudish or overly clean phrasing when the piece could sustain sharper innuendo and a dirtier rhythm.',
+    'Penalize innuendo that is merely decorative wordplay or isolated suggestive phrases instead of a structural comic concept.',
+    'The headline must carry the same central double meaning that drives the story’s premise, power dynamics, escalation, and ending.',
+    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     'No score inflation.',
     '',
     args.includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
@@ -2692,6 +2687,7 @@ async function critiqueSatireArticle(args: {
     '}',
     '',
     'Set passes=true only if ALL scores are at least 9.',
+    'Set passes=false when the article is missing a conceptual sexual double meaning, or when its headline does not carry that same concept.',
     'revisionInstructions should be concrete and directly actionable.',
   ].join('\n')
 
@@ -2742,6 +2738,9 @@ async function rewriteArticleFromCritique(args: {
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
   includeBerlinThemes: boolean
+  outputSchemaMode: OutputSchemaMode
+  seedDraft?: GenerateArticleInput['seedDraft']
+  usedRssTopic: string | null
 }): Promise<GeneratedArticle> {
   const rewriteModelName = process.env.OPENAI_REWRITE_MODEL ?? args.modelName
   const llm = new ChatOpenAI({
@@ -2752,6 +2751,23 @@ async function rewriteArticleFromCritique(args: {
 
   const categoriesList = safeStringList(args.categories)
   const authorsList = safeStringList(args.authors)
+  const lockedDraftRewriteSection =
+    args.outputSchemaMode === 'body-only-locked-draft' && args.seedDraft?.headline?.trim()
+      ? [
+          'LOCKED DRAFT REWRITE MODE:',
+          `Exact locked headline: "${args.seedDraft.headline.trim().slice(0, 140)}"`,
+          typeof args.seedDraft.subheadline === 'string'
+            ? `Exact locked subheadline: "${args.seedDraft.subheadline.trim().slice(0, 220)}"`
+            : '',
+          typeof args.seedDraft.excerpt === 'string'
+            ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
+            : '',
+          '- These fields are server-owned and immutable. Do not return or rewrite the headline, subheadline, excerpt, or sourceRssTopic.',
+          '- Deepen the conceptual sexual double meaning already carried by the locked headline throughout the body, power dynamics, escalation, and ending.',
+        ].join('\n')
+      : ''
+  const rewriteSchema =
+    args.outputSchemaMode === 'body-only-locked-draft' ? JSON_SCHEMA_BODY_ONLY : JSON_SCHEMA
 
   const systemPrompt = [
     'You are rewriting an existing satirical article JSON to increase dark political bite.',
@@ -2771,6 +2787,8 @@ async function rewriteArticleFromCritique(args: {
     `Tone profile target: ${args.toneProfile} (${TONE_PROFILE_GUIDANCE[args.toneProfile]})`,
     '',
     args.brief ? ['Original satire brief:', JSON.stringify(args.brief), ''].join('\n') : '',
+    lockedDraftRewriteSection,
+    '',
     'Critique scores and plan:',
     JSON.stringify(args.critique),
     '',
@@ -2781,12 +2799,14 @@ async function rewriteArticleFromCritique(args: {
     authorsList,
     '',
     'Required JSON schema:',
-    JSON_SCHEMA,
+    rewriteSchema,
     '',
     'Article to rewrite:',
     JSON.stringify(args.article),
     '',
     CRAZY_HEADLINE_REQUIREMENTS,
+    '',
+    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     '',
     'CRITICAL RULES:',
     '- Keep valid JSON schema.',
@@ -2794,7 +2814,10 @@ async function rewriteArticleFromCritique(args: {
     '- Increase specificity: names, places, observable behavior.',
     '- Keep the piece uncomfortable and politically critical in both directions.',
     '- If the current draft is merely clever or mechanical, rewrite toward accusation, humiliation, and sharper social truth.',
-    '- Increase sexual double-entendre density where natural; aim for nastier wordplay without becoming explicit.',
+    '- Rewrite the sexual double meaning into the story’s premise and structure so it drives the power dynamics, escalation, and ending rather than decorating sentences.',
+    args.outputSchemaMode === 'body-only-locked-draft'
+      ? '- Preserve the locked headline concept exactly; strengthen its same central double meaning only through the body.'
+      : '- Rewrite the headline so it carries the same central double meaning and works as both literal news and sexual innuendo.',
     '- Preserve category/author unless clearly incompatible with revised content.',
   ].join('\n')
 
@@ -2806,7 +2829,15 @@ async function rewriteArticleFromCritique(args: {
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
-  const validation = GeneratedArticleSchema.safeParse(parsed)
+  const hydratedForValidation =
+    args.outputSchemaMode === 'body-only-locked-draft'
+      ? hydrateLockedDraftFields({
+          output: parsed,
+          seedDraft: args.seedDraft,
+          usedRssTopic: args.usedRssTopic,
+        })
+      : parsed
+  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
   if (validation.success) return validation.data
 
   return await repairToSchema({
@@ -2814,7 +2845,86 @@ async function rewriteArticleFromCritique(args: {
     categories: args.categories,
     authors: args.authors,
     validationErrors: validation.error.issues,
+    outputSchemaMode: args.outputSchemaMode,
+    seedDraft: args.seedDraft,
+    usedRssTopic: args.usedRssTopic,
   })
+}
+
+async function applySatireCritiqueGate(args: {
+  enabled: boolean
+  apiKey: string
+  modelName: string
+  toneProfile: ToneProfile
+  article: GeneratedArticle
+  brief: SatireBrief | null
+  minCritiqueScore: number
+  categories: GeneratorCategoryOption[]
+  authors: GeneratorAuthorOption[]
+  includeBerlinThemes: boolean
+  outputSchemaMode: OutputSchemaMode
+  seedDraft?: GenerateArticleInput['seedDraft']
+  usedRssTopic: string | null
+}): Promise<GeneratedArticle> {
+  if (!args.enabled) {
+    console.log(`${LOG.prefix} Critique disabled by SATIRE_CRITIQUE_ENABLED`)
+    return args.article
+  }
+
+  let article = args.article
+  try {
+    const critique = await critiqueSatireArticle({
+      apiKey: args.apiKey,
+      modelName: args.modelName,
+      toneProfile: args.toneProfile,
+      article,
+      brief: args.brief,
+      includeBerlinThemes: args.includeBerlinThemes,
+    })
+
+    if (!critique) {
+      console.log(`${LOG.prefix} Critique unavailable; keeping first-pass article`)
+      return article
+    }
+
+    console.log(
+      `${LOG.prefix} Critique scores | dark=${critique.darknessScore} political=${critique.politicalCriticismScore} discomfort=${critique.discomfortScore} specificity=${critique.specificityScore}`,
+    )
+    if (!shouldRewriteFromCritique(critique, args.minCritiqueScore)) return article
+
+    console.log(`${LOG.prefix} Critique below threshold; rewriting article for stronger bite`)
+    article = await rewriteArticleFromCritique({
+      apiKey: args.apiKey,
+      modelName: args.modelName,
+      article,
+      critique,
+      brief: args.brief,
+      toneProfile: args.toneProfile,
+      categories: args.categories,
+      authors: args.authors,
+      includeBerlinThemes: args.includeBerlinThemes,
+      outputSchemaMode: args.outputSchemaMode,
+      seedDraft: args.seedDraft,
+      usedRssTopic: args.usedRssTopic,
+    })
+
+    const rewrittenLangSample =
+      `${article.headline}\n${article.subheadline ?? ''}\n${article.bodyMarkdown}`.slice(0, 1200)
+    if (looksNonEnglish(rewrittenLangSample)) {
+      article = await translateToEnglish({
+        bad: article,
+        categories: args.categories,
+        authors: args.authors,
+        outputSchemaMode: args.outputSchemaMode,
+        seedDraft: args.seedDraft,
+        usedRssTopic: args.usedRssTopic,
+      })
+    }
+  } catch (err) {
+    console.warn(`${LOG.prefix} Critique/rewrite step failed; keeping current article`, err)
+  }
+
+  return article
 }
 
 function looksNonEnglish(text: string): boolean {
@@ -2842,6 +2952,9 @@ async function translateToEnglish(args: {
   bad: GeneratedArticle
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
+  outputSchemaMode?: OutputSchemaMode
+  seedDraft?: GenerateArticleInput['seedDraft']
+  usedRssTopic?: string | null
 }): Promise<GeneratedArticle> {
   // Hypotheses:
   // E: model sometimes outputs German despite instructions
@@ -2863,6 +2976,42 @@ async function translateToEnglish(args: {
 
   const categoriesList = safeStringList(args.categories)
   const authorsList = safeStringList(args.authors)
+  const outputSchemaMode = args.outputSchemaMode ?? 'full'
+  const schemaBlock =
+    outputSchemaMode === 'body-only-locked-draft' ? JSON_SCHEMA_BODY_ONLY : JSON_SCHEMA
+  const lockedDraftTranslationSection =
+    outputSchemaMode === 'body-only-locked-draft' && args.seedDraft?.headline?.trim()
+      ? [
+          'LOCKED DRAFT TRANSLATION MODE:',
+          `Exact locked headline: "${args.seedDraft.headline.trim().slice(0, 140)}"`,
+          typeof args.seedDraft.subheadline === 'string'
+            ? `Exact locked subheadline: "${args.seedDraft.subheadline.trim().slice(0, 220)}"`
+            : '',
+          typeof args.seedDraft.excerpt === 'string'
+            ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
+            : '',
+          '- These fields are server-owned and immutable. Do not return or rewrite the headline, subheadline, excerpt, or sourceRssTopic.',
+          '- Translate only the body and editable metadata, keeping the body tied to the same conceptual sexual double meaning carried by the locked headline.',
+        ].join('\n')
+      : ''
+  const translationInput =
+    outputSchemaMode === 'body-only-locked-draft'
+      ? {
+          bodyMarkdown: args.bad.bodyMarkdown,
+          categorySlug: args.bad.categorySlug,
+          authorSlug: args.bad.authorSlug,
+          newAuthorName: args.bad.newAuthorName ?? null,
+          newAuthorTitle: args.bad.newAuthorTitle ?? null,
+          newAuthorBio: args.bad.newAuthorBio ?? null,
+          layout: args.bad.layout,
+          isFeatured: args.bad.isFeatured,
+          isHeadline: args.bad.isHeadline,
+          imageCaption: args.bad.imageCaption ?? null,
+          imagePrompt: args.bad.imagePrompt ?? null,
+          canonicalSourceAuthor: args.bad.canonicalSourceAuthor ?? null,
+          canonicalSourceStory: args.bad.canonicalSourceStory ?? null,
+        }
+      : args.bad
 
   const systemPrompt = [
     'You are a translation-and-structure tool for satirical article JSON.',
@@ -2878,6 +3027,8 @@ async function translateToEnglish(args: {
     '- Preserve and translate newAuthorName, newAuthorTitle, newAuthorBio if present.',
     '- Keep controversial satire if policy-safe; do not sanitize by default.',
     '',
+    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    '',
     WEDDING_REMINDER_SHORT,
   ].join('\n')
 
@@ -2888,10 +3039,15 @@ async function translateToEnglish(args: {
     'Existing authorSlug options (or create new with required fields):',
     authorsList,
     '',
+    lockedDraftTranslationSection,
+    '',
+    'Required JSON schema:',
+    schemaBlock,
+    '',
     'CRITICAL: If authorSlug is NOT in the existing list, you MUST provide newAuthorName, newAuthorTitle, AND newAuthorBio.',
     '',
     'Translate this JSON to US English (minimal edits, preserve tone and political bite, ensure new author fields if needed):',
-    JSON.stringify(args.bad),
+    JSON.stringify(translationInput),
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -2902,13 +3058,24 @@ async function translateToEnglish(args: {
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const jsonText = extractFirstJsonObject(text)
   const parsed = JSON.parse(jsonText) as unknown
-  const validation = GeneratedArticleSchema.safeParse(parsed)
+  const hydratedForValidation =
+    outputSchemaMode === 'body-only-locked-draft'
+      ? hydrateLockedDraftFields({
+          output: parsed,
+          seedDraft: args.seedDraft,
+          usedRssTopic: args.usedRssTopic ?? null,
+        })
+      : parsed
+  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
   if (!validation.success) {
     return await repairToSchema({
       badOutput: text,
       categories: args.categories,
       authors: args.authors,
       validationErrors: validation.error.issues,
+      outputSchemaMode,
+      seedDraft: args.seedDraft,
+      usedRssTopic: args.usedRssTopic ?? null,
     })
   }
 
@@ -2945,6 +3112,22 @@ async function repairToSchema(args: {
 
   const categoriesList = safeStringList(args.categories)
   const authorsList = safeStringList(args.authors)
+  const outputSchemaMode = args.outputSchemaMode ?? 'full'
+  const lockedDraftRepairSection =
+    outputSchemaMode === 'body-only-locked-draft' && args.seedDraft?.headline?.trim()
+      ? [
+          'LOCKED DRAFT REPAIR CONTEXT:',
+          `Exact locked headline: "${args.seedDraft.headline.trim().slice(0, 140)}"`,
+          typeof args.seedDraft.subheadline === 'string'
+            ? `Exact locked subheadline: "${args.seedDraft.subheadline.trim().slice(0, 220)}"`
+            : '',
+          typeof args.seedDraft.excerpt === 'string'
+            ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
+            : '',
+          '- These fields are server-owned and immutable. Do not return or rewrite them.',
+          '- Repair the body so it develops the same conceptual sexual double meaning carried by the locked headline through its power dynamics, escalation, and ending.',
+        ].join('\n')
+      : ''
 
   const systemPrompt = [
     'You are a JSON repair tool for satirical article outputs.',
@@ -2962,6 +3145,8 @@ async function repairToSchema(args: {
     '- Respect ALL max-length limits; rewrite text to fit without truncating mid-word.',
     '- Do not sanitize edgy political satire unless required to remove explicit policy violations.',
     '',
+    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    '',
     WEDDING_REMINDER_SHORT,
   ].join('\n')
 
@@ -2969,7 +3154,6 @@ async function repairToSchema(args: {
     args.validationErrors && args.validationErrors.length > 0
       ? ['Validation errors to fix:', formatZodIssues(args.validationErrors), ''].join('\n')
       : ''
-  const outputSchemaMode = args.outputSchemaMode ?? 'full'
   const schemaBlock =
     outputSchemaMode === 'body-only-locked-draft' ? JSON_SCHEMA_BODY_ONLY : JSON_SCHEMA
 
@@ -2983,6 +3167,7 @@ async function repairToSchema(args: {
     outputSchemaMode === 'body-only-locked-draft'
       ? 'LOCKED DRAFT MODE: headline/subheadline/excerpt/sourceRssTopic are server-locked; DO NOT return them.'
       : '',
+    lockedDraftRepairSection,
     '',
     'Required JSON schema:',
     schemaBlock,
@@ -3055,6 +3240,21 @@ async function shortenToSchema(args: {
   const categoriesList = safeStringList(args.categories)
   const authorsList = safeStringList(args.authors)
   const outputSchemaMode = args.outputSchemaMode ?? 'full'
+  const lockedDraftShortenSection =
+    outputSchemaMode === 'body-only-locked-draft' && args.seedDraft?.headline?.trim()
+      ? [
+          'LOCKED DRAFT SHORTENING CONTEXT:',
+          `Exact locked headline: "${args.seedDraft.headline.trim().slice(0, 140)}"`,
+          typeof args.seedDraft.subheadline === 'string'
+            ? `Exact locked subheadline: "${args.seedDraft.subheadline.trim().slice(0, 220)}"`
+            : '',
+          typeof args.seedDraft.excerpt === 'string'
+            ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
+            : '',
+          '- These fields are server-owned and immutable. Do not return or rewrite them.',
+          '- Keep the body tied to the same conceptual sexual double meaning carried by the locked headline.',
+        ].join('\n')
+      : ''
   const schemaBlock =
     outputSchemaMode === 'body-only-locked-draft' ? JSON_SCHEMA_BODY_ONLY : JSON_SCHEMA
 
@@ -3066,6 +3266,8 @@ async function shortenToSchema(args: {
     'Output MUST be strict JSON only, no markdown fences, no extra text.',
     'categorySlug can be existing OR new. authorSlug can be existing OR new (if new, ensure newAuthorName/Title/Bio are provided).',
     'If the input has a new authorSlug but is missing newAuthorName/Title/Bio, GENERATE them based on the slug.',
+    '',
+    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     '',
     WEDDING_REMINDER_SHORT,
   ].join('\n')
@@ -3083,6 +3285,7 @@ async function shortenToSchema(args: {
     outputSchemaMode === 'body-only-locked-draft'
       ? 'LOCKED DRAFT MODE: headline/subheadline/excerpt/sourceRssTopic are server-locked; DO NOT return them.'
       : '',
+    lockedDraftShortenSection,
     '',
     'JSON schema:',
     schemaBlock,
@@ -4423,7 +4626,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           EDGE_AND_POLITICAL_INCORRECTNESS,
           '',
-          SPICE_IT_UP,
+          CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
           '',
           INTELLECTUAL_EASTER_EGGS,
         ].join('\n')
@@ -4433,7 +4636,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           EDGE_AND_POLITICAL_INCORRECTNESS,
           '',
-          SPICE_IT_UP,
+          CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
           '',
           INTELLECTUAL_EASTER_EGGS,
         ].join('\n'),
@@ -4685,7 +4888,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '- NO abstract philosophical musings. ONLY concrete, specific details about the scenario.',
           '- Think: "A real journalist would write this story with these details"',
           '',
-          SPICE_IT_UP,
+          CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
           '',
           INTELLECTUAL_EASTER_EGGS,
           '',
@@ -4716,7 +4919,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     ANTI_META_SURREAL_RULES,
     '',
     !useFeatureStoryPrompt
-      ? [EDGE_SHORT, '', SPICE_IT_UP, '', INTELLECTUAL_EASTER_EGGS, ''].join('\n')
+      ? [
+          EDGE_SHORT,
+          '',
+          CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+          '',
+          INTELLECTUAL_EASTER_EGGS,
+          '',
+        ].join('\n')
       : '',
     outputSchemaMode === 'body-only-locked-draft'
       ? 'HEADLINE/SUBHEADLINE/EXCERPT are locked by server. Focus only on body quality and metadata.'
@@ -4820,62 +5030,27 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         bad: validated,
         categories: input.categories,
         authors: input.authors,
+        outputSchemaMode,
+        seedDraft: input.seedDraft,
+        usedRssTopic: actuallyUsedRssTopic,
       })
     }
 
-    try {
-      if (critiqueEnabled) {
-        const critique = await critiqueSatireArticle({
-          apiKey,
-          modelName,
-          toneProfile,
-          article: validated,
-          brief: satireBrief,
-          includeBerlinThemes,
-        })
-
-        if (critique) {
-          console.log(
-            `${LOG.prefix} Critique scores | dark=${critique.darknessScore} political=${critique.politicalCriticismScore} discomfort=${critique.discomfortScore} specificity=${critique.specificityScore}`,
-          )
-          if (shouldRewriteFromCritique(critique, minCritiqueScore)) {
-            console.log(
-              `${LOG.prefix} Critique below threshold; rewriting article for stronger bite`,
-            )
-            validated = await rewriteArticleFromCritique({
-              apiKey,
-              modelName,
-              article: validated,
-              critique,
-              brief: satireBrief,
-              toneProfile,
-              categories: input.categories,
-              authors: input.authors,
-              includeBerlinThemes,
-            })
-
-            const rewrittenLangSample =
-              `${validated.headline}\n${validated.subheadline ?? ''}\n${validated.bodyMarkdown}`.slice(
-                0,
-                1200,
-              )
-            if (looksNonEnglish(rewrittenLangSample)) {
-              validated = await translateToEnglish({
-                bad: validated,
-                categories: input.categories,
-                authors: input.authors,
-              })
-            }
-          }
-        } else {
-          console.log(`${LOG.prefix} Critique unavailable; keeping first-pass article`)
-        }
-      } else {
-        console.log(`${LOG.prefix} Critique disabled by SATIRE_CRITIQUE_ENABLED`)
-      }
-    } catch (err) {
-      console.warn(`${LOG.prefix} Critique/rewrite step failed; keeping current article`, err)
-    }
+    validated = await applySatireCritiqueGate({
+      enabled: critiqueEnabled,
+      apiKey,
+      modelName,
+      toneProfile,
+      article: validated,
+      brief: satireBrief,
+      minCritiqueScore,
+      categories: input.categories,
+      authors: input.authors,
+      includeBerlinThemes,
+      outputSchemaMode,
+      seedDraft: input.seedDraft,
+      usedRssTopic: actuallyUsedRssTopic,
+    })
 
     validated = ensureAfRExplanationInNonHeadlineText(
       sanitizeMetaSurrealFraming(
@@ -4921,20 +5096,51 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     }
     console.log(`${LOG.prefix} Parse/validation error, repairing...`)
     // Fallback: deterministic repair using cheaper model
-    const repaired = ensureAfRExplanationInNonHeadlineText(
+    let repaired = await repairToSchema({
+      badOutput: text,
+      categories: input.categories,
+      authors: input.authors,
+      outputSchemaMode,
+      seedDraft: input.seedDraft,
+      usedRssTopic: actuallyUsedRssTopic,
+    })
+    if (input.forceOpinion) {
+      repaired.categorySlug = 'opinion'
+      repaired.layout = 'opinion'
+    }
+
+    const repairedLangSample =
+      `${repaired.headline}\n${repaired.subheadline ?? ''}\n${repaired.bodyMarkdown}`.slice(0, 1200)
+    if (looksNonEnglish(repairedLangSample)) {
+      repaired = await translateToEnglish({
+        bad: repaired,
+        categories: input.categories,
+        authors: input.authors,
+        outputSchemaMode,
+        seedDraft: input.seedDraft,
+        usedRssTopic: actuallyUsedRssTopic,
+      })
+    }
+
+    repaired = await applySatireCritiqueGate({
+      enabled: critiqueEnabled,
+      apiKey,
+      modelName,
+      toneProfile,
+      article: repaired,
+      brief: satireBrief,
+      minCritiqueScore,
+      categories: input.categories,
+      authors: input.authors,
+      includeBerlinThemes,
+      outputSchemaMode,
+      seedDraft: input.seedDraft,
+      usedRssTopic: actuallyUsedRssTopic,
+    })
+
+    repaired = ensureAfRExplanationInNonHeadlineText(
       sanitizeMetaSurrealFraming(
-        sanitizeCanonicalAttributionMentions(
-          sanitizeArticleSourceMentions(
-            await repairToSchema({
-              badOutput: text,
-              categories: input.categories,
-              authors: input.authors,
-              outputSchemaMode,
-              seedDraft: input.seedDraft,
-              usedRssTopic: actuallyUsedRssTopic,
-            }),
-          ),
-        ),
+        sanitizeCanonicalAttributionMentions(sanitizeArticleSourceMentions(repaired)),
       ),
       { force: useAfRTopicMode },
     )

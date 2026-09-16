@@ -123,6 +123,74 @@ describe('generateDraftCandidate', () => {
     )
   })
 
+  it('requires the pitch headline to carry the story’s conceptual sexual double meaning', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        headline: 'Bürgeramt Promises a Firmer Grip on Every Application',
+        subheadline: 'The office turns administrative control into an intimacy problem.',
+        excerpt: 'Officials insist the new procedure is satisfying once residents submit.',
+      }),
+    })
+
+    await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: false,
+        forceOpinion: false,
+        includeTopics: false,
+      },
+      topicSummary: '',
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      useRandomModes: false,
+    })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toMatch(/sexual double meaning.*(?:premise|comedic engine)/i)
+    expect(combined).toMatch(/headline.*(?:carry|express).*(?:same|central).*double meaning/i)
+    expect(combined).toMatch(/not.*(?:dirty words|suggestive phrases|word-count quota)/i)
+  })
+
+  it('makes conceptual headline innuendo part of draft tone evaluation', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        languagePass: true,
+        englishShare: 1,
+        germanUsageSummary: '',
+        pass: true,
+        reason: 'Accepted.',
+      }),
+    })
+
+    await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Bürgeramt Promises a Firmer Grip on Every Application',
+        subheadline: 'The office turns administrative control into an intimacy problem.',
+        excerpt: 'Officials insist the new procedure is satisfying once residents submit.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toMatch(/headline.*conceptual sexual double meaning/i)
+    expect(combined).toMatch(
+      /headline, subheadline, and excerpt.*one coherent.*(?:mechanism|concept)/i,
+    )
+    expect(combined).toMatch(/(?:reject|pass=false).*merely.*(?:dirty word|suggestive phrase)/i)
+  })
+
   it('rejects a German-dominant draft before invoking the tone evaluator', async () => {
     const evaluation = await evaluateDraftCandidate({
       candidate: {
@@ -236,7 +304,7 @@ describe('generateDraftCandidate', () => {
     expect(mocks.invoke).toHaveBeenCalledOnce()
   })
 
-  it('retains the tone fallback for an ambiguous draft after deterministic checks pass', async () => {
+  it('fails closed when the semantic tone evaluator is unavailable', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockRejectedValue(new Error('evaluator unavailable'))
 
@@ -250,7 +318,7 @@ describe('generateDraftCandidate', () => {
       acceptedDrafts: [],
     })
 
-    expect(evaluation.accepted).toBe(true)
+    expect(evaluation.accepted).toBe(false)
     expect(evaluation.tone.reason).toContain('evaluator unavailable')
   })
 

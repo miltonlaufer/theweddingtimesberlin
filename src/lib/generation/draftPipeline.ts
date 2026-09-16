@@ -9,6 +9,7 @@ import {
   assessHeadlineSimilarity,
   assessRecentCoverageOverlap,
   CRAZY_HEADLINE_REQUIREMENTS,
+  CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
   HUMOR_PERSPECTIVE_METHOD,
   MICRO_DETAIL_FORMULA_GUARD,
   shouldIncludeHumorPerspectiveMethod,
@@ -422,6 +423,8 @@ export async function generateDraftCandidate(params: {
       : '',
     ACID_HUMOR_REQUIREMENTS,
     '',
+    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    '',
     MICRO_DETAIL_FORMULA_GUARD,
     '',
     CRAZY_HEADLINE_REQUIREMENTS,
@@ -534,6 +537,9 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
     HEADLINE_LANGUAGE_POLICY_PROMPT,
     'Output strict JSON only.',
     'Score if the pitch is funny, merciless, and specific.',
+    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    'The headline must carry the story’s conceptual sexual double meaning, not merely contain a dirty word or disconnected suggestive phrase.',
+    'The headline, subheadline, and excerpt must express one coherent conceptual mechanism and the same social accusation.',
     'For headline language, count only classified English/German words and treat proper names as neutral.',
     'Set languagePass=false when the 60%/quotation/isolated-term policy fails or when the subheadline or excerpt are not US English.',
   ].join('\n')
@@ -544,6 +550,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
     'JSON schema:',
     '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "languagePass": boolean, "englishShare": number, "germanUsageSummary": string, "pass": boolean, "reason": string }',
     '',
+    'Set pass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
     'Set pass=true only when all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
   ].join('\n')
 
@@ -672,9 +679,9 @@ export async function evaluateDraftCandidate(params: {
       germanUsageSummary: hasDeterministicEnglishEvidence
         ? 'Deterministic language gate passed; evaluator unavailable.'
         : 'No deterministic English evidence; evaluator unavailable.',
-      pass: hasDeterministicEnglishEvidence,
+      pass: false,
       reason: hasDeterministicEnglishEvidence
-        ? 'Tone evaluator unavailable; accepted by fallback.'
+        ? 'Tone evaluator unavailable; rejected because mandatory semantic requirements could not be verified.'
         : 'Tone evaluator unavailable; rejected because the headline has no English evidence.',
     }
   }
