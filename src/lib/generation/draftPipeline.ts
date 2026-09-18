@@ -44,27 +44,9 @@ const DraftToneSchema = z.object({
   funScore: z.number().int().min(1).max(10),
   mercilessScore: z.number().int().min(1).max(10),
   specificityScore: z.number().int().min(1).max(10),
-  languagePass: z.boolean(),
-  englishShare: z.number().min(0).max(1),
-  germanUsageSummary: z.string().max(200),
   pass: z.boolean(),
   reason: z.string().max(300),
 })
-
-function normalizeDraftTonePayload(value: unknown): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-
-  const payload = value as Record<string, unknown>
-  const englishShare = payload.englishShare
-  if (typeof englishShare !== 'number' || englishShare <= 1 || englishShare > 100) {
-    return value
-  }
-
-  return {
-    ...payload,
-    englishShare: englishShare / 100,
-  }
-}
 
 function extractFirstJsonObject(text: string): string {
   const firstBrace = text.indexOf('{')
@@ -538,7 +520,9 @@ export async function generateDraftCandidate(params: {
   }
 }
 
-async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvaluation['tone']> {
+async function evaluateDraftTone(
+  candidate: DraftCandidate,
+): Promise<z.infer<typeof DraftToneSchema>> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY')
 
@@ -551,23 +535,20 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
 
   const systemPrompt = [
     'You are a satire pitch evaluator.',
-    HEADLINE_LANGUAGE_POLICY_PROMPT,
     'Output strict JSON only.',
     'Score if the pitch is funny, merciless, and specific.',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     ANTI_META_COMMENTARY_RULES,
     'The headline must carry the story’s conceptual sexual double meaning, not merely contain a dirty word or disconnected suggestive phrase.',
     'The headline, subheadline, and excerpt must express one coherent conceptual mechanism and the same social accusation.',
-    'For headline language, count only classified English/German words and treat proper names as neutral.',
-    'Set languagePass=false when the 60%/quotation/isolated-term policy fails or when the subheadline or excerpt are not US English.',
-    'Return englishShare as a decimal from 0 to 1 (for example 0.67), never as a percentage from 0 to 100.',
+    'Language policy has already been validated by a separate deterministic gate. Do not score or reject language.',
   ].join('\n')
   const userPrompt = [
     'Evaluate this draft pitch JSON:',
     JSON.stringify(candidate),
     '',
     'JSON schema:',
-    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "languagePass": boolean, "englishShare": number, "germanUsageSummary": string, "pass": boolean, "reason": string }',
+    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "pass": boolean, "reason": string }',
     '',
     'Set pass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
     'Set pass=false if any field contains meta-commentary, breaks the fourth wall, labels itself as satire/comedy, or explains the joke, premise, angle, genre, intent, or audience reaction.',
@@ -581,7 +562,7 @@ async function evaluateDraftTone(candidate: DraftCandidate): Promise<DraftEvalua
 
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const parsed = JSON.parse(extractFirstJsonObject(text)) as unknown
-  const tone = DraftToneSchema.parse(normalizeDraftTonePayload(parsed))
+  const tone = DraftToneSchema.parse(parsed)
   return tone
 }
 
@@ -687,7 +668,13 @@ export async function evaluateDraftCandidate(params: {
 
   let tone: DraftEvaluation['tone']
   try {
-    tone = await evaluateDraftTone(params.candidate)
+    const semanticTone = await evaluateDraftTone(params.candidate)
+    tone = {
+      ...semanticTone,
+      languagePass: true,
+      englishShare: headlineLanguage.englishShare,
+      germanUsageSummary: 'Deterministic language gate passed.',
+    }
   } catch (error) {
     console.warn(
       '[DRAFT-PIPELINE] Tone evaluator failed',
@@ -714,7 +701,7 @@ export async function evaluateDraftCandidate(params: {
   const minMerciless = Number(process.env.DRAFT_MIN_MERCILESS_SCORE ?? 7)
   const minSpecificity = Number(process.env.DRAFT_MIN_SPECIFICITY_SCORE ?? 6)
 
-  if (!tone.languagePass || tone.englishShare < 0.6) {
+  if (!tone.languagePass) {
     return {
       accepted: false,
       reason: `headline-language: ${tone.germanUsageSummary || tone.reason}`,

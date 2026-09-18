@@ -195,7 +195,7 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/pass=false.*meta-commentary/i)
   })
 
-  it('normalizes evaluator percentage-shaped English shares before validation', async () => {
+  it('uses the deterministic English share instead of an evaluator-provided percentage', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
       content: JSON.stringify({
@@ -221,7 +221,40 @@ describe('generateDraftCandidate', () => {
     })
 
     expect(evaluation.accepted).toBe(true)
-    expect(evaluation.tone.englishShare).toBeCloseTo(0.6667)
+    expect(evaluation.tone.englishShare).toBe(1)
+  })
+
+  it('does not let a false semantic language verdict override the deterministic language gate', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        languagePass: false,
+        englishShare: 0.67,
+        germanUsageSummary: 'No German terms or phrases used.',
+        pass: true,
+        reason: 'The pitch is sharp, coherent, and contains no meta-commentary.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Trash Can Consent, Wedding’s New Courtyard Sport',
+        subheadline:
+          'A new building rule makes residents ask permission before using the shared bins.',
+        excerpt:
+          'Property managers turn every bag of trash into a test of manners, class loyalty, and who gets to act offended first.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(true)
+    expect(evaluation.tone.languagePass).toBe(true)
+    expect(evaluation.tone.englishShare).toBe(1)
+    expect(evaluation.tone.germanUsageSummary).toBe('Deterministic language gate passed.')
   })
 
   it('logs evaluator parse failures before using the fail-closed fallback', async () => {
@@ -229,7 +262,7 @@ describe('generateDraftCandidate', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     mocks.invoke.mockResolvedValue({
       content: JSON.stringify({
-        funScore: 8,
+        funScore: 'eight',
         mercilessScore: 8,
         specificityScore: 8,
         languagePass: true,
@@ -253,7 +286,7 @@ describe('generateDraftCandidate', () => {
     expect(evaluation.accepted).toBe(false)
     expect(warn).toHaveBeenCalledWith(
       '[DRAFT-PIPELINE] Tone evaluator failed',
-      expect.stringContaining('englishShare'),
+      expect.stringContaining('funScore'),
     )
     warn.mockRestore()
   })
@@ -272,65 +305,6 @@ describe('generateDraftCandidate', () => {
     expect(evaluation.accepted).toBe(false)
     expect(evaluation.reason).toContain('headline-language:')
     expect(mocks.invoke).not.toHaveBeenCalled()
-  })
-
-  it('rejects an evaluator-detected language violation that passes local heuristics', async () => {
-    process.env.OPENAI_API_KEY = 'test-key'
-    mocks.invoke.mockResolvedValue({
-      content: JSON.stringify({
-        funScore: 8,
-        mercilessScore: 8,
-        specificityScore: 8,
-        languagePass: false,
-        englishShare: 0.4,
-        germanUsageSummary: 'German clause dominates the headline',
-        pass: false,
-        reason: 'Language policy failed.',
-      }),
-    })
-
-    const evaluation = await evaluateDraftCandidate({
-      candidate: {
-        headline: 'Nachtschicht Rules the Founder Economy',
-        subheadline: 'A startup discovers that exhaustion can be invoiced.',
-        excerpt: 'Founders turn late work into a branded moral hierarchy.',
-      },
-      recentCoverage: [],
-      acceptedDrafts: [],
-    })
-
-    expect(evaluation.accepted).toBe(false)
-    expect(evaluation.reason).toContain('headline-language:')
-  })
-
-  it('rejects evaluator-detected non-English supporting text that passes local heuristics', async () => {
-    process.env.OPENAI_API_KEY = 'test-key'
-    mocks.invoke.mockResolvedValue({
-      content: JSON.stringify({
-        funScore: 8,
-        mercilessScore: 8,
-        specificityScore: 8,
-        languagePass: false,
-        englishShare: 1,
-        germanUsageSummary: 'The subheadline is Italian rather than US English.',
-        pass: false,
-        reason: 'Supporting text language policy failed.',
-      }),
-    })
-
-    const evaluation = await evaluateDraftCandidate({
-      candidate: {
-        headline: 'Ashtray Diplomacy Controls the Night Shift',
-        subheadline: 'I pazienti aspettano mentre lo sportello chiude.',
-        excerpt: 'The hospital turns waiting into a branded public service.',
-      },
-      recentCoverage: [],
-      acceptedDrafts: [],
-    })
-
-    expect(evaluation.accepted).toBe(false)
-    expect(evaluation.reason).toContain('headline-language:')
-    expect(evaluation.reason).toContain('subheadline')
   })
 
   it('does not let evaluator outage fallback override an uppercase deterministic rejection', async () => {
