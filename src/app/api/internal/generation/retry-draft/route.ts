@@ -48,6 +48,11 @@ type JobItemDoc = {
   id: string | number
   job?: string | number | { id: string | number }
   draftAttempt?: number
+  headline?: string | null
+  subheadline?: string | null
+  excerpt?: string | null
+  error?: string | null
+  draftEvaluation?: { reason?: string } | null
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -138,6 +143,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       subheadline: entry.subheadline ?? null,
       excerpt: entry.excerpt ?? null,
     }))
+    const previousRejectionReason =
+      item.error?.trim() || item.draftEvaluation?.reason?.trim() || 'Previous pitch was rejected.'
+    const previousAttempt =
+      currentAttempt > 0 && item.headline?.trim()
+        ? {
+            draft: {
+              headline: item.headline.trim(),
+              subheadline: item.subheadline?.trim() || null,
+              excerpt: item.excerpt?.trim() || null,
+            },
+            rejectionReason: previousRejectionReason,
+          }
+        : undefined
 
     const { draft, sourceRssTopic } = await generateDraftCandidate({
       slot,
@@ -146,6 +164,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       blacklistSummary: body.blacklistSummary,
       acceptedDrafts,
       forbiddenSourceTopics: body.forbiddenSourceTopics,
+      previousAttempt,
     })
 
     const evaluation = await evaluateDraftCandidate({

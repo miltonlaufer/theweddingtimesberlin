@@ -110,4 +110,142 @@ describe('slot-worker route', () => {
       )
     }
   })
+
+  it('promotes the best safe rejected draft after all retries are exhausted', async () => {
+    const update = vi.fn().mockResolvedValue({})
+    mocks.getPayload.mockResolvedValue({
+      find: vi.fn().mockResolvedValue({ docs: [] }),
+      update,
+    })
+    const retryResponses = [
+      {
+        ok: true,
+        accepted: false,
+        exhausted: false,
+        draft: {
+          headline: 'Safe First Draft',
+          subheadline: 'The first safe deck.',
+          excerpt: 'The first safe excerpt.',
+        },
+        sourceRssTopic: 'First topic',
+        evaluation: {
+          accepted: false,
+          safeForFallback: true,
+          reason: 'tone: needs more bite',
+          repetition: { overlaps: false, score: 0, reason: 'distinct', matchedReference: null },
+          tone: {
+            funScore: 6,
+            mercilessScore: 7,
+            specificityScore: 6,
+            conceptualInnuendoPass: false,
+            metaCommentaryPass: true,
+            languagePass: true,
+            englishShare: 1,
+            germanUsageSummary: 'Deterministic language gate passed.',
+            pass: false,
+            reason: 'needs more bite',
+          },
+        },
+      },
+      {
+        ok: true,
+        accepted: false,
+        exhausted: false,
+        draft: {
+          headline: 'Unsafe Meta Draft',
+          subheadline: 'The second deck.',
+          excerpt: 'This piece would satirize the institution.',
+        },
+        sourceRssTopic: 'Second topic',
+        evaluation: {
+          accepted: false,
+          safeForFallback: false,
+          reason: 'tone: meta-commentary',
+          repetition: { overlaps: false, score: 0, reason: 'distinct', matchedReference: null },
+          tone: {
+            funScore: 10,
+            mercilessScore: 10,
+            specificityScore: 10,
+            conceptualInnuendoPass: true,
+            metaCommentaryPass: false,
+            languagePass: true,
+            englishShare: 1,
+            germanUsageSummary: 'Deterministic language gate passed.',
+            pass: false,
+            reason: 'meta-commentary',
+          },
+        },
+      },
+      {
+        ok: true,
+        accepted: false,
+        exhausted: true,
+        draft: {
+          headline: 'Best Safe Draft',
+          subheadline: 'The strongest safe deck.',
+          excerpt: 'The strongest safe excerpt.',
+        },
+        sourceRssTopic: 'Third topic',
+        evaluation: {
+          accepted: false,
+          safeForFallback: true,
+          reason: 'tone: innuendo could be stronger',
+          repetition: { overlaps: false, score: 0, reason: 'distinct', matchedReference: null },
+          tone: {
+            funScore: 8,
+            mercilessScore: 8,
+            specificityScore: 7,
+            conceptualInnuendoPass: false,
+            metaCommentaryPass: true,
+            languagePass: true,
+            englishShare: 1,
+            germanUsageSummary: 'Deterministic language gate passed.',
+            pass: false,
+            reason: 'innuendo could be stronger',
+          },
+        },
+      },
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL) => {
+        const pathname = new URL(String(url)).pathname
+        if (pathname.endsWith('/retry-draft')) {
+          return Response.json(retryResponses.shift())
+        }
+        if (pathname.endsWith('/process-item')) {
+          return Response.json({ ok: true })
+        }
+        return Response.json({ error: `Unexpected fetch to ${pathname}` }, { status: 500 })
+      }),
+    )
+
+    const response = await POST(makeRequest())
+    expect(response.status).toBe(200)
+
+    await mocks.scheduledAfter?.()
+
+    expect(update).toHaveBeenCalledWith({
+      collection: 'generation-job-items',
+      id: 456,
+      data: expect.objectContaining({
+        status: 'draft-accepted',
+        headline: 'Best Safe Draft',
+        subheadline: 'The strongest safe deck.',
+        excerpt: 'The strongest safe excerpt.',
+        sourceRssTopic: 'Third topic',
+        error: null,
+      }),
+    })
+    const paths = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([url]) => new URL(String(url)).pathname)
+    expect(paths).toEqual([
+      '/api/internal/generation/retry-draft',
+      '/api/internal/generation/retry-draft',
+      '/api/internal/generation/retry-draft',
+      '/api/internal/generation/process-item',
+    ])
+    expect(mocks.tryFinalizeGenerationJob).not.toHaveBeenCalled()
+  })
 })

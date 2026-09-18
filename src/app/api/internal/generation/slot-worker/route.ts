@@ -6,6 +6,7 @@ import {
   isInternalCronAuthorized,
 } from '@/lib/generation/internalAuth'
 import { tryFinalizeGenerationJob } from '@/lib/generation/runGenerationPipeline'
+import type { DraftCandidate, DraftEvaluation } from '@/lib/generation/pipelineTypes'
 
 export const maxDuration = 300
 const LOG_PREFIX = '[INTERNAL-SLOT-WORKER]'
@@ -108,6 +109,48 @@ async function markItemTerminalStatus(params: {
   })
 }
 
+type FallbackDraft = {
+  draft: DraftCandidate
+  sourceRssTopic: string | null
+  evaluation: DraftEvaluation
+}
+
+function fallbackQualityScore(evaluation: DraftEvaluation): number {
+  const innuendoBonus = evaluation.tone.conceptualInnuendoPass ? 100 : 0
+  return (
+    innuendoBonus +
+    evaluation.tone.funScore +
+    evaluation.tone.mercilessScore +
+    evaluation.tone.specificityScore
+  )
+}
+
+async function promoteFallbackDraft(params: {
+  itemId: string | number
+  fallback: FallbackDraft
+}): Promise<void> {
+  const payload = await getPayload()
+  if (!payload) throw new Error('Payload unavailable while promoting fallback draft')
+
+  await payload.update({
+    collection: 'generation-job-items',
+    id: params.itemId,
+    data: {
+      status: 'draft-accepted',
+      headline: params.fallback.draft.headline,
+      subheadline: params.fallback.draft.subheadline,
+      excerpt: params.fallback.draft.excerpt,
+      sourceRssTopic: params.fallback.sourceRssTopic,
+      draftEvaluation: {
+        ...params.fallback.evaluation,
+        accepted: true,
+        reason: `accepted-after-retries: ${params.fallback.evaluation.reason}`,
+      },
+      error: null,
+    },
+  })
+}
+
 async function loadAcceptedDrafts(params: {
   jobId: string | number
   currentItemId: string | number
@@ -178,6 +221,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     let accepted = false
     let draftErrorMessage = ''
+    let bestFallback: FallbackDraft | null = null
 
     try {
       for (let attempt = 1; attempt <= body.maxDraftAttempts; attempt++) {
@@ -193,9 +237,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         const draftResult = await callInternalJson<{
           accepted?: boolean
           exhausted?: boolean
-          draft?: { headline: string }
+          draft?: DraftCandidate
           sourceRssTopic?: string | null
-          evaluation?: { reason?: string }
+          evaluation?: DraftEvaluation
           error?: string
         }>({
           baseUrl,
@@ -227,9 +271,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         const payloadData = draftResult.data as {
           accepted?: boolean
           exhausted?: boolean
-          draft?: { headline: string }
+          draft?: DraftCandidate
           sourceRssTopic?: string | null
-          evaluation?: { reason?: string }
+          evaluation?: DraftEvaluation
         }
         const sourceTopic =
           typeof payloadData.sourceRssTopic === 'string' &&
@@ -249,9 +293,33 @@ export async function POST(request: Request): Promise<NextResponse> {
           break
         }
 
+        if (
+          payloadData.draft &&
+          payloadData.evaluation?.safeForFallback === true &&
+          (!bestFallback ||
+            fallbackQualityScore(payloadData.evaluation) >
+              fallbackQualityScore(bestFallback.evaluation))
+        ) {
+          bestFallback = {
+            draft: payloadData.draft,
+            sourceRssTopic: sourceTopic,
+            evaluation: payloadData.evaluation,
+          }
+        }
+
         if (payloadData.exhausted) {
           draftErrorMessage = payloadData.evaluation?.reason ?? 'Draft rejected'
           break
+        }
+      }
+
+      if (!accepted) {
+        if (bestFallback) {
+          await promoteFallbackDraft({ itemId: body.itemId, fallback: bestFallback })
+          accepted = true
+          console.warn(
+            `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} accepted best safe fallback after ${body.maxDraftAttempts} attempts | "${bestFallback.draft.headline.slice(0, 120)}"`,
+          )
         }
       }
 

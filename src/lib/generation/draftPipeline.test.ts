@@ -158,6 +158,50 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/headline, subheadline, excerpt.*reader.*infer/i)
   })
 
+  it('uses the previous rejection as corrective guidance for the next draft', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        headline: 'Permit Office Demands a More Convincing Submission',
+        subheadline: 'Applicants discover that compliance is the only intimacy on offer.',
+        excerpt: 'The revised process makes administrative control the governing double meaning.',
+      }),
+    })
+
+    await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: false,
+        forceOpinion: false,
+        includeTopics: false,
+      },
+      topicSummary: '',
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      previousAttempt: {
+        draft: {
+          headline: 'Permit Office Makes It Personal',
+          subheadline: 'Applicants face another interview.',
+          excerpt: 'The office asks for more paperwork.',
+        },
+        rejectionReason:
+          'The sexual double meaning is decorative and disconnected from the power dynamic.',
+      },
+      useRandomModes: false,
+    })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toContain('Permit Office Makes It Personal')
+    expect(combined).toContain(
+      'The sexual double meaning is decorative and disconnected from the power dynamic.',
+    )
+    expect(combined).toMatch(/correct.*previous.*rejection/i)
+  })
+
   it('makes conceptual headline innuendo part of draft tone evaluation', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
@@ -165,6 +209,8 @@ describe('generateDraftCandidate', () => {
         funScore: 8,
         mercilessScore: 8,
         specificityScore: 8,
+        conceptualInnuendoPass: true,
+        metaCommentaryPass: true,
         languagePass: true,
         englishShare: 1,
         germanUsageSummary: '',
@@ -191,8 +237,66 @@ describe('generateDraftCandidate', () => {
       /headline, subheadline, and excerpt.*one coherent.*(?:mechanism|concept)/i,
     )
     expect(combined).toMatch(/(?:reject|pass=false).*merely.*(?:dirty word|suggestive phrase)/i)
+    expect(combined).toMatch(/three-field pitch.*not.*finished article/i)
+    expect(combined).toMatch(/do not demand.*(?:ending|full article arc)/i)
     expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
     expect(combined).toMatch(/pass=false.*meta-commentary/i)
+  })
+
+  it('allows a non-meta tone rejection to become a final safe fallback', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 6,
+        mercilessScore: 7,
+        specificityScore: 6,
+        conceptualInnuendoPass: false,
+        metaCommentaryPass: true,
+        pass: false,
+        reason: 'The double meaning is recognizable but not yet central enough.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Lie Back for the Permit at the Housing Desk',
+        subheadline: 'Applicants discover that submission is the only route to approval.',
+        excerpt: 'The housing office turns paperwork and bodily compliance into the same ritual.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.safeForFallback).toBe(true)
+  })
+
+  it('never allows meta-commentary to become a final safe fallback', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 9,
+        mercilessScore: 9,
+        specificityScore: 9,
+        conceptualInnuendoPass: true,
+        metaCommentaryPass: false,
+        pass: false,
+        reason: 'The excerpt explains that the piece is satire.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Permit Office Demands Firmer Submission',
+        subheadline: 'Applicants discover that compliance is the only route to approval.',
+        excerpt: 'This satirical piece would mock the officials who enjoy the paperwork.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.safeForFallback).toBe(false)
   })
 
   it('uses the deterministic English share instead of an evaluator-provided percentage', async () => {
@@ -202,6 +306,8 @@ describe('generateDraftCandidate', () => {
         funScore: 8,
         mercilessScore: 8,
         specificityScore: 8,
+        conceptualInnuendoPass: true,
+        metaCommentaryPass: true,
         languagePass: true,
         englishShare: 66.67,
         germanUsageSummary: 'One isolated German term used.',
@@ -231,6 +337,8 @@ describe('generateDraftCandidate', () => {
         funScore: 8,
         mercilessScore: 8,
         specificityScore: 8,
+        conceptualInnuendoPass: true,
+        metaCommentaryPass: true,
         languagePass: false,
         englishShare: 0.67,
         germanUsageSummary: 'No German terms or phrases used.',
@@ -265,6 +373,8 @@ describe('generateDraftCandidate', () => {
         funScore: 'eight',
         mercilessScore: 8,
         specificityScore: 8,
+        conceptualInnuendoPass: true,
+        metaCommentaryPass: true,
         languagePass: true,
         englishShare: 'sixty-seven percent',
         germanUsageSummary: '',
@@ -381,6 +491,8 @@ describe('generateDraftCandidate', () => {
         funScore: 8,
         mercilessScore: 8,
         specificityScore: 8,
+        conceptualInnuendoPass: true,
+        metaCommentaryPass: true,
         languagePass: true,
         englishShare: 1,
         germanUsageSummary: '',

@@ -93,4 +93,53 @@ describe('retry-draft route', () => {
       }),
     )
   })
+
+  it('feeds the previous rejected draft and evaluator reason into the next attempt', async () => {
+    mocks.getPayload.mockResolvedValue({
+      findByID: vi.fn().mockResolvedValue({
+        id: 456,
+        job: 123,
+        draftAttempt: 1,
+        headline: 'Permit Office Makes It Personal',
+        subheadline: 'Applicants face another interview.',
+        excerpt: 'The office asks for more paperwork.',
+        error: 'The double meaning is decorative rather than structural.',
+      }),
+      update: vi.fn().mockResolvedValue({}),
+    })
+
+    const response = await POST(
+      new Request('https://example.test/api/internal/generation/retry-draft', {
+        method: 'POST',
+        body: JSON.stringify({
+          jobId: 123,
+          itemId: 456,
+          maxAttempts: 3,
+          slot: {
+            forceOpinion: false,
+            includeTopics: false,
+          },
+          topicSummary: '',
+          recentCoverage: [],
+          acceptedDrafts: [],
+          forbiddenSourceTopics: [],
+          blacklistSummary: '',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.generateDraftCandidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousAttempt: {
+          draft: {
+            headline: 'Permit Office Makes It Personal',
+            subheadline: 'Applicants face another interview.',
+            excerpt: 'The office asks for more paperwork.',
+          },
+          rejectionReason: 'The double meaning is decorative rather than structural.',
+        },
+      }),
+    )
+  })
 })

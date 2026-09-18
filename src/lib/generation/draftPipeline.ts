@@ -44,6 +44,8 @@ const DraftToneSchema = z.object({
   funScore: z.number().int().min(1).max(10),
   mercilessScore: z.number().int().min(1).max(10),
   specificityScore: z.number().int().min(1).max(10),
+  conceptualInnuendoPass: z.boolean(),
+  metaCommentaryPass: z.boolean(),
   pass: z.boolean(),
   reason: z.string().max(300),
 })
@@ -348,6 +350,10 @@ export async function generateDraftCandidate(params: {
   blacklistSummary: string
   acceptedDrafts: DraftCandidate[]
   forbiddenSourceTopics?: string[]
+  previousAttempt?: {
+    draft: DraftCandidate
+    rejectionReason: string
+  }
   editorDirection?: string
   includeBerlinThemes?: boolean
   useRandomModes?: boolean
@@ -396,6 +402,16 @@ export async function generateDraftCandidate(params: {
   })
   const editorDirection = (params.editorDirection ?? params.slot.editorDirection)?.trim()
   const hasEditorDirection = typeof editorDirection === 'string' && editorDirection.length > 0
+  const previousAttemptSection = params.previousAttempt
+    ? [
+        'CORRECT THE PREVIOUS REJECTION:',
+        `Evaluator feedback: ${params.previousAttempt.rejectionReason.slice(0, 500)}`,
+        `Previous rejected pitch: ${JSON.stringify(params.previousAttempt.draft)}`,
+        '- Produce a new pitch for the currently assigned topic that directly corrects the evaluator feedback.',
+        '- Do not copy the rejected wording or merely add a dirty word; repair the underlying comedic mechanism.',
+        '',
+      ].join('\n')
+    : ''
 
   // Only include the full, heavy HUMOR engine in the slot-level sample to vary tone.
   const includeHumorEngine = shouldIncludeHumorPerspectiveMethod(
@@ -470,6 +486,7 @@ export async function generateDraftCandidate(params: {
           '',
         ].join('\n')
       : '',
+    previousAttemptSection,
     'Rules:',
     CRAZY_HEADLINE_REQUIREMENTS,
     ...buildDraftPerspectiveRuleLines(includeHumorEngine),
@@ -535,12 +552,15 @@ async function evaluateDraftTone(
 
   const systemPrompt = [
     'You are a satire pitch evaluator.',
+    'You are evaluating a three-field pitch, not a finished article.',
     'Output strict JSON only.',
     'Score if the pitch is funny, merciless, and specific.',
-    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     ANTI_META_COMMENTARY_RULES,
-    'The headline must carry the story’s conceptual sexual double meaning, not merely contain a dirty word or disconnected suggestive phrase.',
-    'The headline, subheadline, and excerpt must express one coherent conceptual mechanism and the same social accusation.',
+    'The headline must carry a recognizable conceptual sexual double meaning, not merely contain a dirty word or disconnected suggestive phrase.',
+    'The headline, subheadline, and excerpt must connect that double meaning through one coherent conceptual mechanism, power dynamic, and social accusation.',
+    'Judge only whether the pitch establishes that governing concept clearly enough for the full article to develop it.',
+    'Do not demand callbacks, an ending, or a full article arc from a three-field pitch.',
+    'Subtle bodily, submission, appetite, penetration, exposure, restraint, servicing, or intimacy metaphors can pass when their literal and sexual readings reinforce the same power dynamic; explicit sex words are not required.',
     'Language policy has already been validated by a separate deterministic gate. Do not score or reject language.',
   ].join('\n')
   const userPrompt = [
@@ -548,11 +568,11 @@ async function evaluateDraftTone(
     JSON.stringify(candidate),
     '',
     'JSON schema:',
-    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "pass": boolean, "reason": string }',
+    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
     '',
-    'Set pass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
-    'Set pass=false if any field contains meta-commentary, breaks the fourth wall, labels itself as satire/comedy, or explains the joke, premise, angle, genre, intent, or audience reaction.',
-    'Set pass=true only when all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
+    'Set conceptualInnuendoPass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
+    'Set metaCommentaryPass=false if any field contains meta-commentary, breaks the fourth wall, labels itself as satire/comedy, or explains the joke, premise, angle, genre, intent, or audience reaction.',
+    'Set pass=true only when conceptualInnuendoPass and metaCommentaryPass are true, all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -587,12 +607,15 @@ export async function evaluateDraftCandidate(params: {
   if (!headlineLanguage.passes) {
     return {
       accepted: false,
+      safeForFallback: false,
       reason: headlineLanguage.reason,
       repetition,
       tone: {
         funScore: 1,
         mercilessScore: 1,
         specificityScore: 1,
+        conceptualInnuendoPass: false,
+        metaCommentaryPass: false,
         languagePass: false,
         englishShare: headlineLanguage.englishShare,
         germanUsageSummary: headlineLanguage.signals.join(', '),
@@ -608,12 +631,15 @@ export async function evaluateDraftCandidate(params: {
   if (supportingTextLanguage) {
     return {
       accepted: false,
+      safeForFallback: false,
       reason: supportingTextLanguage.reason,
       repetition,
       tone: {
         funScore: 1,
         mercilessScore: 1,
         specificityScore: 1,
+        conceptualInnuendoPass: false,
+        metaCommentaryPass: false,
         languagePass: false,
         englishShare: headlineLanguage.englishShare,
         germanUsageSummary: supportingTextLanguage.signals.join(', '),
@@ -632,12 +658,15 @@ export async function evaluateDraftCandidate(params: {
   if (headlineSimilarity.violates) {
     return {
       accepted: false,
+      safeForFallback: false,
       reason: headlineSimilarity.reason,
       repetition,
       tone: {
         funScore: 1,
         mercilessScore: 1,
         specificityScore: 1,
+        conceptualInnuendoPass: false,
+        metaCommentaryPass: false,
         languagePass: true,
         englishShare: headlineLanguage.englishShare,
         germanUsageSummary: headlineLanguage.signals.join(', '),
@@ -651,12 +680,15 @@ export async function evaluateDraftCandidate(params: {
   if (!headlineTaste.passes) {
     return {
       accepted: false,
+      safeForFallback: false,
       reason: headlineTaste.reason,
       repetition,
       tone: {
         funScore: 1,
         mercilessScore: 1,
         specificityScore: 1,
+        conceptualInnuendoPass: false,
+        metaCommentaryPass: false,
         languagePass: true,
         englishShare: headlineLanguage.englishShare,
         germanUsageSummary: headlineLanguage.signals.join(', '),
@@ -685,6 +717,8 @@ export async function evaluateDraftCandidate(params: {
       funScore: 7,
       mercilessScore: 7,
       specificityScore: 7,
+      conceptualInnuendoPass: false,
+      metaCommentaryPass: false,
       languagePass: hasDeterministicEnglishEvidence,
       englishShare: headlineLanguage.englishShare,
       germanUsageSummary: hasDeterministicEnglishEvidence
@@ -704,6 +738,7 @@ export async function evaluateDraftCandidate(params: {
   if (!tone.languagePass) {
     return {
       accepted: false,
+      safeForFallback: false,
       reason: `headline-language: ${tone.germanUsageSummary || tone.reason}`,
       repetition,
       tone,
@@ -712,6 +747,8 @@ export async function evaluateDraftCandidate(params: {
 
   const tonePass =
     tone.pass &&
+    tone.conceptualInnuendoPass &&
+    tone.metaCommentaryPass &&
     tone.funScore >= minFun &&
     tone.mercilessScore >= minMerciless &&
     tone.specificityScore >= minSpecificity
@@ -719,6 +756,7 @@ export async function evaluateDraftCandidate(params: {
   if (repetition.overlaps) {
     return {
       accepted: false,
+      safeForFallback: false,
       reason: `repetition: ${repetition.reason}`,
       repetition,
       tone,
@@ -738,6 +776,7 @@ export async function evaluateDraftCandidate(params: {
   ) {
     return {
       accepted: false,
+      safeForFallback: false,
       reason: `theme-bias: rent/housing is overrepresented recently (${rentThemeRecentCount} recent references > limit ${Math.max(0, rentThemeMaxRecent)})`,
       repetition,
       tone,
@@ -747,6 +786,7 @@ export async function evaluateDraftCandidate(params: {
   if (!tonePass) {
     return {
       accepted: false,
+      safeForFallback: tone.metaCommentaryPass,
       reason: `tone: ${tone.reason}`,
       repetition,
       tone,
@@ -755,6 +795,7 @@ export async function evaluateDraftCandidate(params: {
 
   return {
     accepted: true,
+    safeForFallback: true,
     reason: 'accepted',
     repetition,
     tone,

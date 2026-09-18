@@ -29,6 +29,8 @@ export type DraftCandidate = {
 
 export type DraftEvaluation = {
   accepted: boolean
+  /** True only when the draft cleared every non-tone safety/quality gate and contains no meta-commentary. */
+  safeForFallback: boolean
   reason: string
   repetition: {
     overlaps: boolean
@@ -40,6 +42,8 @@ export type DraftEvaluation = {
     funScore: number
     mercilessScore: number
     specificityScore: number
+    conceptualInnuendoPass: boolean
+    metaCommentaryPass: boolean
     languagePass: boolean
     englishShare: number
     germanUsageSummary: string
