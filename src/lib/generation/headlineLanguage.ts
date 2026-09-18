@@ -238,10 +238,10 @@ function classifyWord(raw: string): Language {
   if (ENGLISH_EVIDENCE.has(normalized)) return 'english'
   if (GERMAN_EVIDENCE.has(normalized)) return 'german'
   if (NEUTRAL_EVIDENCE.has(normalized)) return 'neutral'
-  if (/[äöüß]/u.test(normalized)) return 'german'
-  if (normalized.length >= 6 && GERMAN_SUFFIX_PATTERN.test(normalized)) return 'german'
   if (/^[A-Z]{2,5}$/u.test(raw)) return 'neutral'
+  if (normalized.length >= 6 && GERMAN_SUFFIX_PATTERN.test(normalized)) return 'german'
   if (/^\p{Lu}[\p{Ll}\p{M}]+$/u.test(raw)) return 'neutral'
+  if (/[äöüß]/u.test(normalized)) return 'german'
   return 'neutral'
 }
 

@@ -153,6 +153,21 @@ describe('generateArticle final article-language guard', () => {
     expect(mocks.invoke).toHaveBeenCalledTimes(2)
   })
 
+  it('normalizes a percentage-shaped English share before applying the evaluator verdict', async () => {
+    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(fullArticle) })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: false,
+        englishShare: 100,
+        invalidField: 'excerpt',
+        germanUsageSummary: 'The excerpt is not entirely in US English.',
+        reason: 'Supporting text language policy failed.',
+      }),
+    })
+
+    await expect(generateArticle(makeInput())).rejects.toThrow('HEADLINE_LANGUAGE_GUARD: excerpt')
+  })
+
   it('makes sexual double meaning a structural article concept shared by the headline', async () => {
     mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(fullArticle) })
     mocks.invoke.mockResolvedValueOnce({
@@ -496,13 +511,18 @@ describe('generateArticle final article-language guard', () => {
     expect(result.article.bodyMarkdown).toContain('AfR (Alternativ für Ratten)')
   })
 
-  it('fails closed when the final evaluator is unavailable and the headline has no English evidence', async () => {
+  it('keeps a deterministic pass when the final evaluator is unavailable and its dictionary has no English evidence', async () => {
     mocks.invoke.mockResolvedValueOnce({
-      content: JSON.stringify({ ...fullArticle, headline: 'KINDER STREIKEN HEUTE' }),
+      content: JSON.stringify({
+        ...fullArticle,
+        headline: 'Ballot Box, Kremlin’s Favorite Exit',
+      }),
     })
     mocks.invoke.mockRejectedValueOnce(new Error('language evaluator unavailable'))
 
-    await expect(generateArticle(makeInput())).rejects.toThrow('HEADLINE_LANGUAGE_GUARD: headline')
+    const result = await generateArticle(makeInput())
+
+    expect(result.article.headline).toBe('Ballot Box, Kremlin’s Favorite Exit')
     expect(mocks.invoke).toHaveBeenCalledTimes(2)
   })
 

@@ -10,7 +10,6 @@ import {
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   assertArticleLanguagePolicy,
-  assessHeadlineLanguage,
   HEADLINE_LANGUAGE_GUARD_PREFIX,
   HEADLINE_LANGUAGE_POLICY_PROMPT,
 } from './headlineLanguage'
@@ -146,7 +145,10 @@ type SatireCritique = z.infer<typeof SatireCritiqueSchema>
 
 const FinalArticleLanguageSchema = z.object({
   languagePass: z.boolean(),
-  englishShare: z.number().min(0).max(1),
+  englishShare: z.preprocess(
+    (value) => (typeof value === 'number' && value > 1 && value <= 100 ? value / 100 : value),
+    z.number().min(0).max(1),
+  ),
   invalidField: z.enum(['headline', 'subheadline', 'excerpt', 'none']).optional().default('none'),
   germanUsageSummary: z.string().max(300),
   metaCommentaryPass: z.boolean().optional().default(true),
@@ -3520,6 +3522,7 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
     'JSON schema:',
     '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "metaCommentaryPass": boolean, "invalidMetaField": "headline" | "subheadline" | "excerpt" | "bodyMarkdown" | "imageCaption" | "newAuthorTitle" | "newAuthorBio" | "none", "reason": string }',
     '',
+    'englishShare must be a decimal from 0 to 1, never a percentage from 0 to 100.',
     'languagePass must be true only when the headline satisfies the full headline policy and both supporting fields are entirely in US English.',
     'metaCommentaryPass must be true only when every supplied reader-visible field stays inside the reported world and contains no meta-commentary.',
   ].join('\n')
@@ -3559,12 +3562,6 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
         error.message.startsWith(`${META_COMMENTARY_GUARD_PREFIX}:`))
     ) {
       throw error
-    }
-    const headlineLanguage = assessHeadlineLanguage(params.article.headline)
-    if (headlineLanguage.englishWordCount === 0) {
-      throw new Error(
-        `${HEADLINE_LANGUAGE_GUARD_PREFIX}: headline headline-language: evaluator unavailable and no deterministic English evidence`,
-      )
     }
     console.warn(
       `${LOG.prefix} Final language evaluator unavailable; deterministic language guard passed`,

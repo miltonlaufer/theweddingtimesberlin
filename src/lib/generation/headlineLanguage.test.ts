@@ -165,6 +165,7 @@ describe('headline language policy', () => {
     'Samsung opens a Berlin lab.',
     'Zürich clinic expands.',
     'The La La Land premiere opens.',
+    'ZDF says Jan Böhmermann’s “ZDF Magazin Royale” will end at year’s end, after years of performing outrage for the camera while everyone in the room kept pretending the studio wasn’t built for self-display.',
   ])('allows contextual English words and named entities in supporting text %s', (text) => {
     expect(assessSupportingTextLanguage(text).passes).toBe(true)
   })
