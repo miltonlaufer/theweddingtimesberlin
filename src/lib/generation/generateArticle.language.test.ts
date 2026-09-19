@@ -193,6 +193,44 @@ describe('generateArticle final article-language guard', () => {
     expect(combined).toMatch(/all reader-visible text/i)
   })
 
+  it('strongly prefers cultural references woven through a locked-draft article body', async () => {
+    const seedDraft = {
+      headline: 'Hospital Queue Turns Patience Into Policy',
+      subheadline: 'The hospital turns waiting into public policy.',
+      excerpt: 'Patients discover that patience is now an administrative requirement.',
+    }
+    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(bodyOnlyArticle) })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: true,
+        englishShare: 1,
+        invalidField: 'none',
+        germanUsageSummary: '',
+        reason: 'All fields pass.',
+      }),
+    })
+
+    await generateArticle({ ...makeInput(), seedDraft })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toMatch(
+      /strongly prefer[\s\S]*body[\s\S]*(?:cultural|recognizable)[\s\S]*reference/i,
+    )
+    expect(combined).toMatch(/not mandatory|never force/i)
+    expect(combined).toMatch(
+      /comparison[\s\S]*scene[\s\S]*character behavior[\s\S]*recurring motif/i,
+    )
+    expect(combined).toMatch(/not.*(?:isolated )?name-dropping/i)
+    expect(combined).toMatch(
+      /literature[\s\S]*mythology[\s\S]*film[\s\S]*television[\s\S]*music[\s\S]*visual art[\s\S]*internet culture[\s\S]*public figures/i,
+    )
+    expect(combined).toMatch(
+      /avoid[\s\S]*Kafka[\s\S]*Sisyphus[\s\S]*Proust[\s\S]*Orwell[\s\S]*Berghain/i,
+    )
+  })
+
   it('makes critique and rewrite preserve conceptual innuendo in the headline and story', async () => {
     process.env.SATIRE_CRITIQUE_ENABLED = 'true'
     mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(fullArticle) })
@@ -436,8 +474,21 @@ describe('generateArticle final article-language guard', () => {
     expect(shortenPrompt).toContain('NEVER BREAK THE FOURTH WALL')
   })
 
-  it('rejects meta-commentary identified semantically even when it evades the narrow fallback', async () => {
-    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(fullArticle) })
+  it('does not reject in-world theatrical production and audience reporting as meta-commentary', async () => {
+    const musicalArticle = {
+      ...fullArticle,
+      headline: 'Margot Honecker Gets Banned From Peter Plate’s “Helmut Kohl”',
+      subheadline:
+        'The musical bars her at the door while still using her name to sell a polished version of history.',
+      excerpt:
+        'The production promises scandal and nostalgia to an audience paying for both at once.',
+      bodyMarkdown: [
+        'The theater announced the ban before rehearsals on Tuesday, while keeping Honecker’s name in the program and on the lobby posters.',
+        'Producers said the decision protected the production, and the audience applauded before anyone explained what protection meant.',
+        'Ticket sales opened again by noon, with the forbidden guest still doing most of the promotional work from outside the building.',
+      ].join('\n\n'),
+    }
+    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(musicalArticle) })
     mocks.invoke.mockResolvedValueOnce({
       content: JSON.stringify({
         languagePass: true,
@@ -446,6 +497,31 @@ describe('generateArticle final article-language guard', () => {
         germanUsageSummary: '',
         metaCommentaryPass: false,
         invalidMetaField: 'bodyMarkdown',
+        reason: 'The body comments on the nature of the production and audience reactions.',
+      }),
+    })
+
+    const result = await generateArticle(makeInput())
+
+    expect(result.article.headline).toBe(musicalArticle.headline)
+  })
+
+  it('rejects meta-commentary identified semantically even when it evades the narrow fallback', async () => {
+    const implicitMetaArticle = {
+      ...fullArticle,
+      bodyMarkdown: `${coherentBody}\n\nReaders should appreciate the comic treatment before judging the officials.`,
+    }
+    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(implicitMetaArticle) })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: true,
+        englishShare: 1,
+        invalidField: 'none',
+        germanUsageSummary: '',
+        metaCommentaryPass: false,
+        invalidMetaField: 'bodyMarkdown',
+        metaViolationType: 'directs-current-reader-response',
+        metaCommentaryEvidence: 'Readers should appreciate the comic treatment',
         reason: 'The body addresses readers as an audience for a comic treatment.',
       }),
     })

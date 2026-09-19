@@ -152,6 +152,17 @@ const FinalArticleLanguageSchema = z.object({
   invalidField: z.enum(['headline', 'subheadline', 'excerpt', 'none']).optional().default('none'),
   germanUsageSummary: z.string().max(300),
   metaCommentaryPass: z.boolean().optional().default(true),
+  metaViolationType: z
+    .enum([
+      'labels-current-output',
+      'explains-current-joke',
+      'states-writer-intent',
+      'directs-current-reader-response',
+      'none',
+    ])
+    .optional()
+    .default('none'),
+  metaCommentaryEvidence: z.string().max(500).optional().default(''),
   invalidMetaField: z
     .enum([
       'headline',
@@ -377,20 +388,14 @@ export async function rankRssTopicsForHumor(params: {
 
 // Reusable prompt text blocks to avoid repetition
 
-const INTELLECTUAL_SOURCES = `Literature: Kafka, Hemingway, Cormac McCarthy, Proust, Marguerite Duras, Philip K. Dick, Stendhal, Oscar Wilde, Voltaire, Dostoevsky, Tolstoy, James Joyce, Virginia Woolf, William Faulkner, Jorge Luis Borges, Gabriel Garcia Marquez, Thomas Mann, Herman Melville, Charles Dickens, Mark Twain, Edgar Allan Poe, Emily Dickinson, Walt Whitman, Baudelaire, Flaubert, Zola, Balzac, Victor Hugo, Goethe, Schiller, Chekhov, Gogol, Nabokov, Beckett, Ionesco, Brecht, Thomas Pynchon, Don DeLillo, Toni Morrison, Sylvia Plath, Albert Camus, Jean-Paul Sartre, Simone de Beauvoir, Roberto Bolano, Italo Calvino, Umberto Eco, Milan Kundera, Haruki Murakami, Salman Rushdie, Kurt Vonnegut, Hunter S. Thompson, Charles Bukowski, Jack Kerouac, William S. Burroughs, David Foster Wallace, Zadie Smith, Chimamanda Ngozi Adichie, Orwell, Aldous Huxley, Ray Bradbury, Isaac Asimov, Stanislaw Lem, J.G. Ballard, Ursula K. Le Guin, Margaret Atwood. Philosophy: Freud, Lacan, Marx, Hegel, Kant, Plato, Aristotle, Wittgenstein, Heidegger, Husserl, Merleau-Ponty, Kierkegaard, Nietzsche, Bertrand Russell, Quine, Austin, Searle, Rorty, Derrida, Baudrillard, Debord, Benjamin, Adorno, Confucius, I-Ching, Schopenhauer, Spinoza, Leibniz, John Stuart Mill, Hobbes, Locke, Rousseau, Voltaire, Montesquieu, Tocqueville, Hannah Arendt, Simone Weil, Michel Foucault, Gilles Deleuze, Slavoj Zizek, Judith Butler, Noam Chomsky, Peter Singer, Martha Nussbaum, Byung-Chul Han, Zygmunt Bauman, Theodor Adorno, Herbert Marcuse, Antonio Gramsci, Louis Althusser, Georg Lukacs, Karl Popper, Thomas Kuhn, Umberto Eco, Roland Barthes, Susan Sontag. Cinema: Truffaut, Coppola, Godard, Kubrick, Hitchcock, Fellini, Bergman, Tarkovsky, Kurosawa, David Lynch, Quentin Tarantino, Martin Scorsese, Werner Herzog, Wim Wenders, Fassbinder, Lars von Trier, Pedro Almodovar, Andrei Tarkovsky, Jean-Luc Godard, Orson Welles, Billy Wilder, Fritz Lang, Ridley Scott, the Coen Brothers, Spike Lee, Park Chan-wook, Bong Joon-ho, Denis Villeneuve, Charlie Kaufman, Wes Anderson, Sofia Coppola, Michael Haneke. Art & Music: John Cage, Duchamp, Picasso, Bach, Beethoven, Chopin, Andy Warhol, Basquiat, Banksy, Frida Kahlo, Salvador Dali, Magritte, Mondrian, Rothko, Pollock, Kandinsky, Klimt, Egon Schiele, Francis Bacon, Damien Hirst, Jeff Koons, Ai Weiwei, Marina Abramovic, Yoko Ono, Mozart, Wagner, Debussy, Stravinsky, Miles Davis, John Coltrane, Kraftwerk, Brian Eno, David Bowie, Radiohead, Bjork, Aphex Twin, Stockhausen.`
-
-const INTELLECTUAL_EASTER_EGGS = [
-  'INTELLECTUAL EASTER EGGS (MANDATORY - AT LEAST ONE PER ARTICLE):',
-  '- EVERY article MUST contain at least one intellectual easter egg (explicit or subtle)',
-  '- Include 1-5 witty, creative cultural references per article—make them visible but clever',
-  '- Reference: literature, philosophy, film, contemporary art, academic theory, cultural movements, architectural concepts, urban studies',
-  '- These should be recognizable to educated readers, but woven in with WIT and CREATIVITY',
-  '- DO NOT copy examples—come up with your OWN creative, witty references',
-  '- Think broadly: literary allusions, philosophical concepts, film references, art movements, cultural theory, architectural ideas',
-  `- Possible sources (be creative, vary them widely): ${INTELLECTUAL_SOURCES} Vary your references and add more!`,
-  '- Make references witty and contextually appropriate—they should feel natural, not forced',
-  '- The goal is clever cultural commentary, not academic name-dropping',
-  "- Vary your references—don't repeat the same ones in every article",
+export const CULTURAL_REFERENCE_BODY_GUIDANCE = [
+  'CULTURAL REFERENCES IN THE BODY (STRONGLY PREFERRED, NOT MANDATORY):',
+  '- Strongly prefer making the article body carry at least one recognizable cultural reference when it genuinely sharpens the premise, sexual double meaning, or power dynamic.',
+  '- Work the reference into a comparison, scene, character behavior, or recurring motif so it does actual comedic work.',
+  '- Draw broadly from literature, mythology, film, television, music, visual art, internet culture, public figures, philosophy, architecture, and cultural movements.',
+  '- Do not use isolated name-dropping, explain the reference to the reader, or interrupt concrete reporting with an academic aside.',
+  '- This is not mandatory: never force a reference that weakens the story, obscures the news hook, or feels ornamental.',
+  '- Vary the register and source. Avoid repeatedly defaulting to Kafka, Sisyphus, Proust, Orwell, or Berghain.',
 ].join('\n')
 
 const EDGE_AND_POLITICAL_INCORRECTNESS = [
@@ -784,17 +789,14 @@ const DRUGS_TECHNO_HEADLINES_MILD = [
   'Do not force drug or club references into unrelated stories.',
 ].join('\n')
 
-const INTELLECTUAL_HEADLINE_REFERENCES = [
-  'INTELLECTUAL REFERENCES IN HEADLINES (OPTIONAL BUT ENCOURAGED):',
-  'Consider weaving intellectual or cultural references into your headlines when it fits naturally.',
-  'This adds wit and rewards educated readers. Examples of headline styles with references:',
-  '- "Local Man\'s Sisyphean Quest for Anmeldung Enters Year Four"',
-  '- "Proustian Flashback Ruins Techno Set at Berghain"',
-  '- "Waiting for Döner: Neukölln Man\'s Beckettian Vigil at 3am"',
-  '- "Kafkaesque Bureaucracy Claims Another Victim at Bürgeramt"',
-  '- "The Unbearable Lightness of Being Rejected at Berghain"',
-  '- "Görlitzer Park: A Dialectical Analysis of Supply and Demand"',
-  'This is a SUGGESTION, not a requirement—use when it enhances the headline without forcing it.',
+export const CULTURAL_REFERENCE_HEADLINE_GUIDANCE = [
+  'CULTURAL REFERENCES IN HEADLINES (STRONGLY PREFERRED, NOT MANDATORY):',
+  '- Strongly prefer giving the headline a recognizable cultural allusion when it sharpens the premise, sexual double meaning, or power dynamic.',
+  '- Draw broadly from literature, mythology, film, television, music, visual art, internet culture, public figures, philosophy, architecture, and cultural movements.',
+  '- Transform the reference around the actual subject; do not paste a famous title or name beside an unrelated joke.',
+  '- Do not let a reference obscure or hide the story subject, especially the named entity in a current-news headline.',
+  '- This is not mandatory: never force a reference when the clearest, cruelest headline works better without one.',
+  '- Vary the register and source. Avoid repeatedly defaulting to Kafka, Sisyphus, Proust, Orwell, or Berghain.',
 ].join('\n')
 
 export const CRAZY_HEADLINE_REQUIREMENTS = [
@@ -915,7 +917,8 @@ const ANTI_META_SURREAL_RULES = [
 
 export const ANTI_META_COMMENTARY_RULES = [
   'NO META-COMMENTARY — NEVER BREAK THE FOURTH WALL (ABSOLUTE):',
-  '- Stay entirely inside the reported world. Never discuss the writing, genre, comic intent, or audience response.',
+  '- Stay entirely inside the reported world. Never discuss the writing, genre, comic intent, or how readers of this current output should respond.',
+  '- Reporting an in-world play, musical, film, publication, performance, production, audience, character, joke, comedy, or satire is allowed when it is the actual subject of the news and is not a description of this current output.',
   '- Never label or describe the output as an article, piece, story, satire, comedy, parody, joke, premise, bit, gag, angle, or creative exercise.',
   '- Never say what the article/piece/story would, will, aims to, or tries to satirize, show, explore, mock, or reveal.',
   '- Never explain where the joke, satire, absurdity, or humor lies, and never tell readers what they should notice or laugh at.',
@@ -3504,7 +3507,12 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
     'Inspect every supplied reader-visible field for meta-commentary, including bodyMarkdown, imageCaption, and author copy.',
     'Unknown proper names, place names, company names, titles, and acronyms are neutral rather than German or English.',
     'Set invalidField to the first failing field in headline, subheadline, excerpt order, or none when every field passes.',
-    'Set metaCommentaryPass=false and invalidMetaField to the first failing field if any text breaks the fourth wall, labels itself as satire/comedy, or explains the joke, premise, angle, genre, intent, or desired audience reaction.',
+    'Meta-commentary exists only when the narrator refers to this current output, its writing or writer, its joke/comic intent, or tells this output’s readers how to react.',
+    'Do not reject commentary about the reported subject, governance, public service, officials, characters, or their behavior.',
+    'Words such as production, audience, performance, story, article, comedy, or satire are not violations when they refer to an in-world play, musical, film, publication, event, institution, or quoted speaker.',
+    'Set metaCommentaryPass=false only for a supported violation. Then set invalidMetaField, select the precise metaViolationType, and copy the shortest exact contiguous offending passage into metaCommentaryEvidence.',
+    'The evidence must be a verbatim substring of invalidMetaField with no paraphrase or ellipsis. A vague explanation is not evidence.',
+    'When metaCommentaryPass=true, set invalidMetaField="none", metaViolationType="none", and metaCommentaryEvidence="".',
     'Output strict JSON only.',
   ].join('\n')
   const userPrompt = [
@@ -3520,7 +3528,7 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
     }),
     '',
     'JSON schema:',
-    '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "metaCommentaryPass": boolean, "invalidMetaField": "headline" | "subheadline" | "excerpt" | "bodyMarkdown" | "imageCaption" | "newAuthorTitle" | "newAuthorBio" | "none", "reason": string }',
+    '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "metaCommentaryPass": boolean, "invalidMetaField": "headline" | "subheadline" | "excerpt" | "bodyMarkdown" | "imageCaption" | "newAuthorTitle" | "newAuthorBio" | "none", "metaViolationType": "labels-current-output" | "explains-current-joke" | "states-writer-intent" | "directs-current-reader-response" | "none", "metaCommentaryEvidence": string, "reason": string }',
     '',
     'englishShare must be a decimal from 0 to 1, never a percentage from 0 to 100.',
     'languagePass must be true only when the headline satisfies the full headline policy and both supporting fields are entirely in US English.',
@@ -3537,10 +3545,33 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
     const verdict = FinalArticleLanguageSchema.parse(parsed)
 
     if (!verdict.metaCommentaryPass) {
-      const invalidMetaField =
-        verdict.invalidMetaField === 'none' ? 'article' : verdict.invalidMetaField
-      throw new Error(
-        `${META_COMMENTARY_GUARD_PREFIX}: ${invalidMetaField} ${verdict.reason || 'contains meta-commentary'}`,
+      const invalidMetaField = verdict.invalidMetaField
+      const evidence = verdict.metaCommentaryEvidence.trim()
+      const readerVisibleFields = {
+        headline: params.article.headline,
+        subheadline: params.article.subheadline,
+        excerpt: params.article.excerpt,
+        bodyMarkdown: params.article.bodyMarkdown,
+        imageCaption: params.article.imageCaption,
+        newAuthorTitle: params.article.newAuthorTitle,
+        newAuthorBio: params.article.newAuthorBio,
+      }
+      const fieldText = invalidMetaField === 'none' ? null : readerVisibleFields[invalidMetaField]
+      const hasSupportedViolation =
+        verdict.metaViolationType !== 'none' &&
+        evidence.length > 0 &&
+        typeof fieldText === 'string' &&
+        fieldText.includes(evidence)
+
+      if (hasSupportedViolation) {
+        throw new Error(
+          `${META_COMMENTARY_GUARD_PREFIX}: ${invalidMetaField} ${verdict.reason || 'contains meta-commentary'}`,
+        )
+      }
+
+      console.warn(
+        `${LOG.prefix} Ignoring unsupported meta-commentary verdict without typed verbatim evidence`,
+        verdict,
       )
     }
 
@@ -4703,7 +4734,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
           '',
-          INTELLECTUAL_EASTER_EGGS,
+          CULTURAL_REFERENCE_BODY_GUIDANCE,
         ].join('\n')
       : [
           'Tone: irreverent, subversive, and unapologetically politically incorrect. Channel Oscar Wilde, Louis CK, Ricky Gervais, George Carlin, Bill Hicks, and classic British satire like Brass Eye. The comedy must come from REAL uncomfortable truths about society—hypocrisy, self-deception, moral posturing, the gap between what people say and what they do. Mock sacred cows, poke fun at every demographic equally, but always ground it in genuine social observation. The reader should think "holy shit, that IS what people do" not just "haha random". Nothing is off-limits except actual hate speech or calls to violence.',
@@ -4713,7 +4744,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
           '',
-          INTELLECTUAL_EASTER_EGGS,
+          CULTURAL_REFERENCE_BODY_GUIDANCE,
         ].join('\n'),
     topicInstruction,
     canonicalStructureInstruction,
@@ -4771,7 +4802,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
         'TONE: Deadpan, serious journalism about something completely ridiculous, but with an edge. Like The Onion but more detailed, specific, AND uncomfortable.',
         'STYLE: Read like a real local newspaper article. Who, what, where, when, why, how - all answered with absurd but specific details.',
         '',
-        INTELLECTUAL_EASTER_EGGS,
+        CULTURAL_REFERENCE_BODY_GUIDANCE,
         '',
       ].join('\n')
     : hasRssTopics && selectedRssTopic
@@ -4966,7 +4997,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
           '',
-          INTELLECTUAL_EASTER_EGGS,
+          CULTURAL_REFERENCE_BODY_GUIDANCE,
           '',
         ].join('\n')
       : '',
@@ -5002,7 +5033,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           '',
           CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
           '',
-          INTELLECTUAL_EASTER_EGGS,
+          CULTURAL_REFERENCE_BODY_GUIDANCE,
           '',
         ].join('\n')
       : '',
@@ -5034,7 +5065,7 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
                 'Match your headline to your assigned topic—do not force unrelated themes into it.',
               ].join('\n'),
           '',
-          INTELLECTUAL_HEADLINE_REFERENCES,
+          CULTURAL_REFERENCE_HEADLINE_GUIDANCE,
         ].join('\n'),
     '',
     'CATEGORY SELECTION:',

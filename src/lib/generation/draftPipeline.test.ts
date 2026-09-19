@@ -158,6 +158,47 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/headline, subheadline, excerpt.*reader.*infer/i)
   })
 
+  it('strongly prefers an organic cultural allusion in batch-generated headlines', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        headline: 'Bürgeramt Stages Its Own Waiting for Godot',
+        subheadline: 'Applicants are told the missing appointment is the point.',
+        excerpt: 'The office turns administrative delay into an ensemble performance.',
+      }),
+    })
+
+    await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: false,
+        forceOpinion: false,
+        includeTopics: false,
+      },
+      topicSummary: '',
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      useRandomModes: false,
+    })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toMatch(
+      /strongly prefer[\s\S]*headline[\s\S]*(?:cultural|recognizable)[\s\S]*allusion/i,
+    )
+    expect(combined).toMatch(/not mandatory|never force/i)
+    expect(combined).toMatch(/do not.*(?:obscure|hide).*story subject/i)
+    expect(combined).toMatch(
+      /literature[\s\S]*mythology[\s\S]*film[\s\S]*television[\s\S]*music[\s\S]*visual art[\s\S]*internet culture[\s\S]*public figures/i,
+    )
+    expect(combined).toMatch(
+      /avoid[\s\S]*Kafka[\s\S]*Sisyphus[\s\S]*Proust[\s\S]*Orwell[\s\S]*Berghain/i,
+    )
+  })
+
   it('uses the previous rejection as corrective guidance for the next draft', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
@@ -436,23 +477,48 @@ describe('generateDraftCandidate', () => {
     expect(mocks.invoke).not.toHaveBeenCalled()
   })
 
-  it('fails closed on evaluator outage when a headline has no deterministic English evidence', async () => {
+  it('keeps a deterministically clean draft safe for fallback when the evaluator is unavailable', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockRejectedValue(new Error('evaluator unavailable'))
 
     const evaluation = await evaluateDraftCandidate({
       candidate: {
-        headline: 'KINDER STREIKEN HEUTE',
-        subheadline: 'The campaign packages delay as public service.',
-        excerpt: 'The hospital turns waiting into a branded moral hierarchy.',
+        headline: '“We’re Not Solid” — Bayern Leaves Union Open',
+        subheadline:
+          'After the humiliation, Union’s defenders sounded like men explaining a bad night they could still feel in their ankles.',
+        excerpt:
+          'The postmatch quotes read like status panic in cleats while everyone blamed somebody else for the collapse.',
       },
       recentCoverage: [],
       acceptedDrafts: [],
     })
 
     expect(evaluation.accepted).toBe(false)
-    expect(evaluation.reason).toContain('headline-language:')
+    expect(evaluation.safeForFallback).toBe(true)
+    expect(evaluation.reason).toContain('tone:')
+    expect(evaluation.tone.languagePass).toBe(true)
     expect(mocks.invoke).toHaveBeenCalledOnce()
+  })
+
+  it('keeps explicit meta-commentary unsafe when the evaluator is unavailable', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockRejectedValue(new Error('evaluator unavailable'))
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Permit Office Demands Firmer Submission',
+        subheadline: 'Applicants discover that compliance is the only route to approval.',
+        excerpt:
+          'This piece would satirize officials who enjoy making residents beg for paperwork.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.safeForFallback).toBe(false)
+    expect(evaluation.tone.metaCommentaryPass).toBe(false)
+    expect(mocks.invoke).not.toHaveBeenCalled()
   })
 
   it('fails closed when the semantic tone evaluator is unavailable', async () => {

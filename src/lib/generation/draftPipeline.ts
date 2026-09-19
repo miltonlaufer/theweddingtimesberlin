@@ -1,6 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
-import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
+import { hasMetaSummaryVoice, normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
   ACID_HUMOR_REQUIREMENTS,
@@ -11,6 +11,7 @@ import {
   assessRecentCoverageOverlap,
   CRAZY_HEADLINE_REQUIREMENTS,
   CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+  CULTURAL_REFERENCE_HEADLINE_GUIDANCE,
   HUMOR_PERSPECTIVE_METHOD,
   MICRO_DETAIL_FORMULA_GUARD,
   shouldIncludeHumorPerspectiveMethod,
@@ -445,6 +446,8 @@ export async function generateDraftCandidate(params: {
     '',
     CRAZY_HEADLINE_REQUIREMENTS,
     '',
+    CULTURAL_REFERENCE_HEADLINE_GUIDANCE,
+    '',
     includeBerlinThemes ? WEDDING_REMINDER_SHORT : '',
   ].join('\n')
 
@@ -489,6 +492,7 @@ export async function generateDraftCandidate(params: {
     previousAttemptSection,
     'Rules:',
     CRAZY_HEADLINE_REQUIREMENTS,
+    CULTURAL_REFERENCE_HEADLINE_GUIDANCE,
     ...buildDraftPerspectiveRuleLines(includeHumorEngine),
     '- Do NOT use the exhausted micro-detail hook: tiny hidden object, exact mm/cm/Hz measurement, then scam reveal.',
     '- Avoid headlines shaped like "The [tiny thing] That..." or "How a [small measured thing]..." unless the story absolutely cannot work without it.',
@@ -571,7 +575,7 @@ async function evaluateDraftTone(
     '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
     '',
     'Set conceptualInnuendoPass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
-    'Set metaCommentaryPass=false if any field contains meta-commentary, breaks the fourth wall, labels itself as satire/comedy, or explains the joke, premise, angle, genre, intent, or audience reaction.',
+    'Set metaCommentaryPass=false if any field contains meta-commentary, breaks the fourth wall, labels this current pitch as satire/comedy, explains its joke, premise, angle, genre, or intent, or directs how readers should react to it.',
     'Set pass=true only when conceptualInnuendoPass and metaCommentaryPass are true, all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
   ].join('\n')
 
@@ -649,6 +653,35 @@ export async function evaluateDraftCandidate(params: {
     }
   }
 
+  const explicitMetaField = (
+    [
+      ['headline', params.candidate.headline],
+      ['subheadline', params.candidate.subheadline],
+      ['excerpt', params.candidate.excerpt],
+    ] as const
+  ).find(([, value]) => typeof value === 'string' && hasMetaSummaryVoice(value))?.[0]
+
+  if (explicitMetaField) {
+    return {
+      accepted: false,
+      safeForFallback: false,
+      reason: `meta-commentary: ${explicitMetaField} contains explicit self-referential commentary`,
+      repetition,
+      tone: {
+        funScore: 1,
+        mercilessScore: 1,
+        specificityScore: 1,
+        conceptualInnuendoPass: false,
+        metaCommentaryPass: false,
+        languagePass: true,
+        englishShare: headlineLanguage.englishShare,
+        germanUsageSummary: 'Deterministic language gate passed.',
+        pass: false,
+        reason: 'Tone evaluation skipped because explicit meta-commentary was rejected.',
+      },
+    }
+  }
+
   const headlineSimilarity = assessHeadlineSimilarityForDraft({
     candidate: params.candidate,
     recentCoverage: params.recentCoverage,
@@ -712,22 +745,18 @@ export async function evaluateDraftCandidate(params: {
       '[DRAFT-PIPELINE] Tone evaluator failed',
       error instanceof Error ? error.message : String(error),
     )
-    const hasDeterministicEnglishEvidence = headlineLanguage.englishWordCount > 0
     tone = {
       funScore: 7,
       mercilessScore: 7,
       specificityScore: 7,
       conceptualInnuendoPass: false,
-      metaCommentaryPass: false,
-      languagePass: hasDeterministicEnglishEvidence,
+      metaCommentaryPass: true,
+      languagePass: true,
       englishShare: headlineLanguage.englishShare,
-      germanUsageSummary: hasDeterministicEnglishEvidence
-        ? 'Deterministic language gate passed; evaluator unavailable.'
-        : 'No deterministic English evidence; evaluator unavailable.',
+      germanUsageSummary: 'Deterministic language gate passed; evaluator unavailable.',
       pass: false,
-      reason: hasDeterministicEnglishEvidence
-        ? 'Tone evaluator unavailable; rejected because mandatory semantic requirements could not be verified.'
-        : 'Tone evaluator unavailable; rejected because the headline has no English evidence.',
+      reason:
+        'Tone evaluator unavailable; rejected because mandatory semantic requirements could not be verified.',
     }
   }
 
