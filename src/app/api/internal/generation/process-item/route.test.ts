@@ -5,6 +5,10 @@ const mocks = vi.hoisted(() => ({
   getPayload: vi.fn(),
   generateAndUploadImage: vi.fn(),
   generateArticle: vi.fn(),
+  isRetryableGenerationError: vi.fn(),
+  isRepetitionGenerationError: vi.fn(),
+  generateDraftCandidate: vi.fn(),
+  evaluateDraftCandidate: vi.fn(),
   createAndUploadInstagramImage: vi.fn(),
   postToInstagram: vi.fn(),
   recordInstagramIntegrationFailure: vi.fn(),
@@ -24,7 +28,8 @@ vi.mock('@/lib/images/generateAndUploadImage', () => ({
 
 vi.mock('@/lib/generation/generateArticle', () => ({
   generateArticle: mocks.generateArticle,
-  isRetryableGenerationError: () => false,
+  isRetryableGenerationError: mocks.isRetryableGenerationError,
+  isRepetitionGenerationError: mocks.isRepetitionGenerationError,
 }))
 
 vi.mock('@/lib/generation/internalAuth', () => ({
@@ -33,8 +38,8 @@ vi.mock('@/lib/generation/internalAuth', () => ({
 }))
 
 vi.mock('@/lib/generation/draftPipeline', () => ({
-  evaluateDraftCandidate: vi.fn(),
-  generateDraftCandidate: vi.fn(),
+  evaluateDraftCandidate: mocks.evaluateDraftCandidate,
+  generateDraftCandidate: mocks.generateDraftCandidate,
 }))
 
 vi.mock('@/lib/generation/runGenerationPipeline', () => ({
@@ -99,6 +104,10 @@ describe('process-item route', () => {
     mocks.getPayload.mockReset()
     mocks.generateAndUploadImage.mockReset()
     mocks.generateArticle.mockReset()
+    mocks.isRetryableGenerationError.mockReset()
+    mocks.isRepetitionGenerationError.mockReset()
+    mocks.generateDraftCandidate.mockReset()
+    mocks.evaluateDraftCandidate.mockReset()
     mocks.createAndUploadInstagramImage.mockReset()
     mocks.postToInstagram.mockReset()
     mocks.recordInstagramIntegrationFailure.mockReset()
@@ -124,6 +133,8 @@ describe('process-item route', () => {
       return { sent: false, deduplicated: true }
     })
     mocks.tryFinalizeGenerationJob.mockResolvedValue({ finalized: false, pending: true })
+    mocks.isRetryableGenerationError.mockReturnValue(false)
+    mocks.isRepetitionGenerationError.mockReturnValue(false)
     mocks.generateArticle.mockResolvedValue({
       article: {
         headline: 'Siri, Why Is the Courtyard Locked?',
@@ -211,6 +222,46 @@ describe('process-item route', () => {
         forceAfR: true,
       }),
     )
+  })
+
+  it('retries a meta-commentary failure against the same accepted draft with corrective feedback', async () => {
+    const metaError = new Error('META_COMMENTARY_GUARD: bodyMarkdown "The piece would satirize"')
+    mocks.isRetryableGenerationError.mockReturnValue(true)
+    mocks.generateArticle.mockRejectedValueOnce(metaError).mockResolvedValueOnce({
+      article: {
+        headline: 'Siri, Why Is the Courtyard Locked?',
+        subheadline: 'Courtyard access now requires emotional paperwork.',
+        bodyMarkdown: 'Residents found the gate locked before sunrise.',
+        excerpt: 'Courtyard access now requires emotional paperwork.',
+        categorySlug: 'kiez',
+        authorSlug: 'alex-author',
+        newAuthorName: null,
+        newAuthorTitle: null,
+        newAuthorBio: null,
+        imagePrompt: 'A courtyard gate',
+        imageCaption: 'A locked courtyard.',
+        isFeatured: false,
+        isHeadline: false,
+        layout: 'standard',
+        canonicalSourceAuthor: null,
+        canonicalSourceStory: null,
+      },
+      usedRssTopic: null,
+    })
+
+    const response = await POST(makeRequest())
+
+    expect(response.status).toBe(200)
+    expect(mocks.generateArticle).toHaveBeenCalledTimes(2)
+    expect(mocks.generateArticle.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        seedDraft: expect.objectContaining({
+          headline: 'Siri, Why Is the Courtyard Locked?',
+        }),
+        editorDirection: expect.stringContaining(metaError.message),
+      }),
+    )
+    expect(mocks.generateDraftCandidate).not.toHaveBeenCalled()
   })
 
   it('records an alert when Instagram publishing fails', async () => {

@@ -3,12 +3,13 @@ import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
 import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
 import {
-  hasMetaSummaryVoice,
+  findMetaSummaryVoiceEvidence,
   normalizeExcerptForStorage,
   normalizeOptionalExcerptForStorage,
 } from '@/lib/text/excerptQuality'
 import { normalizeOptionalSubheadlineForStorage } from '@/lib/text/subheadline'
 import {
+  assessHeadlineLanguage,
   assertArticleLanguagePolicy,
   HEADLINE_LANGUAGE_GUARD_PREFIX,
   HEADLINE_LANGUAGE_POLICY_PROMPT,
@@ -151,6 +152,11 @@ const FinalArticleLanguageSchema = z.object({
   ),
   invalidField: z.enum(['headline', 'subheadline', 'excerpt', 'none']).optional().default('none'),
   germanUsageSummary: z.string().max(300),
+  languageViolationType: z
+    .enum(['german-headline-policy', 'non-english-headline', 'non-english-supporting-text', 'none'])
+    .optional()
+    .default('none'),
+  languageViolationEvidence: z.string().max(500).optional().default(''),
   metaCommentaryPass: z.boolean().optional().default(true),
   metaViolationType: z
     .enum([
@@ -176,7 +182,7 @@ const FinalArticleLanguageSchema = z.object({
     ])
     .optional()
     .default('none'),
-  reason: z.string().max(300),
+  reason: z.string().max(300).optional().default(''),
 })
 
 /******************* LOGGING ***********************/
@@ -221,12 +227,16 @@ function isWeddingCeremonyError(err: unknown): err is WeddingCeremonyContentErro
 export function isRetryableGenerationError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   // Retry on repetition guard errors
-  if (error.message.includes(REPETITION_GUARD_PREFIX)) return true
+  if (isRepetitionGenerationError(error)) return true
   if (error.message.includes(HEADLINE_LANGUAGE_GUARD_PREFIX)) return true
   if (error.message.includes(META_COMMENTARY_GUARD_PREFIX)) return true
   // Retry on wedding ceremony content errors (article was about weddings instead of Wedding neighborhood)
   if (isWeddingCeremonyError(error)) return true
   return false
+}
+
+export function isRepetitionGenerationError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(REPETITION_GUARD_PREFIX)
 }
 
 /**
@@ -3468,9 +3478,10 @@ function assertNoKnownMetaCommentary(article: GeneratedArticle): void {
   }
 
   for (const [field, value] of Object.entries(readerVisibleFields)) {
-    if (typeof value === 'string' && hasMetaSummaryVoice(value)) {
+    const evidence = typeof value === 'string' ? findMetaSummaryVoiceEvidence(value) : null
+    if (evidence) {
       throw new Error(
-        `${META_COMMENTARY_GUARD_PREFIX}: ${field} contains explicit self-referential commentary`,
+        `${META_COMMENTARY_GUARD_PREFIX}: ${field} "${evidence}" contains explicit self-referential commentary`,
       )
     }
   }
@@ -3503,10 +3514,15 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
     'You are the final publication language and editorial-voice evaluator for a US-English newspaper.',
     HEADLINE_LANGUAGE_POLICY_PROMPT,
     'Inspect headline, subheadline, and excerpt for language policy.',
+    'The deterministic headline guard has already passed. Do not reject an otherwise English-led headline merely for an allowed isolated German local term such as Bürgeramt, Bürgerämter, Späti, Kiez, Anmeldung, or Döner.',
     ANTI_META_COMMENTARY_RULES,
-    'Inspect every supplied reader-visible field for meta-commentary, including bodyMarkdown, imageCaption, and author copy.',
+    'Inspect every supplied article field for meta-commentary, including bodyMarkdown and imageCaption.',
     'Unknown proper names, place names, company names, titles, and acronyms are neutral rather than German or English.',
     'Set invalidField to the first failing field in headline, subheadline, excerpt order, or none when every field passes.',
+    'For a language failure, select the precise languageViolationType and copy the shortest exact contiguous offending passage into languageViolationEvidence.',
+    'Use german-headline-policy only for a violation of the bounded German allowance, non-english-headline for another non-English headline, and non-english-supporting-text for a non-English subheadline or excerpt.',
+    'The language evidence must be a verbatim substring of invalidField. A vague explanation is not evidence.',
+    'When languagePass=true, set languageViolationType="none" and languageViolationEvidence="".',
     'Meta-commentary exists only when the narrator refers to this current output, its writing or writer, its joke/comic intent, or tells this output’s readers how to react.',
     'Do not reject commentary about the reported subject, governance, public service, officials, characters, or their behavior.',
     'Words such as production, audience, performance, story, article, comedy, or satire are not violations when they refer to an in-world play, musical, film, publication, event, institution, or quoted speaker.',
@@ -3523,12 +3539,10 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
       excerpt: params.article.excerpt ?? null,
       bodyMarkdown: params.article.bodyMarkdown,
       imageCaption: params.article.imageCaption ?? null,
-      newAuthorTitle: params.article.newAuthorTitle ?? null,
-      newAuthorBio: params.article.newAuthorBio ?? null,
     }),
     '',
     'JSON schema:',
-    '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "metaCommentaryPass": boolean, "invalidMetaField": "headline" | "subheadline" | "excerpt" | "bodyMarkdown" | "imageCaption" | "newAuthorTitle" | "newAuthorBio" | "none", "metaViolationType": "labels-current-output" | "explains-current-joke" | "states-writer-intent" | "directs-current-reader-response" | "none", "metaCommentaryEvidence": string, "reason": string }',
+    '{ "languagePass": boolean, "englishShare": number, "invalidField": "headline" | "subheadline" | "excerpt" | "none", "germanUsageSummary": string, "languageViolationType": "german-headline-policy" | "non-english-headline" | "non-english-supporting-text" | "none", "languageViolationEvidence": string, "metaCommentaryPass": boolean, "invalidMetaField": "headline" | "subheadline" | "excerpt" | "bodyMarkdown" | "imageCaption" | "none", "metaViolationType": "labels-current-output" | "explains-current-joke" | "states-writer-intent" | "directs-current-reader-response" | "none", "metaCommentaryEvidence": string, "reason": string }',
     '',
     'englishShare must be a decimal from 0 to 1, never a percentage from 0 to 100.',
     'languagePass must be true only when the headline satisfies the full headline policy and both supporting fields are entirely in US English.',
@@ -3558,6 +3572,8 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
       }
       const fieldText = invalidMetaField === 'none' ? null : readerVisibleFields[invalidMetaField]
       const hasSupportedViolation =
+        invalidMetaField !== 'newAuthorTitle' &&
+        invalidMetaField !== 'newAuthorBio' &&
         verdict.metaViolationType !== 'none' &&
         evidence.length > 0 &&
         typeof fieldText === 'string' &&
@@ -3582,8 +3598,34 @@ async function assertSemanticFinalArticleLanguagePolicy(params: {
             ? 'headline'
             : 'article'
           : verdict.invalidField
-      throw new Error(
-        `${HEADLINE_LANGUAGE_GUARD_PREFIX}: ${invalidField} headline-language: ${verdict.germanUsageSummary || verdict.reason}`,
+      const languageEvidence = verdict.languageViolationEvidence.trim()
+      const languageFields = {
+        headline: params.article.headline,
+        subheadline: params.article.subheadline,
+        excerpt: params.article.excerpt,
+      }
+      const fieldText = invalidField === 'article' ? null : languageFields[invalidField]
+      const hasSupportedLanguageViolation =
+        verdict.languageViolationType !== 'none' &&
+        languageEvidence.length > 0 &&
+        typeof fieldText === 'string' &&
+        fieldText.includes(languageEvidence)
+      const deterministicGermanPass =
+        invalidField === 'headline' &&
+        verdict.languageViolationType === 'german-headline-policy' &&
+        assessHeadlineLanguage(params.article.headline).passes
+
+      if (hasSupportedLanguageViolation && !deterministicGermanPass) {
+        throw new Error(
+          `${HEADLINE_LANGUAGE_GUARD_PREFIX}: ${invalidField} headline-language: ${verdict.germanUsageSummary || verdict.reason}`,
+        )
+      }
+
+      console.warn(
+        deterministicGermanPass
+          ? `${LOG.prefix} Ignoring semantic German-policy verdict after deterministic headline pass`
+          : `${LOG.prefix} Ignoring unsupported language verdict without typed verbatim evidence`,
+        verdict,
       )
     }
   } catch (error) {

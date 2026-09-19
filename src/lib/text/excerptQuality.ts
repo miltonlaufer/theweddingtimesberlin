@@ -44,9 +44,19 @@ const META_SUMMARY_VOICE_PATTERNS: RegExp[] = [
 ]
 
 export function hasMetaSummaryVoice(value: string): boolean {
+  return findMetaSummaryVoiceEvidence(value) !== null
+}
+
+export function findMetaSummaryVoiceEvidence(value: string): string | null {
   const normalized = collapseWhitespace(value)
-  if (!normalized) return false
-  return META_SUMMARY_VOICE_PATTERNS.some((pattern) => pattern.test(normalized))
+  if (!normalized) return null
+
+  for (const pattern of META_SUMMARY_VOICE_PATTERNS) {
+    const match = normalized.match(pattern)
+    if (match?.[0]) return match[0]
+  }
+
+  return null
 }
 
 export function hasTerminalExcerptEnding(value: string): boolean {

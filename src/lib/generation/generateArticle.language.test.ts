@@ -96,6 +96,8 @@ describe('generateArticle final article-language guard', () => {
         englishShare: 1,
         invalidField: 'excerpt',
         germanUsageSummary: 'The excerpt is French rather than US English.',
+        languageViolationType: 'non-english-supporting-text',
+        languageViolationEvidence: 'Les patients attendent',
         reason: 'Supporting text language policy failed.',
       },
     },
@@ -111,6 +113,8 @@ describe('generateArticle final article-language guard', () => {
         englishShare: 1,
         invalidField: 'subheadline',
         germanUsageSummary: 'The subheadline is Spanish rather than US English.',
+        languageViolationType: 'non-english-supporting-text',
+        languageViolationEvidence: 'Los pacientes esperan',
         reason: 'Supporting text language policy failed.',
       },
     },
@@ -126,6 +130,8 @@ describe('generateArticle final article-language guard', () => {
         englishShare: 1,
         invalidField: 'subheadline',
         germanUsageSummary: 'The subheadline is Italian rather than US English.',
+        languageViolationType: 'non-english-supporting-text',
+        languageViolationEvidence: 'I pazienti aspettano',
         reason: 'Supporting text language policy failed.',
       },
     },
@@ -153,6 +159,59 @@ describe('generateArticle final article-language guard', () => {
     expect(mocks.invoke).toHaveBeenCalledTimes(2)
   })
 
+  it.each([
+    {
+      headline: 'Door Doctrine: Ariadne’s Couch Still Wants Entry',
+      evidence: 'Ariadne’s Couch',
+    },
+    {
+      headline: 'Ashtray Diplomacy at the Bürgeramt',
+      evidence: 'Bürgeramt',
+    },
+  ])(
+    'does not let a semantic German-policy verdict override the deterministic pass for $evidence',
+    async ({ headline, evidence }) => {
+      mocks.invoke.mockResolvedValueOnce({
+        content: JSON.stringify({ ...fullArticle, headline }),
+      })
+      mocks.invoke.mockResolvedValueOnce({
+        content: JSON.stringify({
+          languagePass: false,
+          englishShare: 0.8,
+          invalidField: 'headline',
+          germanUsageSummary: `The headline contains a German phrase, '${evidence}'.`,
+          languageViolationType: 'german-headline-policy',
+          languageViolationEvidence: evidence,
+          reason: 'The German headline allowance was exceeded.',
+        }),
+      })
+
+      const result = await generateArticle(makeInput())
+
+      expect(result.article.headline).toBe(headline)
+    },
+  )
+
+  it('still rejects an evidence-backed non-English headline', async () => {
+    const headline = 'Les Patients Attendent While Hospital Closes'
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({ ...fullArticle, headline }),
+    })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: false,
+        englishShare: 0.5,
+        invalidField: 'headline',
+        germanUsageSummary: 'The opening phrase is French rather than US English.',
+        languageViolationType: 'non-english-headline',
+        languageViolationEvidence: 'Les Patients Attendent',
+        reason: 'The headline is not English-led.',
+      }),
+    })
+
+    await expect(generateArticle(makeInput())).rejects.toThrow('HEADLINE_LANGUAGE_GUARD: headline')
+  })
+
   it('normalizes a percentage-shaped English share before applying the evaluator verdict', async () => {
     mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(fullArticle) })
     mocks.invoke.mockResolvedValueOnce({
@@ -161,6 +220,8 @@ describe('generateArticle final article-language guard', () => {
         englishShare: 100,
         invalidField: 'excerpt',
         germanUsageSummary: 'The excerpt is not entirely in US English.',
+        languageViolationType: 'non-english-supporting-text',
+        languageViolationEvidence: 'Patients discover',
         reason: 'Supporting text language policy failed.',
       }),
     })
@@ -506,6 +567,35 @@ describe('generateArticle final article-language guard', () => {
     expect(result.article.headline).toBe(musicalArticle.headline)
   })
 
+  it('does not treat an author biography describing the author’s beat as article meta-commentary', async () => {
+    const articleWithNewAuthor = {
+      ...fullArticle,
+      authorSlug: 'clive-deadpan',
+      newAuthorName: 'Clive Deadpan',
+      newAuthorTitle: 'Institutional Humiliation Correspondent',
+      newAuthorBio:
+        'Clive writes about football, bureaucracy, and powerful men discovering consequences. His reporting follows status rituals wherever they become public policy.',
+    }
+    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(articleWithNewAuthor) })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: true,
+        englishShare: 1,
+        invalidField: 'none',
+        germanUsageSummary: '',
+        metaCommentaryPass: false,
+        invalidMetaField: 'newAuthorBio',
+        metaViolationType: 'states-writer-intent',
+        metaCommentaryEvidence: 'Clive writes about football, bureaucracy',
+        reason: "The author bio describes the writer's focus.",
+      }),
+    })
+
+    const result = await generateArticle(makeInput())
+
+    expect(result.article.newAuthorBio).toBe(articleWithNewAuthor.newAuthorBio)
+  })
+
   it('rejects meta-commentary identified semantically even when it evades the narrow fallback', async () => {
     const implicitMetaArticle = {
       ...fullArticle,
@@ -540,7 +630,7 @@ describe('generateArticle final article-language guard', () => {
     })
 
     await expect(generateArticle(makeInput())).rejects.toThrow(
-      'META_COMMENTARY_GUARD: bodyMarkdown',
+      'META_COMMENTARY_GUARD: bodyMarkdown "The piece would satirize"',
     )
     expect(mocks.invoke).toHaveBeenCalledOnce()
   })

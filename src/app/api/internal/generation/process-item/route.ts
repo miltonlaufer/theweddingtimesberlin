@@ -4,6 +4,7 @@ import { getPayload } from '@/lib/payload'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import {
   generateArticle,
+  isRepetitionGenerationError,
   isRetryableGenerationError,
   type GeneratorAuthorOption,
   type GeneratorCategoryOption,
@@ -134,6 +135,22 @@ function extractRepetitionMatchedReference(errorMessage: string): string | null 
   if (!match?.[1]) return null
   const normalized = match[1].replace(/\s+/g, ' ').trim()
   return normalized.length > 0 ? normalized : null
+}
+
+function buildArticleEditorDirection(
+  baseDirection: string | undefined,
+  previousFailure: string | null,
+): string | undefined {
+  const base = baseDirection?.trim().slice(0, 700) ?? ''
+  const correction = previousFailure
+    ? [
+        'CORRECT THE PREVIOUS FULL-ARTICLE REJECTION while preserving the accepted locked draft:',
+        `- ${previousFailure.slice(0, 700)}`,
+        '- Keep the same headline, subheadline, excerpt, topic, and central premise. Correct only the rejected article-level defect.',
+      ].join('\n')
+    : ''
+  const combined = [base, correction].filter(Boolean).join('\n\n')
+  return combined || undefined
 }
 
 function getAuthorIdFromArticleDoc(doc: unknown): string | number | null {
@@ -450,6 +467,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     let generated: Awaited<ReturnType<typeof generateArticle>>['article'] | undefined
     let usedRssTopic: string | null = null
     let lastError: unknown
+    let previousArticleFailure: string | null = null
     let seedDraft: DraftCandidate = {
       headline: item.headline.trim(),
       subheadline: item.subheadline?.trim() || null,
@@ -488,7 +506,10 @@ export async function POST(request: Request): Promise<NextResponse> {
           forceAfR: slot.forceAfR,
           forceOpinion: slot.forceOpinion,
           useHumorPerspectiveMethod: slot.useHumorPerspectiveMethod,
-          editorDirection: slot.editorDirection,
+          editorDirection: buildArticleEditorDirection(
+            slot.editorDirection,
+            previousArticleFailure,
+          ),
           seedDraft: {
             headline: seedDraft.headline,
             subheadline: seedDraft.subheadline,
@@ -508,10 +529,17 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.warn(
           `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} generate attempt ${attempt} failed (${reason})`,
         )
-        const retryableRepetition = isRetryableGenerationError(error)
-        if (!retryableRepetition || attempt >= MAX_GENERATION_ATTEMPTS) {
+        const retryableGenerationError = isRetryableGenerationError(error)
+        if (!retryableGenerationError || attempt >= MAX_GENERATION_ATTEMPTS) {
           throw error
         }
+
+        if (!isRepetitionGenerationError(error)) {
+          previousArticleFailure = reason
+          continue
+        }
+
+        previousArticleFailure = null
 
         const matchedReference = extractRepetitionMatchedReference(reason)
         if (matchedReference) {
