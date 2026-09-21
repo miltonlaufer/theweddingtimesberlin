@@ -72,7 +72,49 @@ describe('generateArticle final article-language guard', () => {
 
   afterEach(() => {
     process.env = originalEnv
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it('carries dated RSS source grounding into full-article generation', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-21T10:00:00.000Z'))
+    mocks.invoke.mockResolvedValueOnce({ content: JSON.stringify(fullArticle) })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        languagePass: true,
+        englishShare: 1,
+        invalidField: 'none',
+        germanUsageSummary: '',
+      }),
+    })
+
+    await generateArticle({
+      ...makeInput(),
+      includeTopics: true,
+      forceRss: true,
+      topicSummary:
+        '- [berliner-zeitung] Politologe: Mit einem spontanen Rücktritt des Bundeskanzlers habe ich nicht gerechnet',
+      rssTopics: [
+        {
+          source: 'berliner-zeitung',
+          title:
+            'Politologe: Mit einem spontanen Rücktritt des Bundeskanzlers habe ich nicht gerechnet',
+          url: 'https://www.berliner-zeitung.de/article/merz-interview',
+          publishedAt: '2026-09-21T06:00:00.000Z',
+          description:
+            'Politologe erklärt, was das Wahldebakel für Friedrich Merz und die Koalition bedeutet.',
+        },
+      ],
+    })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toContain('Current date in Europe/Berlin: 2026-09-21')
+    expect(combined).toContain('Friedrich Merz')
+    expect(combined).toMatch(/never infer.*officeholder.*model memory/i)
   })
 
   it.each([

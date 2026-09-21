@@ -48,6 +48,15 @@ function makeRequest(options?: { forceAfR?: boolean }): Request {
         includeTopics: true,
       },
       topicSummary: '- topic',
+      rssTopics: [
+        {
+          source: 'berliner-zeitung',
+          title: 'The chancellor faces calls to resign',
+          url: 'https://news.example.test/chancellor',
+          publishedAt: '2026-09-21T06:00:00.000Z',
+          description: 'The report concerns Federal Chancellor Friedrich Merz.',
+        },
+      ],
       maxDraftAttempts: 3,
     }),
   })
@@ -108,6 +117,30 @@ describe('slot-worker route', () => {
           slot: expect.objectContaining({ forceAfR: true }),
         }),
       )
+    }
+  })
+
+  it('preserves structured RSS source context across draft and article requests', async () => {
+    const response = await POST(makeRequest())
+    expect(response.status).toBe(200)
+
+    await mocks.scheduledAfter?.()
+
+    const requestBodies = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>)
+
+    expect(requestBodies).toHaveLength(2)
+    for (const body of requestBodies) {
+      expect(body.rssTopics).toEqual([
+        {
+          source: 'berliner-zeitung',
+          title: 'The chancellor faces calls to resign',
+          url: 'https://news.example.test/chancellor',
+          publishedAt: '2026-09-21T06:00:00.000Z',
+          description: 'The report concerns Federal Chancellor Friedrich Merz.',
+        },
+      ])
     }
   })
 

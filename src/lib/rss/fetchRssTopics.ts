@@ -9,6 +9,7 @@ export interface RssTopic {
   title: string
   url: string
   publishedAt?: string
+  description?: string
 }
 
 export interface FetchRssTopicsResult {
@@ -25,6 +26,21 @@ const DEFAULT_FEEDS: Record<RssSource, string[]> = {
   // Berliner Zeitung: provide via env (RSS_BERLINER_ZEITUNG_FEED).
   'berliner-zeitung': [],
   nytimes: ['https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml'],
+}
+
+function normalizeDescription(value: string): string | undefined {
+  const normalized = value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 800)
+    .trim()
+
+  return normalized || undefined
 }
 
 /******************* HELPERS ***********************/
@@ -66,12 +82,16 @@ function normalizeRssItems(args: { source: RssSource; xml: string; maxItems: num
         const title = getStringProp(item, 'title').trim()
         const url = getStringProp(item, 'link').trim()
         const publishedAtRaw = getStringProp(item, 'pubDate').trim()
+        const description = normalizeDescription(
+          getStringProp(item, 'description') || getStringProp(item, 'content:encoded'),
+        )
 
         return {
           source: args.source,
           title,
           url,
           publishedAt: publishedAtRaw.length > 0 ? publishedAtRaw : undefined,
+          description,
         }
       })
       .filter((t) => t.title.length > 0 && t.url.length > 0)
@@ -99,12 +119,16 @@ function normalizeRssItems(args: { source: RssSource; xml: string; maxItems: num
 
         const updated = getStringProp(entry, 'updated').trim()
         const published = getStringProp(entry, 'published').trim()
+        const description = normalizeDescription(
+          getStringProp(entry, 'summary') || getStringProp(entry, 'content'),
+        )
 
         return {
           source: args.source,
           title,
           url,
           publishedAt: updated.length > 0 ? updated : published.length > 0 ? published : undefined,
+          description,
         }
       })
       .filter((t) => t.title.length > 0 && t.url.length > 0)

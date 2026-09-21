@@ -184,7 +184,7 @@ export async function POST(req: Request) {
   }
 
   const includeTopics = pickTwoThirds()
-  const { topicSummary } = await fetchRssTopics()
+  const { topics: rssTopics, topicSummary } = await fetchRssTopics()
 
   // Use the recent articles we already fetched in the parallel query above
   const recentArticlesForOverlap = recentArticlesRes.docs
@@ -286,6 +286,7 @@ export async function POST(req: Request) {
       const generatedDraft = await generateDraftCandidate({
         slot,
         topicSummary,
+        rssTopics,
         recentCoverage,
         blacklistSummary: blacklistCache.summary,
         acceptedDrafts: attemptedDrafts,
@@ -344,6 +345,7 @@ export async function POST(req: Request) {
         categories,
         authors,
         topicSummary,
+        rssTopics,
         includeTopics,
         recentArticleTitles: recentArticleTitles.slice(0, 40), // Pass last 40 for topic avoidance and structure variety
         recentArticleExcerpts: recentArticleExcerpts.slice(0, 40), // Parallel array to titles

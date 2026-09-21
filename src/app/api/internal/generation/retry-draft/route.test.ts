@@ -94,6 +94,44 @@ describe('retry-draft route', () => {
     )
   })
 
+  it('passes structured RSS source context into draft generation', async () => {
+    const rssTopics = [
+      {
+        source: 'berliner-zeitung',
+        title: 'The chancellor faces calls to resign',
+        url: 'https://news.example.test/chancellor',
+        publishedAt: '2026-09-21T06:00:00.000Z',
+        description: 'The report concerns Federal Chancellor Friedrich Merz.',
+      },
+    ]
+    const response = await POST(
+      new Request('https://example.test/api/internal/generation/retry-draft', {
+        method: 'POST',
+        body: JSON.stringify({
+          jobId: 123,
+          itemId: 456,
+          maxAttempts: 3,
+          slot: {
+            forceOpinion: false,
+            includeTopics: true,
+            forceRss: true,
+          },
+          topicSummary: '- [berliner-zeitung] The chancellor faces calls to resign',
+          rssTopics,
+          recentCoverage: [],
+          acceptedDrafts: [],
+          forbiddenSourceTopics: [],
+          blacklistSummary: '',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.generateDraftCandidate).toHaveBeenCalledWith(
+      expect.objectContaining({ rssTopics }),
+    )
+  })
+
   it('feeds the previous rejected draft and evaluator reason into the next attempt', async () => {
     mocks.getPayload.mockResolvedValue({
       findByID: vi.fn().mockResolvedValue({

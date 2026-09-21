@@ -706,6 +706,7 @@ export async function runGenerationPipeline(params: {
             itemId: item.id,
             slot: item.slot,
             topicSummary,
+            rssTopics: prioritizedTopics,
             recentCoverage,
             recentArticleTitles,
             recentArticleExcerpts,

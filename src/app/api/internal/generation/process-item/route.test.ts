@@ -77,6 +77,15 @@ function makeRequest(options?: { forceAfR?: boolean }): Request {
         includeTopics: true,
       },
       topicSummary: '- topic',
+      rssTopics: [
+        {
+          source: 'berliner-zeitung',
+          title: 'The chancellor faces calls to resign',
+          url: 'https://news.example.test/chancellor',
+          publishedAt: '2026-09-21T06:00:00.000Z',
+          description: 'The report concerns Federal Chancellor Friedrich Merz.',
+        },
+      ],
       recentArticleTitles: [],
       recentArticleExcerpts: [],
       recentCanonicalStoryReferences: [],
@@ -220,6 +229,25 @@ describe('process-item route', () => {
     expect(mocks.generateArticle).toHaveBeenCalledWith(
       expect.objectContaining({
         forceAfR: true,
+      }),
+    )
+  })
+
+  it('passes structured RSS source context into full-article generation', async () => {
+    const response = await POST(makeRequest())
+
+    expect(response.status).toBe(200)
+    expect(mocks.generateArticle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rssTopics: [
+          {
+            source: 'berliner-zeitung',
+            title: 'The chancellor faces calls to resign',
+            url: 'https://news.example.test/chancellor',
+            publishedAt: '2026-09-21T06:00:00.000Z',
+            description: 'The report concerns Federal Chancellor Friedrich Merz.',
+          },
+        ],
       }),
     )
   })

@@ -14,6 +14,8 @@ import {
   HEADLINE_LANGUAGE_GUARD_PREFIX,
   HEADLINE_LANGUAGE_POLICY_PROMPT,
 } from './headlineLanguage'
+import { buildRssGroundingPrompt, resolveRssTopicContext } from './rssGrounding'
+import type { RssTopic } from '@/lib/rss/fetchRssTopics'
 
 /******************* TYPES ***********************/
 
@@ -38,6 +40,7 @@ export interface GenerateArticleInput {
   categories: GeneratorCategoryOption[]
   authors: GeneratorAuthorOption[]
   topicSummary: string
+  rssTopics?: RssTopic[]
   includeTopics: boolean
   recentArticleTitles: string[] // Titles of recent articles to avoid repeating
   recentArticleExcerpts?: string[] // Optional excerpts (parallel array to titles, truncated to ~150 chars)
@@ -1903,7 +1906,10 @@ function parseTopicSummaryLine(line: string): TopicSummaryLine | null {
   const value = sourceTagged[2].trim()
   if (!value) return null
 
-  if (sourceRaw === 'rss' || sourceRaw === 'manual' || sourceRaw === 'hint') {
+  if (sourceRaw === 'rss' || sourceRaw === 'nytimes' || sourceRaw === 'berliner-zeitung') {
+    return { source: 'rss', value }
+  }
+  if (sourceRaw === 'manual' || sourceRaw === 'hint') {
     return { source: sourceRaw, value }
   }
   return { source: 'unknown', value }
@@ -4433,6 +4439,15 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   // RSS topics are only used when NOT a feature story AND RSS topics are available
   const actuallyUsedRssTopic =
     !useFeatureStoryPrompt && hasRssTopics && selectedRssTopic ? selectedRssTopic : null
+  const rawRssContext = actuallyUsedRssTopic
+    ? (input.rssTopics ?? []).find(
+        (topic) =>
+          topic.title.trim().replace(/\s+/g, ' ').toLowerCase() ===
+          actuallyUsedRssTopic.trim().replace(/\s+/g, ' ').toLowerCase(),
+      )
+    : undefined
+  const resolvedRssContext = rawRssContext ? await resolveRssTopicContext(rawRssContext) : undefined
+  const rssGroundingSection = resolvedRssContext ? buildRssGroundingPrompt(resolvedRssContext) : ''
   const useAfRRssMode = Boolean(actuallyUsedRssTopic && isAfDTopic(actuallyUsedRssTopic))
   const useAfRTopicMode =
     input.forceAfR === true ||
@@ -4851,6 +4866,8 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
       ? [
           'CURRENT NEWS TOPIC TO SATIRIZE:',
           selectedRssTopic,
+          '',
+          rssGroundingSection,
           '',
           useAfRRssMode
             ? [

@@ -11,6 +11,14 @@ import type { DraftCandidate, DraftEvaluation } from '@/lib/generation/pipelineT
 export const maxDuration = 300
 const LOG_PREFIX = '[INTERNAL-SLOT-WORKER]'
 
+const RssTopicSchema = z.object({
+  source: z.enum(['berliner-zeitung', 'nytimes']),
+  title: z.string().min(1).max(300),
+  url: z.string().url().max(2000),
+  publishedAt: z.string().max(100).optional(),
+  description: z.string().max(800).optional(),
+})
+
 const RequestSchema = z.object({
   jobId: z.union([z.string(), z.number()]),
   itemId: z.union([z.string(), z.number()]),
@@ -26,6 +34,7 @@ const RequestSchema = z.object({
     editorDirection: z.string().max(1200).optional(),
   }),
   topicSummary: z.string(),
+  rssTopics: z.array(RssTopicSchema).max(100).default([]),
   recentCoverage: z
     .array(
       z.object({
@@ -251,6 +260,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             maxAttempts: body.maxDraftAttempts,
             slot: body.slot,
             topicSummary: body.topicSummary,
+            rssTopics: body.rssTopics,
             recentCoverage: body.recentCoverage,
             acceptedDrafts,
             forbiddenSourceTopics: Array.from(attemptedSourceTopicsForSlot),
@@ -347,6 +357,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           itemId: body.itemId,
           slot: body.slot,
           topicSummary: body.topicSummary,
+          rssTopics: body.rssTopics,
           recentArticleTitles: body.recentArticleTitles,
           recentArticleExcerpts: body.recentArticleExcerpts,
           recentCanonicalStoryReferences: body.recentCanonicalStoryReferences,

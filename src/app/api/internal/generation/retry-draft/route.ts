@@ -7,6 +7,14 @@ import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/gener
 
 const LOG_PREFIX = '[INTERNAL-RETRY-DRAFT]'
 
+const RssTopicSchema = z.object({
+  source: z.enum(['berliner-zeitung', 'nytimes']),
+  title: z.string().min(1).max(300),
+  url: z.string().url().max(2000),
+  publishedAt: z.string().max(100).optional(),
+  description: z.string().max(800).optional(),
+})
+
 const RequestSchema = z.object({
   jobId: z.union([z.string(), z.number()]),
   itemId: z.union([z.string(), z.number()]),
@@ -23,6 +31,7 @@ const RequestSchema = z.object({
     editorDirection: z.string().max(1200).optional(),
   }),
   topicSummary: z.string(),
+  rssTopics: z.array(RssTopicSchema).max(100).default([]),
   recentCoverage: z
     .array(
       z.object({
@@ -160,6 +169,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const { draft, sourceRssTopic } = await generateDraftCandidate({
       slot,
       topicSummary: body.topicSummary,
+      rssTopics: body.rssTopics,
       recentCoverage,
       blacklistSummary: body.blacklistSummary,
       acceptedDrafts,

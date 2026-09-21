@@ -22,6 +22,8 @@ import {
   assessSupportingTextLanguage,
   HEADLINE_LANGUAGE_POLICY_PROMPT,
 } from '@/lib/generation/headlineLanguage'
+import { buildRssGroundingPrompt, resolveRssTopicContext } from './rssGrounding'
+import type { RssTopic } from '@/lib/rss/fetchRssTopics'
 import type {
   DraftCandidate,
   DraftEvaluation,
@@ -347,6 +349,7 @@ function buildRentThemeBiasInstruction(params: {
 export async function generateDraftCandidate(params: {
   slot: SlotConfig
   topicSummary: string
+  rssTopics?: RssTopic[]
   recentCoverage: RecentCoverageItem[]
   blacklistSummary: string
   acceptedDrafts: DraftCandidate[]
@@ -380,6 +383,17 @@ export async function generateDraftCandidate(params: {
     useRandomModes,
   )
   const topic = selectedTopic?.value ?? null
+  const selectedRssContext =
+    selectedTopic?.source === 'rss'
+      ? (params.rssTopics ?? []).find(
+          (candidate) =>
+            normalizeTopicIdentity(candidate.title) === normalizeTopicIdentity(topic ?? ''),
+        )
+      : undefined
+  const resolvedRssContext = selectedRssContext
+    ? await resolveRssTopicContext(selectedRssContext)
+    : undefined
+  const rssGroundingSection = resolvedRssContext ? buildRssGroundingPrompt(resolvedRssContext) : ''
   const llm = new ChatOpenAI({
     apiKey,
     model: modelName,
@@ -463,6 +477,7 @@ export async function generateDraftCandidate(params: {
     '',
     `Mode: ${buildModeInstruction(params.slot, includeBerlinThemes)}`,
     topic ? `Assigned topic/news hook: ${topic}` : 'No fixed topic: choose a fresh one.',
+    rssGroundingSection,
     '',
     'ABSOLUTE: Avoid overlap with these already-covered stories:',
     recentLines || '- none',

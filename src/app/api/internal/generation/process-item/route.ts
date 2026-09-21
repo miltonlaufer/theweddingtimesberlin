@@ -62,6 +62,14 @@ const GENERATION_REDRAFT_ATTEMPTS_PER_FAILURE = Math.max(
 const GENERATION_REDRAFT_ACCEPT_NON_OVERLAP =
   (process.env.GENERATION_REDRAFT_ACCEPT_NON_OVERLAP ?? 'true') !== 'false'
 
+const RssTopicSchema = z.object({
+  source: z.enum(['berliner-zeitung', 'nytimes']),
+  title: z.string().min(1).max(300),
+  url: z.string().url().max(2000),
+  publishedAt: z.string().max(100).optional(),
+  description: z.string().max(800).optional(),
+})
+
 const RequestSchema = z.object({
   jobId: z.union([z.string(), z.number()]),
   itemId: z.union([z.string(), z.number()]),
@@ -77,6 +85,7 @@ const RequestSchema = z.object({
     editorDirection: z.string().max(1200).optional(),
   }),
   topicSummary: z.string(),
+  rssTopics: z.array(RssTopicSchema).max(100).default([]),
   recentArticleTitles: z.array(z.string()).default([]),
   recentArticleExcerpts: z.array(z.string()).default([]),
   recentCanonicalStoryReferences: z
@@ -493,6 +502,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           categories,
           authors,
           topicSummary: body.topicSummary,
+          rssTopics: body.rssTopics,
           includeTopics: slot.includeTopics,
           recentArticleTitles: body.recentArticleTitles.slice(0, 20),
           recentArticleExcerpts: body.recentArticleExcerpts.slice(0, 20),
@@ -570,6 +580,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             const regeneratedDraft = await generateDraftCandidate({
               slot,
               topicSummary: body.topicSummary,
+              rssTopics: body.rssTopics,
               recentCoverage: dynamicCoverage,
               blacklistSummary: body.precomputedBlacklistSummary,
               acceptedDrafts,

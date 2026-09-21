@@ -17,6 +17,8 @@ describe('generateDraftCandidate', () => {
   afterEach(() => {
     process.env.OPENAI_API_KEY = originalOpenAiApiKey
     mocks.invoke.mockReset()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   it('treats configured RSS source tags as RSS topics for forced RSS slots', async () => {
@@ -49,6 +51,66 @@ describe('generateDraftCandidate', () => {
     expect(mocks.invoke).toHaveBeenCalledOnce()
     expect(JSON.stringify(mocks.invoke.mock.calls[0]?.[0])).toContain(
       'Assigned topic/news hook: Senate discovers the queue is sentient',
+    )
+  })
+
+  it('grounds an ambiguous officeholder headline in dated source metadata instead of model memory', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-21T10:00:00.000Z'))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            '<html><head><meta property="og:description" content="Politologe erklärt, was das Wahldebakel für Friedrich Merz und die Koalition bedeutet."></head></html>',
+            { status: 200, headers: { 'content-type': 'text/html' } },
+          ),
+      ),
+    )
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        headline: 'Merz Finds the Chancellery Exit Locked From Inside',
+        subheadline: 'The coalition rehearses loyalty while checking every emergency door.',
+        excerpt: 'A disastrous election result turns the chancellery into a public waiting room.',
+      }),
+    })
+
+    await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: true,
+        forceOpinion: false,
+        includeTopics: true,
+      },
+      topicSummary:
+        '- [berliner-zeitung] Politologe: Mit einem spontanen Rücktritt des Bundeskanzlers habe ich nicht gerechnet',
+      rssTopics: [
+        {
+          source: 'berliner-zeitung',
+          title:
+            'Politologe: Mit einem spontanen Rücktritt des Bundeskanzlers habe ich nicht gerechnet',
+          url: 'https://www.berliner-zeitung.de/article/merz-interview',
+          publishedAt: '2026-09-21T06:00:00.000Z',
+        },
+      ],
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      forbiddenSourceTopics: [],
+      useRandomModes: false,
+    })
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+
+    expect(combined).toContain('Current date in Europe/Berlin: 2026-09-21')
+    expect(combined).toContain('Friedrich Merz')
+    expect(combined).toContain('Published: 2026-09-21T06:00:00.000Z')
+    expect(combined).toMatch(/never infer.*officeholder.*model memory/i)
+    expect(combined).toMatch(
+      /source.*does not identify.*use the office title.*do not invent a name/i,
     )
   })
 
