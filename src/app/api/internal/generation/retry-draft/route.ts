@@ -182,24 +182,33 @@ export async function POST(request: Request): Promise<NextResponse> {
       recentCoverage,
       acceptedDrafts,
     })
+    const acceptSafeThirdAttempt =
+      !evaluation.accepted && nextAttempt >= 3 && evaluation.safeForFallback
+    const finalEvaluation = acceptSafeThirdAttempt
+      ? {
+          ...evaluation,
+          accepted: true,
+          reason: `accepted-third-attempt: ${evaluation.reason}`,
+        }
+      : evaluation
 
     await payload.update({
       collection: 'generation-job-items',
       id: body.itemId,
       data: {
         draftAttempt: nextAttempt,
-        status: evaluation.accepted ? 'draft-accepted' : 'draft-rejected',
+        status: finalEvaluation.accepted ? 'draft-accepted' : 'draft-rejected',
         headline: draft.headline,
         subheadline: draft.subheadline,
         excerpt: draft.excerpt,
         sourceRssTopic: sourceRssTopic ?? undefined,
-        draftEvaluation: evaluation,
-        error: evaluation.accepted ? undefined : evaluation.reason,
+        draftEvaluation: finalEvaluation,
+        error: finalEvaluation.accepted ? undefined : finalEvaluation.reason,
       },
     })
-    if (evaluation.accepted) {
+    if (finalEvaluation.accepted) {
       console.log(
-        `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} accepted on attempt ${nextAttempt} | "${draft.headline.slice(0, 120)}"`,
+        `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} accepted on attempt ${nextAttempt}${acceptSafeThirdAttempt ? ' via safe third-attempt fallback' : ''} | "${draft.headline.slice(0, 120)}"`,
       )
     } else {
       console.warn(
@@ -209,12 +218,12 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     return NextResponse.json({
       ok: true,
-      accepted: evaluation.accepted,
-      exhausted: nextAttempt >= maxAttempts && !evaluation.accepted,
+      accepted: finalEvaluation.accepted,
+      exhausted: nextAttempt >= maxAttempts && !finalEvaluation.accepted,
       attempt: nextAttempt,
       draft,
       sourceRssTopic,
-      evaluation,
+      evaluation: finalEvaluation,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Draft generation failed'

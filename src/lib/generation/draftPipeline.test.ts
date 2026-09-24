@@ -185,7 +185,7 @@ describe('generateDraftCandidate', () => {
     )
   })
 
-  it('requires the pitch headline to carry the story’s conceptual sexual double meaning', async () => {
+  it('requires the pitch headline to use a conceptual sexual or surreal engine', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
       content: JSON.stringify({
@@ -213,9 +213,12 @@ describe('generateDraftCandidate', () => {
     const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
     const combined = messages.map((message) => message.content).join('\n')
 
-    expect(combined).toMatch(/sexual double meaning.*(?:premise|comedic engine)/i)
-    expect(combined).toMatch(/headline.*(?:carry|express).*(?:same|central).*double meaning/i)
-    expect(combined).toMatch(/not.*(?:dirty words|suggestive phrases|word-count quota)/i)
+    expect(combined).toMatch(/at least one strong engine.*sexual.*(?:or|OR).*surreal/i)
+    expect(combined).toMatch(/aim for both.*one fully realized engine is enough/i)
+    expect(combined).toMatch(
+      /impossible.*(?:rule|object|institution|physical fact).*ordinary procedure/i,
+    )
+    expect(combined).toMatch(/random dirty words.*odd nouns.*merely weird wording/i)
     expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
     expect(combined).toMatch(/headline, subheadline, excerpt.*reader.*infer/i)
   })
@@ -344,6 +347,44 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/do not demand.*(?:ending|full article arc)/i)
     expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
     expect(combined).toMatch(/pass=false.*meta-commentary/i)
+  })
+
+  it('accepts a genuinely surreal or pataphysical headline as an alternative style lane', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        conceptualInnuendoPass: false,
+        surrealPataphysicsPass: true,
+        metaCommentaryPass: true,
+        pass: true,
+        reason: 'The impossible administrative rule governs the whole pitch.',
+      }),
+    })
+
+    const evaluation = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Permit Office Declares Gravity a Missing Attachment',
+        subheadline: 'Applicants must remain airborne until the correct office stamps the floor.',
+        excerpt:
+          'The city treats gravity as defective paperwork and invoices residents for landing.',
+      },
+      recentCoverage: [],
+      acceptedDrafts: [],
+    })
+
+    expect(evaluation.accepted).toBe(true)
+    expect(evaluation.tone.surrealPataphysicsPass).toBe(true)
+
+    const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
+    const combined = messages.map((message) => message.content).join('\n')
+    expect(combined).toMatch(
+      /sexual.*(?:or|alternative).*surreal|surreal.*(?:or|alternative).*sexual/i,
+    )
+    expect(combined).toMatch(/pataphys/i)
+    expect(combined).toMatch(/random.*(?:odd|weird)|merely.*absurd.*word/i)
   })
 
   it('allows a non-meta tone rejection to become a final safe fallback', async () => {

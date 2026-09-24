@@ -125,9 +125,10 @@ type FallbackDraft = {
 }
 
 function fallbackQualityScore(evaluation: DraftEvaluation): number {
-  const innuendoBonus = evaluation.tone.conceptualInnuendoPass ? 100 : 0
+  const strongStyleBonus =
+    evaluation.tone.conceptualInnuendoPass || evaluation.tone.surrealPataphysicsPass ? 100 : 0
   return (
-    innuendoBonus +
+    strongStyleBonus +
     evaluation.tone.funScore +
     evaluation.tone.mercilessScore +
     evaluation.tone.specificityScore

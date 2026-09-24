@@ -10,7 +10,6 @@ import {
   assessHeadlineSimilarity,
   assessRecentCoverageOverlap,
   CRAZY_HEADLINE_REQUIREMENTS,
-  CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
   CULTURAL_REFERENCE_HEADLINE_GUIDANCE,
   HUMOR_PERSPECTIVE_METHOD,
   MICRO_DETAIL_FORMULA_GUARD,
@@ -48,10 +47,20 @@ const DraftToneSchema = z.object({
   mercilessScore: z.number().int().min(1).max(10),
   specificityScore: z.number().int().min(1).max(10),
   conceptualInnuendoPass: z.boolean(),
+  surrealPataphysicsPass: z.boolean().default(false),
   metaCommentaryPass: z.boolean(),
   pass: z.boolean(),
   reason: z.string().max(300),
 })
+
+const DRAFT_STRONG_HEADLINE_STYLE_REQUIREMENTS = [
+  'STRONG HEADLINE STYLE GATE:',
+  '- The headline must fully realize at least one strong engine: a conceptual sexual double meaning OR a genuinely surreal/pataphysical mechanism that reorganizes real-world logic.',
+  '- Aim for both when they reinforce each other, but one fully realized engine is enough.',
+  '- For the sexual lane, connect the literal and sexual readings through the same power dynamic and social accusation.',
+  '- For the surreal/pataphysical lane, make an impossible rule, object, institution, or physical fact govern the story while everyone treats it as ordinary procedure.',
+  '- Random dirty words, disconnected suggestive phrases, odd nouns, dream images, or merely weird wording do not count.',
+].join('\n')
 
 function extractFirstJsonObject(text: string): string {
   const firstBrace = text.indexOf('{')
@@ -452,7 +461,7 @@ export async function generateDraftCandidate(params: {
       : '',
     ACID_HUMOR_REQUIREMENTS,
     '',
-    CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
+    DRAFT_STRONG_HEADLINE_STYLE_REQUIREMENTS,
     '',
     ANTI_META_COMMENTARY_RULES,
     '',
@@ -506,6 +515,8 @@ export async function generateDraftCandidate(params: {
       : '',
     previousAttemptSection,
     'Rules:',
+    DRAFT_STRONG_HEADLINE_STYLE_REQUIREMENTS,
+    '',
     CRAZY_HEADLINE_REQUIREMENTS,
     CULTURAL_REFERENCE_HEADLINE_GUIDANCE,
     ...buildDraftPerspectiveRuleLines(includeHumorEngine),
@@ -575,8 +586,11 @@ async function evaluateDraftTone(
     'Output strict JSON only.',
     'Score if the pitch is funny, merciless, and specific.',
     ANTI_META_COMMENTARY_RULES,
-    'The headline must carry a recognizable conceptual sexual double meaning, not merely contain a dirty word or disconnected suggestive phrase.',
-    'The headline, subheadline, and excerpt must connect that double meaning through one coherent conceptual mechanism, power dynamic, and social accusation.',
+    'The headline must pass at least one strong style lane: a recognizable conceptual sexual double meaning OR a genuinely surreal/pataphysical mechanism.',
+    'For the sexual lane, a dirty word or disconnected suggestive phrase does not count; the headline, subheadline, and excerpt must connect through one coherent conceptual mechanism, power dynamic, and social accusation.',
+    'For the surreal/pataphysical lane, an impossible rule, object, institution, or physical fact must reorganize the story’s real-world logic and social accusation while everyone treats it as ordinary procedure.',
+    'Random odd nouns, merely weird wording, generic absurdity, dream imagery, or announcing that something is surreal do not count.',
+    'A pitch may pass either lane. Reward one that achieves both without obscuring the actual story.',
     'Judge only whether the pitch establishes that governing concept clearly enough for the full article to develop it.',
     'Do not demand callbacks, an ending, or a full article arc from a three-field pitch.',
     'Subtle bodily, submission, appetite, penetration, exposure, restraint, servicing, or intimacy metaphors can pass when their literal and sexual readings reinforce the same power dynamic; explicit sex words are not required.',
@@ -587,11 +601,12 @@ async function evaluateDraftTone(
     JSON.stringify(candidate),
     '',
     'JSON schema:',
-    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
+    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "surrealPataphysicsPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
     '',
     'Set conceptualInnuendoPass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
+    'Set surrealPataphysicsPass=false when the headline lacks a governing impossible mechanism or merely uses random odd, weird, dreamlike, or absurd wording.',
     'Set metaCommentaryPass=false if any field contains meta-commentary, breaks the fourth wall, labels this current pitch as satire/comedy, explains its joke, premise, angle, genre, or intent, or directs how readers should react to it.',
-    'Set pass=true only when conceptualInnuendoPass and metaCommentaryPass are true, all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
+    'Set pass=true only when either conceptualInnuendoPass or surrealPataphysicsPass is true, metaCommentaryPass is true, all scores are >= 7, the angle is not bland, the pitch has real bite, and the tone is not too clean or polite.',
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -634,6 +649,7 @@ export async function evaluateDraftCandidate(params: {
         mercilessScore: 1,
         specificityScore: 1,
         conceptualInnuendoPass: false,
+        surrealPataphysicsPass: false,
         metaCommentaryPass: false,
         languagePass: false,
         englishShare: headlineLanguage.englishShare,
@@ -658,6 +674,7 @@ export async function evaluateDraftCandidate(params: {
         mercilessScore: 1,
         specificityScore: 1,
         conceptualInnuendoPass: false,
+        surrealPataphysicsPass: false,
         metaCommentaryPass: false,
         languagePass: false,
         englishShare: headlineLanguage.englishShare,
@@ -687,6 +704,7 @@ export async function evaluateDraftCandidate(params: {
         mercilessScore: 1,
         specificityScore: 1,
         conceptualInnuendoPass: false,
+        surrealPataphysicsPass: false,
         metaCommentaryPass: false,
         languagePass: true,
         englishShare: headlineLanguage.englishShare,
@@ -714,6 +732,7 @@ export async function evaluateDraftCandidate(params: {
         mercilessScore: 1,
         specificityScore: 1,
         conceptualInnuendoPass: false,
+        surrealPataphysicsPass: false,
         metaCommentaryPass: false,
         languagePass: true,
         englishShare: headlineLanguage.englishShare,
@@ -736,6 +755,7 @@ export async function evaluateDraftCandidate(params: {
         mercilessScore: 1,
         specificityScore: 1,
         conceptualInnuendoPass: false,
+        surrealPataphysicsPass: false,
         metaCommentaryPass: false,
         languagePass: true,
         englishShare: headlineLanguage.englishShare,
@@ -765,6 +785,7 @@ export async function evaluateDraftCandidate(params: {
       mercilessScore: 7,
       specificityScore: 7,
       conceptualInnuendoPass: false,
+      surrealPataphysicsPass: false,
       metaCommentaryPass: true,
       languagePass: true,
       englishShare: headlineLanguage.englishShare,
@@ -791,7 +812,7 @@ export async function evaluateDraftCandidate(params: {
 
   const tonePass =
     tone.pass &&
-    tone.conceptualInnuendoPass &&
+    (tone.conceptualInnuendoPass || tone.surrealPataphysicsPass) &&
     tone.metaCommentaryPass &&
     tone.funScore >= minFun &&
     tone.mercilessScore >= minMerciless &&

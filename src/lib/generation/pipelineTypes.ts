@@ -43,6 +43,7 @@ export type DraftEvaluation = {
     mercilessScore: number
     specificityScore: number
     conceptualInnuendoPass: boolean
+    surrealPataphysicsPass: boolean
     metaCommentaryPass: boolean
     languagePass: boolean
     englishShare: number

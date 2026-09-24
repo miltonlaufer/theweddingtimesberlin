@@ -815,7 +815,7 @@ export const CULTURAL_REFERENCE_HEADLINE_GUIDANCE = [
 export const CRAZY_HEADLINE_REQUIREMENTS = [
   'CRAZY HEADLINE REQUIREMENTS (MANDATORY):',
   '- The headline must feel dangerous, funny, and slightly wrong in the mouth.',
-  '- The title must express the story’s central sexual double meaning; adding a random dirty word or disconnected suggestive phrase does not count.',
+  '- The title must express the story’s central comedic mechanism; decorative dirty words, disconnected suggestive phrases, odd nouns, dream images, or merely weird wording do not count.',
   '- Prefer 5-12 words. Hard cap 18 words unless a named current-news entity truly requires more.',
   '- Make the title a punchline, threat, confession, question, curse, quoted warning, absurd official notice, or image the reader cannot immediately file away.',
   '- Create curiosity before explanation. Do not summarize the whole thesis.',
