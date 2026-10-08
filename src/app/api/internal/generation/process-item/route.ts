@@ -14,7 +14,12 @@ import {
   isInternalCronAuthorized,
 } from '@/lib/generation/internalAuth'
 import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
-import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
+import {
+  evaluateDraftCandidate,
+  generateDraftCandidate,
+  reviseDraftCandidate,
+} from '@/lib/generation/draftPipeline'
+import { refineDraftInnuendo } from '@/lib/generation/refineDraftInnuendo'
 import { tryFinalizeGenerationJob } from '@/lib/generation/runGenerationPipeline'
 import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
 import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
@@ -593,11 +598,33 @@ export async function POST(request: Request): Promise<NextResponse> {
               triedSourceTopicsForItem.add(regeneratedDraft.sourceRssTopic.trim())
             }
 
-            const evaluation = await evaluateDraftCandidate({
+            let evaluation = await evaluateDraftCandidate({
               candidate: regeneratedDraft.draft,
               recentCoverage: dynamicCoverage,
               acceptedDrafts,
             })
+            const refined = await refineDraftInnuendo({
+              draft: regeneratedDraft.draft,
+              evaluation,
+              revise: (draft, verdict) =>
+                reviseDraftCandidate({
+                  draft,
+                  sourceRssTopic: regeneratedDraft.sourceRssTopic,
+                  feedback: JSON.stringify({
+                    reason: verdict.reason,
+                    toneReason: verdict.tone.reason,
+                    evidence: verdict.tone.innuendoEvidence,
+                  }),
+                }),
+              evaluate: (candidate) =>
+                evaluateDraftCandidate({
+                  candidate,
+                  recentCoverage: dynamicCoverage,
+                  acceptedDrafts: acceptedDrafts,
+                }),
+            })
+            regeneratedDraft.draft = refined.draft
+            evaluation = refined.evaluation
 
             attemptedDrafts.push(regeneratedDraft.draft)
 

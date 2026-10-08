@@ -11,7 +11,12 @@ import {
 import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
-import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
+import {
+  evaluateDraftCandidate,
+  generateDraftCandidate,
+  reviseDraftCandidate,
+} from '@/lib/generation/draftPipeline'
+import { refineDraftInnuendo } from '@/lib/generation/refineDraftInnuendo'
 import type { DraftCandidate, DraftEvaluation, SlotConfig } from '@/lib/generation/pipelineTypes'
 import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
 import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
@@ -300,11 +305,33 @@ export async function POST(req: Request) {
         triedSourceTopics.add(generatedDraft.sourceRssTopic.trim())
       }
 
-      const evaluation = await evaluateDraftCandidate({
+      let evaluation = await evaluateDraftCandidate({
         candidate: generatedDraft.draft,
         recentCoverage,
         acceptedDrafts: attemptedDrafts,
       })
+      const refined = await refineDraftInnuendo({
+        draft: generatedDraft.draft,
+        evaluation,
+        revise: (draft, verdict) =>
+          reviseDraftCandidate({
+            draft,
+            sourceRssTopic: generatedDraft.sourceRssTopic,
+            feedback: JSON.stringify({
+              reason: verdict.reason,
+              toneReason: verdict.tone.reason,
+              evidence: verdict.tone.innuendoEvidence,
+            }),
+          }),
+        evaluate: (candidate) =>
+          evaluateDraftCandidate({
+            candidate,
+            recentCoverage: recentCoverage,
+            acceptedDrafts: attemptedDrafts,
+          }),
+      })
+      generatedDraft.draft = refined.draft
+      evaluation = refined.evaluation
       lastEvaluation = evaluation
 
       attemptedDrafts.push(generatedDraft.draft)

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getPayload: vi.fn(),
   generateDraftCandidate: vi.fn(),
   evaluateDraftCandidate: vi.fn(),
+  reviseDraftCandidate: vi.fn(),
 }))
 
 vi.mock('@/lib/payload', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/lib/generation/internalAuth', () => ({
 vi.mock('@/lib/generation/draftPipeline', () => ({
   generateDraftCandidate: mocks.generateDraftCandidate,
   evaluateDraftCandidate: mocks.evaluateDraftCandidate,
+  reviseDraftCandidate: mocks.reviseDraftCandidate,
 }))
 
 describe('retry-draft route', () => {
@@ -25,6 +27,8 @@ describe('retry-draft route', () => {
     mocks.getPayload.mockReset()
     mocks.generateDraftCandidate.mockReset()
     mocks.evaluateDraftCandidate.mockReset()
+    mocks.reviseDraftCandidate.mockReset()
+    mocks.reviseDraftCandidate.mockImplementation(async ({ draft }) => draft)
 
     mocks.getPayload.mockResolvedValue({
       findByID: vi.fn().mockResolvedValue({
@@ -63,6 +67,76 @@ describe('retry-draft route', () => {
       },
     })
   })
+
+  it.each([
+    {
+      label: 'style checks fail',
+      previousRevision: undefined,
+      expectedRevisions: 12,
+      evaluatorAvailable: true,
+    },
+    {
+      label: 'evaluator unavailable and revision budget spent',
+      previousRevision: { attempts: 2, failures: 2, improved: false },
+      expectedRevisions: 0,
+      evaluatorAvailable: false,
+    },
+  ])(
+    'accepts all six safe slots when $label',
+    async ({ previousRevision, expectedRevisions, evaluatorAvailable }) => {
+      const update = vi.fn().mockResolvedValue({})
+      mocks.getPayload.mockResolvedValue({
+        findByID: vi.fn(async ({ id }) => ({
+          id,
+          job: 123,
+          draftAttempt: 2,
+          draftEvaluation: { innuendoRevision: previousRevision },
+        })),
+        update,
+      })
+      mocks.evaluateDraftCandidate.mockResolvedValue({
+        accepted: false,
+        safeForFallback: true,
+        reason: 'tone: missing innuendo',
+        repetition: { overlaps: false, score: 0, reason: 'distinct', matchedReference: null },
+        tone: {
+          funScore: 7,
+          mercilessScore: 7,
+          specificityScore: 7,
+          conceptualInnuendoPass: false,
+          evaluatorAvailable,
+          surrealPataphysicsPass: false,
+          metaCommentaryPass: true,
+          languagePass: true,
+          englishShare: 1,
+          germanUsageSummary: '',
+          pass: false,
+          reason: 'No recognizable double meaning.',
+        },
+      })
+      const results = []
+      for (let itemId = 1; itemId <= 6; itemId++) {
+        const response = await POST(
+          new Request('https://example.test/api/internal/generation/retry-draft', {
+            method: 'POST',
+            body: JSON.stringify({
+              jobId: 123,
+              itemId,
+              maxAttempts: 3,
+              slot: { forceOpinion: false, includeTopics: false },
+              topicSummary: '',
+            }),
+          }),
+        )
+        results.push(await response.json())
+      }
+      expect(results.every((result) => result.accepted && !result.exhausted)).toBe(true)
+      expect(mocks.reviseDraftCandidate).toHaveBeenCalledTimes(expectedRevisions)
+      expect(
+        update.mock.calls.filter(([args]) => args.data.status === 'draft-accepted'),
+      ).toHaveLength(6)
+    },
+  )
 
   it('preserves forced AfR mode when generating a draft', async () => {
     const request = new Request('https://example.test/api/internal/generation/retry-draft', {

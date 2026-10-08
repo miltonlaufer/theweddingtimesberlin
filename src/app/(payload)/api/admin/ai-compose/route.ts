@@ -16,7 +16,12 @@ import {
   type GeneratedArticle,
 } from '@/lib/generation/generateArticle'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
-import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
+import {
+  evaluateDraftCandidate,
+  generateDraftCandidate,
+  reviseDraftCandidate,
+} from '@/lib/generation/draftPipeline'
+import { refineDraftInnuendo } from '@/lib/generation/refineDraftInnuendo'
 import { generateAndUploadImage } from '@/lib/images/generateAndUploadImage'
 import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
 import { normalizeOptionalExcerptForStorage } from '@/lib/text/excerptQuality'
@@ -773,11 +778,33 @@ export async function POST(request: Request): Promise<NextResponse> {
           strictTopicFocus: options.strictTopicFocus,
         })
 
-        const evaluation = await evaluateDraftCandidate({
+        let evaluation = await evaluateDraftCandidate({
           candidate: result.draft,
           recentCoverage: recent.recentCoverage,
           acceptedDrafts,
         })
+        const refined = await refineDraftInnuendo({
+          draft: result.draft,
+          evaluation,
+          revise: (draft, verdict) =>
+            reviseDraftCandidate({
+              draft,
+              sourceRssTopic: result.sourceRssTopic,
+              feedback: JSON.stringify({
+                reason: verdict.reason,
+                toneReason: verdict.tone.reason,
+                evidence: verdict.tone.innuendoEvidence,
+              }),
+            }),
+          evaluate: (candidate) =>
+            evaluateDraftCandidate({
+              candidate,
+              recentCoverage: recent.recentCoverage,
+              acceptedDrafts: acceptedDrafts,
+            }),
+        })
+        result.draft = refined.draft
+        evaluation = refined.evaluation
 
         const normalizedSourceRssTopic = normalizeSourceRssTopic(result.sourceRssTopic)
         logInfo(requestId, 'generateDraft: completed', {

@@ -77,6 +77,45 @@ describe('generateArticle final article-language guard', () => {
     vi.restoreAllMocks()
   })
 
+  it('preserves an overlong supporting field through a complete rewrite', async () => {
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        ...fullArticle,
+        subheadline:
+          'Union Berlin’s standing-room devotion is about to be treated like a scheduling miracle, as Bundesliga bosses discover that the club’s biggest asset is not football but the crowd’s willingness to rearrange its entire schedule.',
+      }),
+    })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        subheadline: 'Supporters rearrange their lives around television schedules.',
+      }),
+    })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({ languagePass: true, englishShare: 1, germanUsageSummary: '' }),
+    })
+
+    const result = await generateArticle(makeInput())
+    expect(result.article.subheadline).toBe(
+      'Supporters rearrange their lives around television schedules.',
+    )
+    expect(result.article.excerpt).toBe(fullArticle.excerpt)
+    expect(result.article.bodyMarkdown).toBe(coherentBody)
+  })
+
+  it('rejects failed summary rewrites instead of accepting an omitted field', async () => {
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        ...fullArticle,
+        subheadline:
+          'Union Berlin’s standing-room devotion is about to be treated like a scheduling miracle, as Bundesliga bosses discover that the club’s biggest asset is not football but the crowd’s willingness to rearrange its entire schedule.',
+      }),
+    })
+    mocks.invoke.mockResolvedValue({ content: JSON.stringify({ subheadline: null }) })
+    await expect(generateArticle(makeInput())).rejects.toThrow(
+      'Could not rewrite supporting text within its limits',
+    )
+  })
+
   it('carries dated RSS source grounding into full-article generation', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-21T10:00:00.000Z'))

@@ -12,7 +12,8 @@ import { generateAuthors } from '@/lib/generation/generateAuthors'
 import { planEditorialSlots } from '@/lib/generation/editorialPlanner'
 import { sendPushNotifications } from '@/lib/push/sendNotifications'
 import { buildInternalAuthHeaders } from '@/lib/generation/internalAuth'
-import type { RecentCoverageItem } from '@/lib/generation/pipelineTypes'
+import type { DraftEvaluation, RecentCoverageItem } from '@/lib/generation/pipelineTypes'
+import { summarizeBatchDraftInnuendo } from '@/lib/generation/refineDraftInnuendo'
 
 /******************* LOGGING ***********************/
 
@@ -159,6 +160,7 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 type JobItemStatusDoc = {
+  draftEvaluation?: DraftEvaluation
   id?: string | number
   status?: string
   draftAttempt?: number
@@ -374,6 +376,7 @@ export async function tryFinalizeGenerationJob(params: {
         notificationResult,
         revalidatedPaths,
         instagramResult,
+        draftInnuendo: summarizeBatchDraftInnuendo(refreshedDocs),
         finalizedAt: new Date().toISOString(),
       },
     },

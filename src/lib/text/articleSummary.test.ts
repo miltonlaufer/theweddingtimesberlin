@@ -23,12 +23,24 @@ describe('articleSummary', () => {
     )
   })
 
-  it('trims long fallback summaries at a clause instead of a dangling phrase', () => {
+  it('rejects long fallback paragraphs with no complete sentence under the limit', () => {
     const html =
       '<p>A Kreuzberg wellness collective that made its money selling discipline, breathwork, and the kind of self-control usually reserved for hedge funds and abandoned marriages has rebranded itself as a trauma embassy, complete with intake forms, donation tiers, and a waiting list long enough to be mistaken for civic demand.</p>'
 
-    expect(buildSummaryFromHtmlContent(html, 300)).toBe(
-      'A Kreuzberg wellness collective that made its money selling discipline, breathwork, and the kind of self-control usually reserved for hedge funds and abandoned marriages has rebranded itself as a trauma embassy, complete with intake forms, donation tiers.',
-    )
+    expect(buildSummaryFromHtmlContent(html, 300)).toBeUndefined()
+  })
+
+  it('skips an overlong HTML paragraph and uses the next complete paragraph', () => {
+    const html =
+      '<p>Union Berlin’s standing-room devotion is about to be treated like a scheduling miracle, as Bundesliga bosses discover that the club’s biggest asset is not football but the crowd’s willingness to rearrange its entire schedule.</p><p>The league wants Monday matches.</p>'
+
+    expect(buildSummaryFromHtmlContent(html, 220)).toBe('The league wants Monday matches.')
+  })
+
+  it('skips an overlong Markdown paragraph and uses the next complete paragraph', () => {
+    const markdown =
+      'Union Berlin’s standing-room devotion is about to be treated like a scheduling miracle, as Bundesliga bosses discover that the club’s biggest asset is not football but the crowd’s willingness to rearrange its entire schedule.\n\nThe league wants Monday matches.'
+
+    expect(buildSummaryFromMarkdownContent(markdown, 220)).toBe('The league wants Monday matches.')
   })
 })

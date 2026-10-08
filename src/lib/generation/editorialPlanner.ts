@@ -179,7 +179,7 @@ function slotForTheme(
     includeTopics: theme === 'rss-current-news',
     useHumorPerspectiveMethod: includeHumorPerspectiveMethod(),
     themeBucket: theme,
-    editorDirection: editorialDirection(theme),
+    editorDirection: `${editorialDirection(theme)} Build a recognizable sexual double meaning into the headline and the same governing power dynamic; surrealism must reinforce this layer rather than replace it.`,
   }
 }
 

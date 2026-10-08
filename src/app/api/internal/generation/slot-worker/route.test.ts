@@ -90,6 +90,65 @@ describe('slot-worker route', () => {
     )
   })
 
+  it('keeps an earlier safe innuendo pitch instead of a weaker accepted third attempt', async () => {
+    const update = vi.fn().mockResolvedValue({})
+    mocks.getPayload.mockResolvedValue({ find: vi.fn().mockResolvedValue({ docs: [] }), update })
+    let attempt = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL) => {
+        if (new URL(String(url)).pathname.endsWith('/process-item'))
+          return Response.json({ ok: true })
+        attempt++
+        const innuendo = attempt === 1
+        return Response.json({
+          accepted: attempt === 3,
+          exhausted: false,
+          draft: {
+            headline: innuendo ? 'Permit Office Demands Submission' : `Safe Style Miss ${attempt}`,
+            subheadline: 'Applicants submit to another interview.',
+            excerpt: 'Paperwork governs the process.',
+          },
+          sourceRssTopic: 'Permit office interview process',
+          evaluation: {
+            accepted: attempt === 3,
+            safeForFallback: true,
+            reason: 'tone: needs revision',
+            repetition: { overlaps: false, score: 0, reason: 'distinct', matchedReference: null },
+            tone: {
+              funScore: 6,
+              mercilessScore: 7,
+              specificityScore: 7,
+              conceptualInnuendoPass: innuendo,
+              surrealPataphysicsPass: false,
+              metaCommentaryPass: true,
+              languagePass: true,
+              englishShare: 1,
+              germanUsageSummary: '',
+              pass: false,
+              reason: 'needs more bite',
+            },
+          },
+        })
+      }),
+    )
+    await POST(makeRequest())
+    await mocks.scheduledAfter?.()
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'draft-accepted',
+          headline: 'Permit Office Demands Submission',
+        }),
+      }),
+    )
+    expect(
+      vi
+        .mocked(globalThis.fetch)
+        .mock.calls.some(([url]) => new URL(String(url)).pathname.endsWith('/process-item')),
+    ).toBe(true)
+  })
+
   it('does not finalize after process-item succeeds because process-item already finalizes', async () => {
     const response = await POST(makeRequest())
     expect(response.status).toBe(200)

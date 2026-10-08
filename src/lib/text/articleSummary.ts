@@ -17,41 +17,8 @@ function stripMarkdownLinks(value: string): string {
     .replace(/[*_`>#~-]+/g, ' ')
 }
 
-function trimFallbackCandidate(value: string, maxLength: number): string {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-
-  const hardSlice = normalized.slice(0, maxLength)
-  const sentenceMatches = [...hardSlice.matchAll(/[.!?]["')\]]?\s+/g)]
-  const lastSentence = sentenceMatches.at(-1)
-  if (lastSentence) {
-    const sentenceEnd = (lastSentence.index ?? 0) + lastSentence[0].trimEnd().length
-    if (sentenceEnd >= Math.floor(maxLength * 0.45)) {
-      return hardSlice.slice(0, sentenceEnd).trim()
-    }
-  }
-
-  const clauseMatches = [...hardSlice.matchAll(/[,;:]|\s[\u2013\u2014]\s/g)]
-  const lastClause = clauseMatches.at(-1)
-  if (lastClause) {
-    const clauseEnd = (lastClause.index ?? 0) + lastClause[0].length
-    if (clauseEnd >= Math.floor(maxLength * 0.5)) {
-      const clause = hardSlice
-        .slice(0, clauseEnd)
-        .replace(/[,:;\s-]+$/g, '')
-        .trim()
-      if (clause.length > 0) return `${clause}.`
-    }
-  }
-
-  return hardSlice.trim()
-}
-
 function paragraphToSummary(paragraph: string, maxLength: number): string | undefined {
-  const normalized = normalizeSummaryForStorage(
-    trimFallbackCandidate(paragraph, maxLength),
-    maxLength,
-  )
+  const normalized = normalizeSummaryForStorage(paragraph, maxLength)
   return normalized.length > 0 ? normalized : undefined
 }
 

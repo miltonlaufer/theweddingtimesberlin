@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  hasMetaSummaryVoice,
-  hasTerminalExcerptEnding,
-  normalizeExcerptForStorage,
-} from './excerptQuality'
+import { hasMetaSummaryVoice, normalizeExcerptForStorage } from './excerptQuality'
 
 describe('normalizeExcerptForStorage', () => {
   it('keeps valid terminal punctuation', () => {
@@ -19,12 +15,31 @@ describe('normalizeExcerptForStorage', () => {
     expect(normalized.includes(' and the')).toBe(false)
   })
 
-  it('trims ellipsis endings into a complete sentence', () => {
+  it('rejects an ellipsis fragment instead of disguising it as a complete sentence', () => {
     const value =
       'Landlords now demand AI certificates for oat milk and hairdressers run express modules because the holo badge...'
     const normalized = normalizeExcerptForStorage(value, 300)
-    expect(normalized.endsWith('...')).toBe(false)
-    expect(hasTerminalExcerptEnding(normalized)).toBe(true)
+    expect(normalized).toBe('')
+  })
+
+  it('keeps complete sentences before an ellipsis fragment', () => {
+    expect(
+      normalizeExcerptForStorage('Tickets sold out. Supporters rearranged their entire...'),
+    ).toBe('Tickets sold out.')
+  })
+
+  it('keeps a sentence ending exactly at the limit before more text', () => {
+    expect(normalizeExcerptForStorage('Tickets sold out. Queues grew outside.', 17)).toBe(
+      'Tickets sold out.',
+    )
+  })
+
+  it('rejects an unpunctuated sentence when adding a period would exceed the limit', () => {
+    expect(normalizeExcerptForStorage('Tickets sold out', 16)).toBe('')
+  })
+
+  it('does not mistake the cut point inside a word for a sentence ending', () => {
+    expect(normalizeExcerptForStorage('Supporters rearranged their schedules.', 30)).toBe('')
   })
 
   it('stays at or below max length', () => {

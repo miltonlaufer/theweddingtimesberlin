@@ -2,10 +2,21 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getPayload } from '@/lib/payload'
 import { isInternalCronAuthorized } from '@/lib/generation/internalAuth'
-import { evaluateDraftCandidate, generateDraftCandidate } from '@/lib/generation/draftPipeline'
-import type { DraftCandidate, RecentCoverageItem, SlotConfig } from '@/lib/generation/pipelineTypes'
+import {
+  evaluateDraftCandidate,
+  generateDraftCandidate,
+  reviseDraftCandidate,
+} from '@/lib/generation/draftPipeline'
+import { refineDraftInnuendo } from '@/lib/generation/refineDraftInnuendo'
+import type {
+  DraftCandidate,
+  DraftEvaluation,
+  RecentCoverageItem,
+  SlotConfig,
+} from '@/lib/generation/pipelineTypes'
 
 const LOG_PREFIX = '[INTERNAL-RETRY-DRAFT]'
+export const maxDuration = 300
 
 const RssTopicSchema = z.object({
   source: z.enum(['berliner-zeitung', 'nytimes']),
@@ -61,7 +72,7 @@ type JobItemDoc = {
   subheadline?: string | null
   excerpt?: string | null
   error?: string | null
-  draftEvaluation?: { reason?: string } | null
+  draftEvaluation?: Partial<DraftEvaluation> | null
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -166,7 +177,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           }
         : undefined
 
-    const { draft, sourceRssTopic } = await generateDraftCandidate({
+    const generated = await generateDraftCandidate({
       slot,
       topicSummary: body.topicSummary,
       rssTopics: body.rssTopics,
@@ -177,11 +188,43 @@ export async function POST(request: Request): Promise<NextResponse> {
       previousAttempt,
     })
 
-    const evaluation = await evaluateDraftCandidate({
-      candidate: draft,
+    const initialEvaluation = await evaluateDraftCandidate({
+      candidate: generated.draft,
       recentCoverage,
       acceptedDrafts,
     })
+    const sourceRssTopic = generated.sourceRssTopic
+    const previousRevision = item.draftEvaluation?.innuendoRevision
+    const refined = await refineDraftInnuendo({
+      draft: generated.draft,
+      evaluation: initialEvaluation,
+      maxRevisions: Math.max(0, 2 - (previousRevision?.attempts ?? 0)),
+      revise: (draft, evaluation) =>
+        reviseDraftCandidate({
+          draft,
+          sourceRssTopic,
+          feedback: JSON.stringify({
+            reason: evaluation.reason,
+            toneReason: evaluation.tone.reason,
+            evidence: evaluation.tone.innuendoEvidence,
+          }),
+        }),
+      evaluate: (candidate) =>
+        evaluateDraftCandidate({ candidate, recentCoverage, acceptedDrafts }),
+    })
+    const draft = refined.draft
+    const evaluation = previousRevision
+      ? {
+          ...refined.evaluation,
+          innuendoRevision: {
+            attempts:
+              previousRevision.attempts + (refined.evaluation.innuendoRevision?.attempts ?? 0),
+            failures:
+              previousRevision.failures + (refined.evaluation.innuendoRevision?.failures ?? 0),
+            improved: refined.evaluation.innuendoRevision?.improved ?? false,
+          },
+        }
+      : refined.evaluation
     const acceptSafeThirdAttempt =
       !evaluation.accepted && nextAttempt >= 3 && evaluation.safeForFallback
     const finalEvaluation = acceptSafeThirdAttempt

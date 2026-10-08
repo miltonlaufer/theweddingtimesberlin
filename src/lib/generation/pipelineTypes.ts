@@ -28,6 +28,7 @@ export type DraftCandidate = {
 }
 
 export type DraftEvaluation = {
+  innuendoRevision?: { attempts: number; improved: boolean; failures: number }
   accepted: boolean
   /** True only when the draft cleared every non-tone safety/quality gate and contains no meta-commentary. */
   safeForFallback: boolean
@@ -43,6 +44,8 @@ export type DraftEvaluation = {
     mercilessScore: number
     specificityScore: number
     conceptualInnuendoPass: boolean
+    innuendoEvidence?: { wording: string; literalReading: string; sexualReading: string }
+    evaluatorAvailable?: boolean
     surrealPataphysicsPass: boolean
     metaCommentaryPass: boolean
     languagePass: boolean

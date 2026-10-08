@@ -1,6 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
+import { rewriteOverlongSummaries, SUMMARY_LENGTH_GUARD_PREFIX } from './rewriteOverlongSummaries'
 import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
 import {
   findMetaSummaryVoiceEvidence,
@@ -233,6 +234,7 @@ export function isRetryableGenerationError(error: unknown): boolean {
   if (isRepetitionGenerationError(error)) return true
   if (error.message.includes(HEADLINE_LANGUAGE_GUARD_PREFIX)) return true
   if (error.message.includes(META_COMMENTARY_GUARD_PREFIX)) return true
+  if (error.message.includes(SUMMARY_LENGTH_GUARD_PREFIX)) return true
   // Retry on wedding ceremony content errors (article was about weddings instead of Wedding neighborhood)
   if (isWeddingCeremonyError(error)) return true
   return false
@@ -2888,7 +2890,9 @@ async function rewriteArticleFromCritique(args: {
           usedRssTopic: args.usedRssTopic,
         })
       : parsed
-  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
+  const validation = GeneratedArticleSchema.safeParse(
+    await rewriteOverlongSummaries(hydratedForValidation),
+  )
   if (validation.success) return validation.data
 
   return await repairToSchema({
@@ -3119,7 +3123,9 @@ async function translateToEnglish(args: {
           usedRssTopic: args.usedRssTopic ?? null,
         })
       : parsed
-  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
+  const validation = GeneratedArticleSchema.safeParse(
+    await rewriteOverlongSummaries(hydratedForValidation),
+  )
   if (!validation.success) {
     return await repairToSchema({
       badOutput: text,
@@ -3250,7 +3256,9 @@ async function repairToSchema(args: {
           usedRssTopic: args.usedRssTopic ?? null,
         })
       : parsed
-  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
+  const validation = GeneratedArticleSchema.safeParse(
+    await rewriteOverlongSummaries(hydratedForValidation),
+  )
   if (validation.success) {
     return validation.data
   }
@@ -3369,7 +3377,9 @@ async function shortenToSchema(args: {
           usedRssTopic: args.usedRssTopic ?? null,
         })
       : parsed
-  const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
+  const validation = GeneratedArticleSchema.safeParse(
+    await rewriteOverlongSummaries(hydratedForValidation),
+  )
 
   if (!validation.success) {
     throw validation.error
@@ -5166,7 +5176,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
             usedRssTopic: actuallyUsedRssTopic,
           })
         : parsed
-    const validation = GeneratedArticleSchema.safeParse(hydratedForValidation)
+    const validation = GeneratedArticleSchema.safeParse(
+      await rewriteOverlongSummaries(hydratedForValidation),
+    )
     let validated: GeneratedArticle
     if (!validation.success) {
       console.log(`${LOG.prefix} Schema validation failed, repairing...`)

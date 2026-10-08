@@ -7,6 +7,7 @@ import {
 } from '@/lib/generation/internalAuth'
 import { tryFinalizeGenerationJob } from '@/lib/generation/runGenerationPipeline'
 import type { DraftCandidate, DraftEvaluation } from '@/lib/generation/pipelineTypes'
+import { draftQualityScore } from '@/lib/generation/refineDraftInnuendo'
 
 export const maxDuration = 300
 const LOG_PREFIX = '[INTERNAL-SLOT-WORKER]'
@@ -125,14 +126,7 @@ type FallbackDraft = {
 }
 
 function fallbackQualityScore(evaluation: DraftEvaluation): number {
-  const strongStyleBonus =
-    evaluation.tone.conceptualInnuendoPass || evaluation.tone.surrealPataphysicsPass ? 100 : 0
-  return (
-    strongStyleBonus +
-    evaluation.tone.funScore +
-    evaluation.tone.mercilessScore +
-    evaluation.tone.specificityScore
-  )
+  return draftQualityScore(evaluation)
 }
 
 async function promoteFallbackDraft(params: {
@@ -297,9 +291,19 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
 
         if (payloadData.accepted && payloadData.draft) {
+          let acceptedDraft = payloadData.draft
+          if (
+            bestFallback &&
+            payloadData.evaluation &&
+            fallbackQualityScore(bestFallback.evaluation) >
+              fallbackQualityScore(payloadData.evaluation)
+          ) {
+            await promoteFallbackDraft({ itemId: body.itemId, fallback: bestFallback })
+            acceptedDraft = bestFallback.draft
+          }
           accepted = true
           console.log(
-            `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} draft accepted on attempt ${attempt} | "${payloadData.draft.headline.slice(0, 120)}"`,
+            `${LOG_PREFIX} Job ${String(body.jobId)} item ${String(body.itemId)} draft accepted on attempt ${attempt} | "${acceptedDraft.headline.slice(0, 120)}"`,
           )
           break
         }

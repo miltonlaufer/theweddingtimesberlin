@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { evaluateDraftCandidate, generateDraftCandidate } from './draftPipeline'
+import {
+  evaluateDraftCandidate,
+  generateDraftCandidate,
+  reviseDraftCandidate,
+} from './draftPipeline'
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -19,6 +23,69 @@ describe('generateDraftCandidate', () => {
     mocks.invoke.mockReset()
     vi.useRealTimers()
     vi.unstubAllGlobals()
+  })
+
+  it('revises the same news pitch and returns its new headline and supporting text', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        headline: 'Permit Office Demands a More Convincing Submission',
+        subheadline: 'Applicants discover that compliance is the only intimacy on offer.',
+        excerpt: 'The office turns bodily compliance and paperwork into the same ritual.',
+      }),
+    })
+    const revised = await reviseDraftCandidate({
+      draft: {
+        headline: 'Permit Office Adds Another Interview',
+        subheadline: 'Applicants face another interview.',
+        excerpt: 'The office asks for more paperwork.',
+      },
+      feedback: 'No recognizable sexual double meaning.',
+      sourceRssTopic: 'Permit office introduces a second interview',
+    })
+    expect(revised.headline).toBe('Permit Office Demands a More Convincing Submission')
+    expect(revised.subheadline).toBe(
+      'Applicants discover that compliance is the only intimacy on offer.',
+    )
+    expect(JSON.stringify(mocks.invoke.mock.calls[0][0])).toContain(
+      'Permit office introduces a second interview',
+    )
+  })
+
+  it('rewrites an overlong deck before accepting the draft instead of dropping it', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        headline: 'Champions of Prime Time Beg for Monday Night',
+        subheadline:
+          'Union Berlin’s standing-room devotion is about to be treated like a scheduling miracle, as Bundesliga bosses discover that the club’s biggest asset is not football but the crowd’s willingness to rearrange its entire schedule.',
+        excerpt: 'The league wants Monday matches.',
+      }),
+    })
+    mocks.invoke.mockResolvedValueOnce({
+      content: JSON.stringify({
+        subheadline: 'Union Berlin supporters rearrange their lives around television schedules.',
+      }),
+    })
+
+    const result = await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: false,
+        forceOpinion: false,
+        includeTopics: false,
+      },
+      topicSummary: '',
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      useRandomModes: false,
+    })
+    expect(result.draft.subheadline).toBe(
+      'Union Berlin supporters rearrange their lives around television schedules.',
+    )
+    expect(result.draft.excerpt).toBe('The league wants Monday matches.')
   })
 
   it('treats configured RSS source tags as RSS topics for forced RSS slots', async () => {
@@ -185,7 +252,7 @@ describe('generateDraftCandidate', () => {
     )
   })
 
-  it('requires the pitch headline to use a conceptual sexual or surreal engine', async () => {
+  it('targets sexual innuendo with surrealism as a supporting layer', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
       content: JSON.stringify({
@@ -213,8 +280,8 @@ describe('generateDraftCandidate', () => {
     const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
     const combined = messages.map((message) => message.content).join('\n')
 
-    expect(combined).toMatch(/at least one strong engine.*sexual.*(?:or|OR).*surreal/i)
-    expect(combined).toMatch(/aim for both.*one fully realized engine is enough/i)
+    expect(combined).toMatch(/every pitch.*sexual double meaning/i)
+    expect(combined).toMatch(/surreal.*do not replace the sexual layer/i)
     expect(combined).toMatch(
       /impossible.*(?:rule|object|institution|physical fact).*ordinary procedure/i,
     )
@@ -349,7 +416,7 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/pass=false.*meta-commentary/i)
   })
 
-  it('accepts a genuinely surreal or pataphysical headline as an alternative style lane', async () => {
+  it('keeps a surreal-only pitch available for fallback but flags it for innuendo revision', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
       content: JSON.stringify({
@@ -375,14 +442,13 @@ describe('generateDraftCandidate', () => {
       acceptedDrafts: [],
     })
 
-    expect(evaluation.accepted).toBe(true)
+    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.safeForFallback).toBe(true)
     expect(evaluation.tone.surrealPataphysicsPass).toBe(true)
 
     const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
     const combined = messages.map((message) => message.content).join('\n')
-    expect(combined).toMatch(
-      /sexual.*(?:or|alternative).*surreal|surreal.*(?:or|alternative).*sexual/i,
-    )
+    expect(combined).toMatch(/surrealism.*not a substitute/i)
     expect(combined).toMatch(/pataphys/i)
     expect(combined).toMatch(/random.*(?:odd|weird)|merely.*absurd.*word/i)
   })

@@ -1,5 +1,3 @@
-import { trimToReadableLength } from './trimToReadableLength'
-
 const TERMINAL_ENDING_RE = /[.!?]["')\]]?$/
 const TRAILING_CONNECTORS = new Set([
   'and',
@@ -122,7 +120,15 @@ function stripTrailingConnectors(value: string): string {
 export function normalizeSummaryForStorage(input: string, maxLength = 300): string {
   const normalized = collapseWhitespace(input)
   if (hasMetaSummaryVoice(normalized)) return ''
-  const base = trimToReadableLength(normalized, maxLength)
+  // A word boundary is not a sentence boundary. Never turn length truncation
+  // (or an existing ellipsis fragment) into a finished sentence by adding a period.
+  if (normalized.length > maxLength || /(?:\.\.\.|…)$/.test(normalized)) {
+    const boundaries = [...normalized.matchAll(/(?<!\.)[.!?](?!\.)["')\]]?(?=\s|$)/g)]
+    const last = boundaries.filter((match) => match.index + match[0].length <= maxLength).at(-1)
+    if (!last) return ''
+    return normalizeSummaryForStorage(normalized.slice(0, last.index + last[0].length), maxLength)
+  }
+  const base = normalized
   if (!base) return ''
   const withoutDanglingClause = stripDanglingTrailingClause(base)
   if (withoutDanglingClause !== base) {
@@ -130,10 +136,9 @@ export function normalizeSummaryForStorage(input: string, maxLength = 300): stri
   }
   if (hasTerminalExcerptEnding(base)) return base
 
-  const wasLengthTrimmed = normalized.length > maxLength || /(?:\.\.\.|…)$/.test(base)
-  let out = base.replace(/\.\.\.+$/g, '').trimEnd()
+  let out = base
   const hadDanglingPunctuation = /[,:;\-–—]$/.test(out)
-  out = trimToLastSentenceBoundary(out, wasLengthTrimmed || hadDanglingPunctuation ? 0.35 : 0.55)
+  out = trimToLastSentenceBoundary(out, hadDanglingPunctuation ? 0.35 : 0.55)
   out = stripDanglingTrailingClause(out)
   out = out.replace(/[,:;\-–—]+$/g, '').trimEnd()
   out = stripTrailingConnectors(out)
@@ -143,17 +148,8 @@ export function normalizeSummaryForStorage(input: string, maxLength = 300): stri
     out = `${out}.`
   }
 
-  let finalText = trimToReadableLength(out, maxLength)
-  finalText = finalText.replace(/\.{2,}$/g, '.')
-  if (finalText.endsWith('...')) {
-    finalText = `${finalText
-      .slice(0, -3)
-      .trimEnd()
-      .replace(/[,:;\-–—]+$/g, '')}.`
-    finalText = trimToReadableLength(finalText, maxLength)
-  }
-  if (hasMetaSummaryVoice(finalText)) return ''
-  return finalText
+  if (out.length > maxLength || hasMetaSummaryVoice(out)) return ''
+  return out
 }
 
 export function normalizeOptionalSummaryForStorage(
