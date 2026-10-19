@@ -41,6 +41,23 @@ function evaluation(innuendo: boolean, extra: Partial<DraftEvaluation> = {}): Dr
 }
 
 describe('refineDraftInnuendo', () => {
+  it('revises a repeated trope even when it already passes the innuendo check', async () => {
+    const stale = evaluation(true, {
+      styleDiversity: {
+        pass: false,
+        reason: 'Repeated foreplay',
+        signals: ['sexual-trope:foreplay'],
+      },
+    })
+    const result = await refineDraftInnuendo({
+      draft: original,
+      evaluation: stale,
+      revise: async () => revised,
+      evaluate: async () =>
+        evaluation(true, { styleDiversity: { pass: true, reason: 'Fresh', signals: [] } }),
+    })
+    expect(result.draft).toEqual(revised)
+  })
   it('revises a safe pitch before locking it and returns the improved fields', async () => {
     const result = await refineDraftInnuendo({
       draft: original,
@@ -52,25 +69,38 @@ describe('refineDraftInnuendo', () => {
     expect(result.evaluation.tone.conceptualInnuendoPass).toBe(true)
   })
 
-  it('keeps all six safe slots usable when innuendo checks fail throughout', async () => {
-    let revisions = 0
-    const results = await Promise.all(
-      Array.from({ length: 6 }, (_, index) =>
-        refineDraftInnuendo({
-          draft: { ...original, headline: `Permit Office Adds Interview ${index}` },
-          evaluation: evaluation(false),
-          revise: async (draft) => {
-            revisions++
-            return { ...draft, subheadline: 'The office still asks for paperwork.' }
-          },
-          evaluate: async () => evaluation(false),
-        }),
-      ),
-    )
-    expect(results).toHaveLength(6)
-    expect(results.every((result) => result.evaluation.safeForFallback)).toBe(true)
-    expect(revisions).toBe(12)
-  })
+  it.each([false, true])(
+    'keeps all six safe slots usable when style checks fail throughout (innuendo=%s)',
+    async (hasInnuendo) => {
+      let revisions = 0
+      const verdict = hasInnuendo
+        ? evaluation(true, {
+            accepted: false,
+            styleDiversity: {
+              pass: false,
+              reason: 'Repeated trope',
+              signals: ['sexual-trope:foreplay'],
+            },
+          })
+        : evaluation(false)
+      const results = await Promise.all(
+        Array.from({ length: 6 }, (_, index) =>
+          refineDraftInnuendo({
+            draft: { ...original, headline: `Permit Office Adds Interview ${index}` },
+            evaluation: verdict,
+            revise: async (draft) => {
+              revisions++
+              return { ...draft, subheadline: 'The office still asks for paperwork.' }
+            },
+            evaluate: async () => verdict,
+          }),
+        ),
+      )
+      expect(results).toHaveLength(6)
+      expect(results.every((result) => result.evaluation.safeForFallback)).toBe(true)
+      expect(revisions).toBe(12)
+    },
+  )
 
   it('keeps the original safe draft when revisions or evaluation are unavailable', async () => {
     const result = await refineDraftInnuendo({

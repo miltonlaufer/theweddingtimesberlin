@@ -789,11 +789,13 @@ export async function POST(request: Request): Promise<NextResponse> {
           revise: (draft, verdict) =>
             reviseDraftCandidate({
               draft,
+              editorDirection: slot.editorDirection,
               sourceRssTopic: result.sourceRssTopic,
               feedback: JSON.stringify({
                 reason: verdict.reason,
                 toneReason: verdict.tone.reason,
                 evidence: verdict.tone.innuendoEvidence,
+                styleDiversity: verdict.styleDiversity,
               }),
             }),
           evaluate: (candidate) =>

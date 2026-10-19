@@ -40,6 +40,7 @@ export function summarizeDraftInnuendo(evaluations: Array<DraftEvaluation | unde
 
 export function draftQualityScore(evaluation: DraftEvaluation): number {
   return (
+    (evaluation.styleDiversity?.pass === false ? -2000 : 0) +
     (evaluation.tone.conceptualInnuendoPass ? 1000 : 0) +
     (evaluation.tone.surrealPataphysicsPass ? 100 : 0) +
     evaluation.tone.funScore +
@@ -58,7 +59,8 @@ export async function refineDraftInnuendo(params: {
   const maxRevisions = Math.max(0, Math.min(2, params.maxRevisions ?? 2))
   if (
     !params.evaluation.safeForFallback ||
-    params.evaluation.tone.conceptualInnuendoPass ||
+    (params.evaluation.tone.conceptualInnuendoPass &&
+      params.evaluation.styleDiversity?.pass !== false) ||
     maxRevisions === 0
   ) {
     return { draft: params.draft, evaluation: params.evaluation }
@@ -79,7 +81,11 @@ export async function refineDraftInnuendo(params: {
       ) {
         best = { draft, evaluation }
       }
-      if (best.evaluation.tone.conceptualInnuendoPass) break
+      if (
+        best.evaluation.tone.conceptualInnuendoPass &&
+        best.evaluation.styleDiversity?.pass !== false
+      )
+        break
     } catch {
       // Style repair must never discard the original safe pitch or lose a slot.
       failures++

@@ -36,7 +36,7 @@ vi.mock('@/lib/generation/runGenerationPipeline', () => ({
   tryFinalizeGenerationJob: mocks.tryFinalizeGenerationJob,
 }))
 
-function makeRequest(options?: { forceAfR?: boolean }): Request {
+function makeRequest(options?: { forceAfR?: boolean; rssPoolIsExclusive?: boolean }): Request {
   return new Request('https://example.test/api/internal/generation/slot-worker', {
     method: 'POST',
     body: JSON.stringify({
@@ -44,6 +44,8 @@ function makeRequest(options?: { forceAfR?: boolean }): Request {
       itemId: 456,
       slot: {
         forceAfR: options?.forceAfR,
+        forceRss: options?.rssPoolIsExclusive,
+        rssPoolIsExclusive: options?.rssPoolIsExclusive,
         forceOpinion: false,
         includeTopics: true,
       },
@@ -88,6 +90,19 @@ describe('slot-worker route', () => {
         return Response.json({ error: `Unexpected fetch to ${pathname}` }, { status: 500 })
       }),
     )
+  })
+
+  it('preserves the exclusive source pool marker through drafting and article processing', async () => {
+    await POST(makeRequest({ rssPoolIsExclusive: true }))
+    await mocks.scheduledAfter?.()
+    const forwarded = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter(([url]) =>
+        /\/(?:retry-draft|process-item)$/.test(new URL(String(url)).pathname),
+      )
+      .map(([, options]) => JSON.parse(String(options?.body)))
+    expect(forwarded).toHaveLength(2)
+    expect(forwarded.every((body) => body.slot.rssPoolIsExclusive === true)).toBe(true)
   })
 
   it('keeps an earlier safe innuendo pitch instead of a weaker accepted third attempt', async () => {

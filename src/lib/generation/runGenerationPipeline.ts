@@ -9,7 +9,10 @@ import {
 } from '@/lib/generation/generateArticle'
 import { getOrComputeBlacklistSummary } from '@/lib/generation/blacklistSummaryCache'
 import { generateAuthors } from '@/lib/generation/generateAuthors'
-import { planEditorialSlots } from '@/lib/generation/editorialPlanner'
+import {
+  deduplicateFreshRssTopics,
+  planEditorialSlotsWithRssAllocation,
+} from '@/lib/generation/rssSlotAllocation'
 import { sendPushNotifications } from '@/lib/push/sendNotifications'
 import { buildInternalAuthHeaders } from '@/lib/generation/internalAuth'
 import type { DraftEvaluation, RecentCoverageItem } from '@/lib/generation/pipelineTypes'
@@ -535,9 +538,7 @@ export async function runGenerationPipeline(params: {
         .filter((t) => t.length > 0),
     )
 
-    const freshTopics = rssTopicsResult.topics.filter(
-      (t) => !recentlyUsedRssTopics.has(normalizeTopicIdentity(t.title)),
-    )
+    const freshTopics = deduplicateFreshRssTopics(rssTopicsResult.topics, recentlyUsedRssTopics)
 
     CRON_LOG.info(
       `JOB ${String(jobId)}: rss topic filtering | fetched=${rssTopicsResult.topics.length} fresh=${freshTopics.length} lockedFromRecent=${recentlyUsedRssTopics.size}`,
@@ -600,7 +601,10 @@ export async function runGenerationPipeline(params: {
           titles: freshTopics.map((t) => t.title),
         })
         if (rankedIndexes.length > 0) {
-          prioritizedTopics = rankedIndexes.map((index) => freshTopics[index]!).filter(Boolean)
+          prioritizedTopics = deduplicateFreshRssTopics([
+            ...rankedIndexes.map((index) => freshTopics[index]!).filter(Boolean),
+            ...freshTopics,
+          ])
         }
       } catch (error) {
         CRON_LOG.warn(
@@ -609,14 +613,12 @@ export async function runGenerationPipeline(params: {
       }
     }
 
-    const topicSummary = prioritizedTopics.map((t) => `- [${t.source}] ${t.title}`).join('\n')
-
     currentStage = 'prepare-slots'
     CRON_LOG.info(`JOB ${String(jobId)}: stage=${currentStage}`)
     const precomputedBlacklistSummary = blacklistCache.summary
-    const editorialPlan = planEditorialSlots({
+    const editorialPlan = planEditorialSlotsWithRssAllocation({
       count: ARTICLES_PER_RUN,
-      hasRssTopics,
+      rssTopics: prioritizedTopics,
       forceOpinionFirst: forceOpinionThisRun,
       recentCoverage,
       includeHumorPerspectiveMethod: shouldIncludeHumorPerspectiveMethod,
@@ -708,8 +710,8 @@ export async function runGenerationPipeline(params: {
             jobId,
             itemId: item.id,
             slot: item.slot,
-            topicSummary,
-            rssTopics: prioritizedTopics,
+            topicSummary: item.slot.assignedRssTopicSummary,
+            rssTopics: item.slot.assignedRssTopics,
             recentCoverage,
             recentArticleTitles,
             recentArticleExcerpts,

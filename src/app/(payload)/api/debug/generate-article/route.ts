@@ -316,11 +316,13 @@ export async function POST(req: Request) {
         revise: (draft, verdict) =>
           reviseDraftCandidate({
             draft,
+            editorDirection: slot.editorDirection,
             sourceRssTopic: generatedDraft.sourceRssTopic,
             feedback: JSON.stringify({
               reason: verdict.reason,
               toneReason: verdict.tone.reason,
               evidence: verdict.tone.innuendoEvidence,
+              styleDiversity: verdict.styleDiversity,
             }),
           }),
         evaluate: (candidate) =>

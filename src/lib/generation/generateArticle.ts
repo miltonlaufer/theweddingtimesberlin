@@ -2,6 +2,7 @@ import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
 import { rewriteOverlongSummaries, SUMMARY_LENGTH_GUARD_PREFIX } from './rewriteOverlongSummaries'
+import { STYLE_DIVERSITY_GUIDANCE, buildStyleDiversityGuidance } from './styleDiversity'
 import { buildSummaryFromMarkdownContent } from '@/lib/text/articleSummary'
 import {
   findMetaSummaryVoiceEvidence,
@@ -805,6 +806,7 @@ const DRUGS_TECHNO_HEADLINES_MILD = [
 ].join('\n')
 
 export const CULTURAL_REFERENCE_HEADLINE_GUIDANCE = [
+  STYLE_DIVERSITY_GUIDANCE,
   'CULTURAL REFERENCES IN HEADLINES (STRONGLY PREFERRED, NOT MANDATORY):',
   '- Strongly prefer giving the headline a recognizable cultural allusion when it sharpens the premise, sexual double meaning, or power dynamic.',
   '- Draw broadly from literature, mythology, film, television, music, visual art, internet culture, public figures, philosophy, architecture, and cultural movements.',
@@ -5019,6 +5021,9 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   const userPrompt = [
     topicsSection,
+    buildStyleDiversityGuidance(
+      recentTitles.map((headline, index) => ({ headline, excerpt: recentExcerpts[index] ?? '' })),
+    ),
     buildArticlePrimaryCheck(includeHumorEngine),
     '',
     canonicalStructureInstruction,

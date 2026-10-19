@@ -1,4 +1,5 @@
 import type { RecentCoverageItem, SlotConfig } from './pipelineTypes'
+import { buildBatchStyleDirections } from './styleDiversity'
 
 export type EditorialTheme =
   | 'rss-current-news'
@@ -179,7 +180,7 @@ function slotForTheme(
     includeTopics: theme === 'rss-current-news',
     useHumorPerspectiveMethod: includeHumorPerspectiveMethod(),
     themeBucket: theme,
-    editorDirection: `${editorialDirection(theme)} Build a recognizable sexual double meaning into the headline and the same governing power dynamic; surrealism must reinforce this layer rather than replace it.`,
+    editorDirection: editorialDirection(theme),
   }
 }
 
@@ -231,7 +232,11 @@ export function planEditorialSlots(args: PlanEditorialSlotsArgs): EditorialPlan 
   }
 
   const limitedThemes = plannedThemes.slice(0, count)
-  const slots = limitedThemes.map((theme) => slotForTheme(theme, includeHumorPerspectiveMethod))
+  const styleDirections = buildBatchStyleDirections(count, args.recentCoverage)
+  const slots = limitedThemes.map((theme, index) => {
+    const slot = slotForTheme(theme, includeHumorPerspectiveMethod)
+    return { ...slot, editorDirection: `${slot.editorDirection} ${styleDirections[index]}` }
+  })
 
   return {
     slots,

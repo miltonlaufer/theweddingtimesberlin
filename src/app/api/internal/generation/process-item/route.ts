@@ -82,6 +82,7 @@ const RequestSchema = z.object({
     forceDrugsTechno: z.boolean().optional(),
     forceStartup: z.boolean().optional(),
     forceRss: z.boolean().optional(),
+    rssPoolIsExclusive: z.boolean().optional(),
     forceAfR: z.boolean().optional(),
     forceOpinion: z.boolean(),
     includeTopics: z.boolean(),
@@ -470,6 +471,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       forceDrugsTechno: body.slot.forceDrugsTechno,
       forceStartup: body.slot.forceStartup,
       forceRss: body.slot.forceRss,
+      rssPoolIsExclusive: body.slot.rssPoolIsExclusive,
       forceAfR: body.slot.forceAfR,
       forceOpinion: body.slot.forceOpinion,
       includeTopics: body.slot.includeTopics,
@@ -609,11 +611,13 @@ export async function POST(request: Request): Promise<NextResponse> {
               revise: (draft, verdict) =>
                 reviseDraftCandidate({
                   draft,
+                  editorDirection: slot.editorDirection,
                   sourceRssTopic: regeneratedDraft.sourceRssTopic,
                   feedback: JSON.stringify({
                     reason: verdict.reason,
                     toneReason: verdict.tone.reason,
                     evidence: verdict.tone.innuendoEvidence,
+                    styleDiversity: verdict.styleDiversity,
                   }),
                 }),
               evaluate: (candidate) =>

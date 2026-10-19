@@ -25,6 +25,88 @@ describe('generateDraftCandidate', () => {
     vi.unstubAllGlobals()
   })
 
+  it('rejects an exhausted assigned RSS pool before generating an ungrounded pitch', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    await expect(
+      generateDraftCandidate({
+        slot: {
+          forceDrugsTechno: false,
+          forceStartup: false,
+          forceRss: true,
+          forceOpinion: false,
+          includeTopics: true,
+        },
+        topicSummary: '- [nytimes] The only reserved news story',
+        forbiddenSourceTopics: ['The only reserved news story'],
+        recentCoverage: [],
+        blacklistSummary: '',
+        acceptedDrafts: [],
+        useRandomModes: false,
+      }),
+    ).rejects.toThrow('No unused RSS topics remain')
+    expect(mocks.invoke).not.toHaveBeenCalled()
+  })
+
+  it('can correct a rejected pitch on the same source inside a coordinator-reserved exclusive pool', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        headline: 'Permit Office Demands a More Convincing Submission',
+        subheadline: 'Applicants discover a new intimacy with paperwork.',
+        excerpt: 'The same permit story gets a corrected pitch.',
+      }),
+    })
+    const result = await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: true,
+        forceOpinion: false,
+        includeTopics: true,
+        rssPoolIsExclusive: true,
+      },
+      topicSummary: '- [nytimes] The only reserved news story',
+      forbiddenSourceTopics: ['The only reserved news story'],
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      useRandomModes: false,
+    })
+    expect(result.sourceRssTopic).toBe('The only reserved news story')
+    expect(result.draft.excerpt).toBe('The same permit story gets a corrected pitch.')
+  })
+
+  it('flags a saturated sexual trope for revision without making the slot unsafe', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        funScore: 8,
+        mercilessScore: 8,
+        specificityScore: 8,
+        conceptualInnuendoPass: true,
+        metaCommentaryPass: true,
+        pass: true,
+        reason: 'Recognizable double meaning.',
+      }),
+    })
+    const result = await evaluateDraftCandidate({
+      candidate: {
+        headline: 'Charité Demands Better Foreplay',
+        subheadline: 'The doctors demand satisfaction.',
+        excerpt: 'Contract negotiations drag on.',
+      },
+      recentCoverage: [
+        { headline: 'Rubio’s Silk Road Foreplay', excerpt: '' },
+        { headline: 'Discovery Without the Foreplay', excerpt: '' },
+      ],
+      acceptedDrafts: [],
+    })
+    expect(result.accepted).toBe(false)
+    expect(result.safeForFallback).toBe(true)
+    expect(result.styleDiversity?.signals).toContain('sexual-trope:foreplay')
+    expect(result.reason).toContain('Overused style')
+  })
+
   it('revises the same news pitch and returns its new headline and supporting text', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({

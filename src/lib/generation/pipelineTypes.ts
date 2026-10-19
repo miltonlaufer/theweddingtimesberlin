@@ -1,4 +1,6 @@
 export type SlotConfig = {
+  /** Coordinator assigned a disjoint RSS pool; retries may reuse sources within that pool. */
+  rssPoolIsExclusive?: boolean
   forceDrugsTechno: boolean | undefined
   forceStartup: boolean | undefined
   forceRss: boolean | undefined
@@ -28,6 +30,7 @@ export type DraftCandidate = {
 }
 
 export type DraftEvaluation = {
+  styleDiversity?: { pass: boolean; reason: string; signals: string[] }
   innuendoRevision?: { attempts: number; improved: boolean; failures: number }
   accepted: boolean
   /** True only when the draft cleared every non-tone safety/quality gate and contains no meta-commentary. */

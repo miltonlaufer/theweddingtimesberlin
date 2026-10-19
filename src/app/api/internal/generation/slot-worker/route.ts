@@ -27,6 +27,7 @@ const RequestSchema = z.object({
     forceDrugsTechno: z.boolean().optional(),
     forceStartup: z.boolean().optional(),
     forceRss: z.boolean().optional(),
+    rssPoolIsExclusive: z.boolean().optional(),
     forceAfR: z.boolean().optional(),
     forceOpinion: z.boolean(),
     includeTopics: z.boolean(),
