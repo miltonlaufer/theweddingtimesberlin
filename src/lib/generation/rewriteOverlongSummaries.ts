@@ -1,4 +1,4 @@
-import { ChatOpenAI } from '@langchain/openai'
+import { createHeadlineModel } from './headlineProvider'
 import { hasTerminalExcerptEnding, normalizeSummaryForStorage } from '@/lib/text/excerptQuality'
 
 const LIMITS = { subheadline: 220, excerpt: 300 } as const
@@ -17,15 +17,7 @@ export async function rewriteOverlongSummaries<T>(value: T): Promise<T> {
   if (fields.length === 0) return value
 
   const originals = Object.fromEntries(fields.map((field) => [field, article[field]]))
-  const llm = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model:
-      process.env.OPENAI_DRAFT_MODEL ??
-      process.env.OPENAI_ANALYSIS_MODEL ??
-      process.env.OPENAI_MODEL ??
-      'gpt-4o-mini',
-    temperature: 1,
-  })
+  const llm = createHeadlineModel()
   let feedback = ''
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

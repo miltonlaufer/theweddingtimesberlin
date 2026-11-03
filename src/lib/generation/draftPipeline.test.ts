@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ChatOpenAI } from '@langchain/openai'
 import {
   evaluateDraftCandidate,
   generateDraftCandidate,
@@ -23,6 +24,48 @@ describe('generateDraftCandidate', () => {
     mocks.invoke.mockReset()
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    vi.mocked(ChatOpenAI).mockClear()
+  })
+
+  it('uses Grok for both pitch creation and revision', async () => {
+    vi.stubEnv('HEADLINE_PROVIDER', 'grok')
+    vi.stubEnv('XAI_API_KEY', 'xai-test')
+    vi.stubEnv('OPENAI_API_KEY', '')
+    const draft = {
+      headline: 'Permit Office Demands a More Convincing Submission',
+      subheadline: 'Applicants discover a new intimacy with paperwork.',
+      excerpt: 'The same permit story gets a corrected pitch.',
+    }
+    mocks.invoke.mockResolvedValue({ content: JSON.stringify(draft) })
+    const generated = await generateDraftCandidate({
+      slot: {
+        forceDrugsTechno: false,
+        forceStartup: false,
+        forceRss: false,
+        forceOpinion: false,
+        includeTopics: true,
+      },
+      topicSummary: '- [manual] Permit delays',
+      recentCoverage: [],
+      blacklistSummary: '',
+      acceptedDrafts: [],
+      useRandomModes: false,
+    })
+    await reviseDraftCandidate({
+      draft: generated.draft,
+      feedback: 'Sharpen the premise.',
+      sourceRssTopic: null,
+    })
+    expect(ChatOpenAI).toHaveBeenCalledTimes(2)
+    for (const [config] of vi.mocked(ChatOpenAI).mock.calls) {
+      expect(config).toEqual(
+        expect.objectContaining({
+          apiKey: 'xai-test',
+          configuration: { baseURL: 'https://api.x.ai/v1' },
+        }),
+      )
+    }
   })
 
   it('rejects an exhausted assigned RSS pool before generating an ungrounded pitch', async () => {
@@ -362,12 +405,10 @@ describe('generateDraftCandidate', () => {
     const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
     const combined = messages.map((message) => message.content).join('\n')
 
-    expect(combined).toMatch(/every pitch.*sexual double meaning/i)
-    expect(combined).toMatch(/surreal.*do not replace the sexual layer/i)
-    expect(combined).toMatch(
-      /impossible.*(?:rule|object|institution|physical fact).*ordinary procedure/i,
-    )
-    expect(combined).toMatch(/random dirty words.*odd nouns.*merely weird wording/i)
+    expect(combined).toContain('ordinary vocabulary')
+    expect(combined).toContain('Both readings must work without an explanation')
+    expect(combined).toContain('a broken idiom')
+    expect(combined).toContain('They do not need a second sexual cue')
     expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
     expect(combined).toMatch(/headline, subheadline, excerpt.*reader.*infer/i)
   })
@@ -530,7 +571,7 @@ describe('generateDraftCandidate', () => {
 
     const messages = mocks.invoke.mock.calls[0]?.[0] as Array<{ content: string }>
     const combined = messages.map((message) => message.content).join('\n')
-    expect(combined).toMatch(/surrealism.*not a substitute/i)
+    expect(combined).toContain('Subtlety is not a failure of intensity')
     expect(combined).toMatch(/pataphys/i)
     expect(combined).toMatch(/random.*(?:odd|weird)|merely.*absurd.*word/i)
   })

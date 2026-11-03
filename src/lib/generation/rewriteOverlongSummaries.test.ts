@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ChatOpenAI } from '@langchain/openai'
 import { rewriteOverlongSummaries } from './rewriteOverlongSummaries'
 
 const mocks = vi.hoisted(() => ({ invoke: vi.fn() }))
@@ -10,7 +11,27 @@ const longSubheadline =
   'Union Berlin’s standing-room devotion is about to be treated like a scheduling miracle, as Bundesliga bosses discover that the club’s biggest asset is not football but the crowd’s willingness to rearrange its entire schedule.'
 
 describe('rewriteOverlongSummaries', () => {
-  afterEach(() => mocks.invoke.mockReset())
+  afterEach(() => {
+    mocks.invoke.mockReset()
+    vi.mocked(ChatOpenAI).mockClear()
+    vi.unstubAllEnvs()
+  })
+
+  it('keeps summary shortening on Grok when it owns headline creation', async () => {
+    vi.stubEnv('HEADLINE_PROVIDER', 'grok')
+    vi.stubEnv('XAI_API_KEY', 'xai-test')
+    vi.stubEnv('OPENAI_API_KEY', '')
+    mocks.invoke.mockResolvedValue({
+      content: JSON.stringify({ subheadline: 'Fans change their plans.' }),
+    })
+    await rewriteOverlongSummaries({ subheadline: longSubheadline })
+    expect(ChatOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: 'xai-test',
+        configuration: { baseURL: 'https://api.x.ai/v1' },
+      }),
+    )
+  })
 
   it('rewrites an overlong subheadline without changing other article fields', async () => {
     mocks.invoke.mockResolvedValueOnce({

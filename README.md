@@ -308,6 +308,29 @@ The service worker (`src/sw.ts`) handles:
 - `RESEND_API_KEY` - Resend API key for emails
 - `CRON_SECRET` - Secret for protecting cron endpoints (production)
 
+### Grok headline generation
+
+The headline pitch stage supports OpenAI (default) and Grok through xAI.
+To try Grok locally, add these settings to `.env`, then restart `npm run dev`:
+
+```dotenv
+HEADLINE_PROVIDER=grok
+XAI_API_KEY=your-xai-api-key
+XAI_HEADLINE_MODEL=grok-4.20-0309-non-reasoning
+```
+
+Use the existing admin headline/pitch generation workflow. Grok creates the
+headline, subheadline, and excerpt, handles pitch revisions, and shortens supporting
+text when necessary. The selected pitch is preserved by the article-writing stage.
+`XAI_HEADLINE_MODEL` is optional. The integration uses xAI's
+[OpenAI-compatible chat endpoint](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions).
+
+Keep `OPENAI_API_KEY` configured: article bodies, pitch evaluators, translations,
+and images still use OpenAI. Existing language, style, and quality checks also apply
+to Grok pitches. Missing xAI credentials or API errors do not silently switch to
+OpenAI. Set `HEADLINE_PROVIDER=openai` to switch back; existing `OPENAI_DRAFT_MODEL`
+settings retain their precedence. Keys stay on the server.
+
 ### Storage (one provider required)
 
 **Supabase Storage** (default):

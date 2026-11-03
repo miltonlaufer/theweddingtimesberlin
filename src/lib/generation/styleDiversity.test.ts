@@ -74,13 +74,15 @@ describe('style diversity', () => {
     ).toContain('sexual-trope:submission')
   })
 
-  it('gives all six slots distinct mechanisms and prioritizes less-used ones', () => {
+  it('gives all six slots distinct reporting questions without prescribing sexual devices', () => {
     const directions = buildBatchStyleDirections(6, [
       draft('Long Foreplay'),
       draft('More Foreplay'),
     ])
     expect(new Set(directions).size).toBe(6)
     expect(directions.every(Boolean)).toBe(true)
+    expect(directions.every((direction) => direction.startsWith('Reporting direction'))).toBe(true)
+    expect(directions.join(' ')).not.toMatch(/foreplay|seduction|performance anxiety/i)
     expect(directions[0]).not.toContain('seduction and withholding')
   })
 })

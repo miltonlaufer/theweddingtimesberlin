@@ -328,8 +328,8 @@ describe('generateArticle final article-language guard', () => {
     const combined = messages.map((message) => message.content).join('\n')
 
     expect(combined).toMatch(/sexual double meaning.*(?:core|structural).*comedic/i)
-    expect(combined).toMatch(/power dynamics.*escalation.*(?:ending|conclusion)/i)
-    expect(combined).toMatch(/headline.*(?:same|central).*double meaning/i)
+    expect(combined).toContain('do not impose a quota or escalate explicitness')
+    expect(combined).toContain('headline must still make sense as news')
     expect(combined).not.toContain('Include 4-6 double entendres')
     expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
     expect(combined).toMatch(/all reader-visible text/i)
@@ -412,7 +412,7 @@ describe('generateArticle final article-language guard', () => {
       /passes=false.*(?:missing|lacks).*conceptual sexual double meaning/i,
     )
     expect(critiquePrompt).toContain('suggestive rather than pornographically explicit')
-    expect(critiquePrompt).toContain('word-count quota')
+    expect(critiquePrompt).toContain('do not impose a quota or escalate explicitness')
     expect(critiquePrompt).toContain('NEVER BREAK THE FOURTH WALL')
     expect(critiquePrompt).toMatch(/passes=false.*meta-commentary/i)
     expect(rewritePrompt).toMatch(
@@ -420,7 +420,7 @@ describe('generateArticle final article-language guard', () => {
     )
     expect(rewritePrompt).toMatch(/headline.*(?:same|central).*double meaning/i)
     expect(rewritePrompt).toContain('suggestive rather than pornographically explicit')
-    expect(rewritePrompt).toContain('word-count quota')
+    expect(rewritePrompt).toContain('do not impose a quota or escalate explicitness')
     expect(rewritePrompt).toContain('NEVER BREAK THE FOURTH WALL')
   })
 
@@ -533,7 +533,7 @@ describe('generateArticle final article-language guard', () => {
 
     expect(repairPrompt).toContain('CONCEPTUAL SEXUAL INNUENDO')
     expect(repairPrompt).toContain('suggestive rather than pornographically explicit')
-    expect(repairPrompt).toContain('word-count quota')
+    expect(repairPrompt).toContain('do not impose a quota or escalate explicitness')
     expect(repairPrompt).toContain(`Exact locked headline: "${seedDraft.headline}"`)
     expect(repairPrompt).toContain(`Exact locked subheadline: "${seedDraft.subheadline}"`)
     expect(repairPrompt).toContain(`Exact locked excerpt: "${seedDraft.excerpt}"`)

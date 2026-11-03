@@ -79,60 +79,25 @@ export function assessStyleDiversity(params: {
   }
 }
 
-const MECHANISMS = [
-  {
-    name: 'seduction and withholding',
-    pattern: /\b(?:foreplay|seduc\w*|withhold\w*)\b/i,
-    detail: 'desire for access versus calculated refusal',
-  },
-  {
-    name: 'power and negotiated consent',
-    pattern: /\b(?:consent|permission|submit\w*|submission)\b/i,
-    detail: 'who sets the terms and whose agreement is taken for granted',
-  },
-  {
-    name: 'performance anxiety',
-    pattern: /\b(?:performance|premature\w*|climax\w*)\b/i,
-    detail: 'promises of potency versus the pressure to deliver under scrutiny',
-  },
-  {
-    name: 'commitment and infidelity',
-    pattern: /\b(?:loyal\w*|infidel\w*|commitment)\b/i,
-    detail: 'professed loyalty versus opportunistic switching of partners',
-  },
-  {
-    name: 'exposure and voyeurism',
-    pattern: /\b(?:expos\w*|voyeur\w*|naked|privacy)\b/i,
-    detail: 'who gets to watch and who is made vulnerable in public',
-  },
-  {
-    name: 'appetite and satisfaction',
-    pattern: /\b(?:appetite|satisf\w*|hunger|orgasm\w*)\b/i,
-    detail: 'whose demands are serviced and who remains unsatisfied',
-  },
-  {
-    name: 'jealousy and exclusivity',
-    pattern: /\b(?:jealous\w*|exclusive\w*|rival\w*)\b/i,
-    detail: 'competition to be desired versus attempts to possess the other party',
-  },
-  {
-    name: 'intimacy and emotional distance',
-    pattern: /\b(?:intima\w*|detachment|distance)\b/i,
-    detail: 'demands for closeness versus refusal to reciprocate',
-  },
+// Vary the reporting question rather than supplying sexual phrases to imitate.
+const EDITORIAL_QUESTIONS = [
+  'whose public promise conflicts with their actual behavior',
+  'who sets the terms and who pays the hidden cost',
+  'what the institution measures instead of the thing it claims to deliver',
+  'whose supposed convenience creates extra work for someone else',
+  'which ordinary procedure exposes a status difference',
+  'who benefits when the stated solution fails',
+  'what the official wording accidentally admits',
+  'what changes when a private incentive becomes a public rule',
 ]
 
 export function buildBatchStyleDirections(
   count: number,
   recentCoverage: RecentCoverageItem[],
 ): string[] {
-  const ranked = MECHANISMS.map((mechanism, index) => ({
-    ...mechanism,
-    index,
-    uses: recentCoverage.slice(0, 24).filter((draft) => mechanism.pattern.test(text(draft))).length,
-  })).sort((a, b) => a.uses - b.uses || a.index - b.index)
+  const offset = recentCoverage.length % EDITORIAL_QUESTIONS.length
   return Array.from({ length: count }, (_, index) => {
-    const mechanism = ranked[index % ranked.length]
-    return `Sexual mechanism direction for this slot: ${mechanism.name}; explore ${mechanism.detail} through the actual topic. Develop the relationship, do not paste the mechanism's label into the headline. Other slots receive different directions; avoid replacing this with an overused stock trope.`
+    const question = EDITORIAL_QUESTIONS[(offset + index) % EDITORIAL_QUESTIONS.length]
+    return `Reporting direction for this slot: investigate ${question} in the assigned subject. Derive the double meaning from its ordinary language; do not impose a sexual scenario. Keep the mechanism distinct from recent coverage and other slots.`
   })
 }
