@@ -408,7 +408,7 @@ describe('generateDraftCandidate', () => {
     expect(combined).toContain('ordinary vocabulary')
     expect(combined).toContain('Both readings must work without an explanation')
     expect(combined).toContain('a broken idiom')
-    expect(combined).toContain('They do not need a second sexual cue')
+    expect(combined).toContain('without requiring another sexual cue')
     expect(combined).toContain('NEVER BREAK THE FOURTH WALL')
     expect(combined).toMatch(/headline, subheadline, excerpt.*reader.*infer/i)
   })

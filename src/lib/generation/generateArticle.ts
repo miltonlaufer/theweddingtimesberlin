@@ -1,4 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai'
+import { SUPPORTING_TEXT_SATIRE_REQUIREMENTS } from './supportingTextPrompt'
 import { z } from 'zod'
 import { trimToReadableLength } from '@/lib/text/trimToReadableLength'
 import { rewriteOverlongSummaries, SUMMARY_LENGTH_GUARD_PREFIX } from './rewriteOverlongSummaries'
@@ -539,7 +540,7 @@ export const CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS = [
   '- The headline must still make sense as news if the reader misses the innuendo. Keep the subject and action clear.',
   '- If the second reading requires an unnatural phrase, a broken idiom, or an unrelated sexual act, discard the wording and find another angle on the same event.',
   '- Do not substitute a sexual label for the actual joke, invent explicit sexual behavior merely to justify a pun, or explain the double meaning in the supporting text.',
-  '- Let the subheadline and excerpt develop concrete stakes and consequences in ordinary reporting language. They do not need a second sexual cue.',
+  SUPPORTING_TEXT_SATIRE_REQUIREMENTS,
   '- Preserve the same relationship when developing the article, but let callbacks arise naturally; do not impose a quota or escalate explicitness.',
   '- Prefer an understated second reading that sharpens a recognizable social accusation. Make the accusation specific rather than making the vocabulary louder.',
   '- Derive fresh wording from this subject. Do not imitate earlier headlines or use a preset menu of sexual devices.',
