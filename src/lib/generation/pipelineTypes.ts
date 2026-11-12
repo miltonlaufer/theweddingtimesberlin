@@ -47,6 +47,7 @@ export type DraftEvaluation = {
     mercilessScore: number
     specificityScore: number
     conceptualInnuendoPass: boolean
+    supportingTextSatirePass?: boolean
     innuendoEvidence?: { wording: string; literalReading: string; sexualReading: string }
     evaluatorAvailable?: boolean
     surrealPataphysicsPass: boolean

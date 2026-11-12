@@ -51,6 +51,7 @@ const DraftToneSchema = z.object({
   mercilessScore: z.number().int().min(1).max(10),
   specificityScore: z.number().int().min(1).max(10),
   conceptualInnuendoPass: z.boolean(),
+  supportingTextSatirePass: z.boolean(),
   innuendoEvidence: z
     .object({
       wording: z.string().max(300),
@@ -575,6 +576,7 @@ export async function reviseDraftCandidate(params: {
         'Keep the same news event, factual news subjects, source facts, and social target. Do not invent a different topic. Decorative cultural allusions are not factual news subjects: remove or replace them when they repeat an overused figure or headline scaffold.',
         CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
         buildStyleDiversityGuidance([]),
+        'If feedback only flags the supporting text, keep the headline verbatim and rewrite the subheadline or excerpt to add its own deadpan comic development.',
         'If feedback flags a repeated sexual trope, cultural figure, or headline scaffold, replace that mechanism and structure while retaining the same news event. The replacement must solve the reported repetition, not just prove that the original contains innuendo.',
         params.editorDirection
           ? `Keep this slot’s assigned editorial direction: ${params.editorDirection}`
@@ -639,13 +641,14 @@ async function evaluateDraftTone(
     JSON.stringify(candidate),
     '',
     'JSON schema:',
-    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "innuendoEvidence": { "wording": string, "literalReading": string, "sexualReading": string }, "surrealPataphysicsPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
+    '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "supportingTextSatirePass": boolean, "innuendoEvidence": { "wording": string, "literalReading": string, "sexualReading": string }, "surrealPataphysicsPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
     'Quote the exact innuendo wording and explain its literal and sexual readings in innuendoEvidence. If no coherent double meaning is recognizable, leave wording empty and explain what is missing in reason so an editor can revise the pitch.',
     '',
     'Set conceptualInnuendoPass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
+    'Set supportingTextSatirePass=false if either supporting field is missing, merely paraphrases the headline, or reads like straight reporting without a distinct comic consequence or revealing detail. Identify the failing field and what it needs in reason. A funny headline cannot compensate for either field.',
     'Set surrealPataphysicsPass=false when no governing impossible mechanism is present. This field is descriptive only, not an acceptance requirement.',
     'Set metaCommentaryPass=false if any field contains meta-commentary, breaks the fourth wall, labels this current pitch as satire/comedy, explains its joke, premise, angle, genre, or intent, or directs how readers should react to it.',
-    'Set pass=true only when conceptualInnuendoPass is true, metaCommentaryPass is true, all scores are >= 7, and the pitch has specific social bite. Do not penalize understated wording or demand explicit sexual vocabulary.',
+    'Set pass=true only when supportingTextSatirePass is true, conceptualInnuendoPass is true, metaCommentaryPass is true, all scores are >= 7, and the pitch has specific social bite. Do not penalize understated wording or demand explicit sexual vocabulary.',
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -856,6 +859,7 @@ export async function evaluateDraftCandidate(params: {
     styleDiversity.pass &&
     tone.pass &&
     tone.conceptualInnuendoPass &&
+    tone.supportingTextSatirePass === true &&
     tone.metaCommentaryPass &&
     tone.funScore >= minFun &&
     tone.mercilessScore >= minMerciless &&

@@ -41,6 +41,22 @@ function evaluation(innuendo: boolean, extra: Partial<DraftEvaluation> = {}): Dr
 }
 
 describe('refineDraftInnuendo', () => {
+  it('repairs flat supporting text even when the headline already passes', async () => {
+    const before = evaluation(true, { accepted: false })
+    before.tone.supportingTextSatirePass = false
+    const after = evaluation(true)
+    after.tone.supportingTextSatirePass = true
+    const pitch = { ...revised, headline: original.headline }
+    const result = await refineDraftInnuendo({
+      draft: original,
+      evaluation: before,
+      revise: async () => pitch,
+      evaluate: async () => after,
+    })
+    expect(result.draft).toEqual(pitch)
+    expect(result.evaluation.accepted).toBe(true)
+  })
+
   it('revises a repeated trope even when it already passes the innuendo check', async () => {
     const stale = evaluation(true, {
       styleDiversity: {
