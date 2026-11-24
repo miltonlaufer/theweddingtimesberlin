@@ -549,6 +549,7 @@ describe('generateDraftCandidate', () => {
         mercilessScore: 8,
         specificityScore: 8,
         conceptualInnuendoPass: false,
+        innuendoEvidence: {},
         supportingTextSatirePass: true,
         surrealPataphysicsPass: true,
         metaCommentaryPass: true,
