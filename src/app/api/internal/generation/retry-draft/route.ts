@@ -244,7 +244,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       id: body.itemId,
       data: {
         draftAttempt: nextAttempt,
-        status: finalEvaluation.accepted ? 'draft-accepted' : 'draft-rejected',
+        status: finalEvaluation.accepted ? 'draft-accepted' : 'draft-pending',
         headline: draft.headline,
         subheadline: draft.subheadline,
         excerpt: draft.excerpt,
@@ -283,7 +283,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       id: body.itemId,
       data: {
         draftAttempt: currentAttempt + 1,
-        status: 'draft-rejected',
+        status: 'draft-pending',
         error: message,
       },
     })
