@@ -19,11 +19,7 @@ export function createHeadlineModel(): ChatOpenAI {
   }
   return new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
-    model:
-      process.env.OPENAI_DRAFT_MODEL ??
-      process.env.OPENAI_ANALYSIS_MODEL ??
-      process.env.OPENAI_MODEL ??
-      'gpt-4o-mini',
+    model: process.env.OPENAI_HEADLINE_MODEL ?? process.env.OPENAI_DRAFT_MODEL ?? 'gpt-6.1-terra',
     temperature: 1,
   })
 }

@@ -533,10 +533,13 @@ const AVOID_OVERUSED_THEMES = [
 
 export const CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS = [
   'CONCEPTUAL SEXUAL INNUENDO — NATURAL DOUBLE MEANING:',
-  '- Let the sexual double meaning emerge from the core comedic relationship rather than replacing the news event.',
+  '- Find what one party needs the other to do. Give that relationship one impossible property. Write the moment somebody has to act on it.',
+  '- Strongly favor an erotic undertone when it grows out of that dependence. Keep the participants entirely serious. Privately ask whether the joke could survive swapping in a different news story; if so, find another premise.',
+  '- Put the funniest visible action in the headline. Advance the scene in the subheadline and end the excerpt on one further concrete action. Keep the imaginary rule implicit when the action makes it clear.',
+  '- Only use a sexual double meaning when it emerges from the core comedic relationship rather than replacing the news event.',
   '- Keep it suggestive rather than pornographically explicit.',
   '- Start from the actual news event, its ordinary vocabulary, and a specific contradiction in who benefits or holds power.',
-  '- Find concise, idiomatic wording that describes that event literally and also admits a sexual reading. Both readings must work without an explanation.',
+  '- Innuendo is optional. Choose the strongest comic observation first. If the event naturally admits a second reading, use concise, idiomatic wording. Both readings must work without an explanation.',
   '- The headline must still make sense as news if the reader misses the innuendo. Keep the subject and action clear.',
   '- If the second reading requires an unnatural phrase, a broken idiom, or an unrelated sexual act, discard the wording and find another angle on the same event.',
   '- Do not substitute a sexual label for the actual joke, invent explicit sexual behavior merely to justify a pun, or explain the double meaning in the supporting text.',
@@ -2675,7 +2678,7 @@ async function critiqueSatireArticle(args: {
     'Penalize pieces that merely describe a mechanism or scam without humiliating a recognizable target.',
     'If the article reads like clever reportage rather than acidic satire, score it down hard.',
     'Penalize innuendo that is merely decorative wordplay or isolated suggestive phrases instead of a structural comic concept.',
-    'The headline must carry the same central double meaning that drives the story’s premise, power dynamics, escalation, and ending.',
+    'The headline must carry the same central comic premise that drives the story’s premise, power dynamics, escalation, and ending.',
     CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS,
     ANTI_META_COMMENTARY_RULES,
     'No score inflation.',
@@ -2714,7 +2717,7 @@ async function critiqueSatireArticle(args: {
     '}',
     '',
     'Set passes=true only if ALL scores are at least 9.',
-    'Set passes=false when the article is missing a conceptual sexual double meaning, or when its headline does not carry that same concept.',
+    'Judge the central comic observation. Innuendo is optional and its absence must never cause rejection.',
     'Set passes=false if any reader-visible field contains meta-commentary, breaks the fourth wall, names the output as satire/comedy, or explains its joke or intent.',
     'revisionInstructions should be concrete and directly actionable.',
   ].join('\n')
@@ -2791,7 +2794,7 @@ async function rewriteArticleFromCritique(args: {
             ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
             : '',
           '- These fields are server-owned and immutable. Do not return or rewrite the headline, subheadline, excerpt, or sourceRssTopic.',
-          '- Deepen the conceptual sexual double meaning already carried by the locked headline throughout the body, power dynamics, escalation, and ending.',
+          '- Deepen the comic premise already carried by the locked headline throughout the body, power dynamics, escalation, and ending.',
         ].join('\n')
       : ''
   const rewriteSchema =
@@ -2843,10 +2846,10 @@ async function rewriteArticleFromCritique(args: {
     '- Increase specificity: names, places, observable behavior.',
     '- Keep the piece uncomfortable and politically critical in both directions.',
     '- If the current draft is merely clever or mechanical, rewrite toward accusation, humiliation, and sharper social truth.',
-    '- Rewrite the sexual double meaning into the story’s premise and structure so it drives the power dynamics, escalation, and ending rather than decorating sentences.',
+    '- Rewrite the comic observation into the story’s premise and structure so it drives the power dynamics, escalation, and ending rather than decorating sentences.',
     args.outputSchemaMode === 'body-only-locked-draft'
-      ? '- Preserve the locked headline concept exactly; strengthen its same central double meaning only through the body.'
-      : '- Rewrite the headline so it carries the same central double meaning and works as both literal news and sexual innuendo.',
+      ? '- Preserve the locked headline concept exactly; strengthen its same central comic premise only through the body.'
+      : '- Rewrite the headline so it carries the same central comic premise and expresses the contradiction in ordinary language.',
     '- Preserve category/author unless clearly incompatible with revised content.',
   ].join('\n')
 
@@ -3022,7 +3025,7 @@ async function translateToEnglish(args: {
             ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
             : '',
           '- These fields are server-owned and immutable. Do not return or rewrite the headline, subheadline, excerpt, or sourceRssTopic.',
-          '- Translate only the body and editable metadata, keeping the body tied to the same conceptual sexual double meaning carried by the locked headline.',
+          '- Translate only the body and editable metadata, keeping the body tied to the same comic premise carried by the locked headline.',
         ].join('\n')
       : ''
   const translationInput =
@@ -3160,7 +3163,7 @@ async function repairToSchema(args: {
             ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
             : '',
           '- These fields are server-owned and immutable. Do not return or rewrite them.',
-          '- Repair the body so it develops the same conceptual sexual double meaning carried by the locked headline through its power dynamics, escalation, and ending.',
+          '- Repair the body so it develops the same comic premise carried by the locked headline through its power dynamics, escalation, and ending.',
         ].join('\n')
       : ''
 
@@ -3291,7 +3294,7 @@ async function shortenToSchema(args: {
             ? `Exact locked excerpt: "${args.seedDraft.excerpt.trim().slice(0, 300)}"`
             : '',
           '- These fields are server-owned and immutable. Do not return or rewrite them.',
-          '- Keep the body tied to the same conceptual sexual double meaning carried by the locked headline.',
+          '- Keep the body tied to the same comic premise carried by the locked headline.',
         ].join('\n')
       : ''
   const schemaBlock =

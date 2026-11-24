@@ -407,18 +407,14 @@ describe('generateArticle final article-language guard', () => {
     const rewritePrompt = rewriteMessages.map((message) => message.content).join('\n')
 
     expect(critiquePrompt).toMatch(/penalize.*innuendo.*(?:decorative|isolated|wordplay)/i)
-    expect(critiquePrompt).toMatch(/headline.*(?:same|central).*double meaning/i)
-    expect(critiquePrompt).toMatch(
-      /passes=false.*(?:missing|lacks).*conceptual sexual double meaning/i,
-    )
+    expect(critiquePrompt).toMatch(/headline.*(?:same|central).*comic premise/i)
+    expect(critiquePrompt).toMatch(/innuendo is optional.*absence must never cause rejection/i)
     expect(critiquePrompt).toContain('suggestive rather than pornographically explicit')
     expect(critiquePrompt).toContain('do not impose a quota or escalate explicitness')
     expect(critiquePrompt).toContain('NEVER BREAK THE FOURTH WALL')
     expect(critiquePrompt).toMatch(/passes=false.*meta-commentary/i)
-    expect(rewritePrompt).toMatch(
-      /(?:rebuild|rewrite).*sexual double meaning.*(?:premise|structure)/i,
-    )
-    expect(rewritePrompt).toMatch(/headline.*(?:same|central).*double meaning/i)
+    expect(rewritePrompt).toMatch(/(?:rebuild|rewrite).*comic observation.*(?:premise|structure)/i)
+    expect(rewritePrompt).toMatch(/headline.*(?:same|central).*comic premise/i)
     expect(rewritePrompt).toContain('suggestive rather than pornographically explicit')
     expect(rewritePrompt).toContain('do not impose a quota or escalate explicitness')
     expect(rewritePrompt).toContain('NEVER BREAK THE FOURTH WALL')
@@ -463,7 +459,7 @@ describe('generateArticle final article-language guard', () => {
     expect(rewritePrompt).toContain('LOCKED DRAFT REWRITE MODE')
     expect(rewritePrompt).toContain(`Exact locked headline: "${seedDraft.headline}"`)
     expect(rewritePrompt).toMatch(/do not (?:return|rewrite).*headline/i)
-    expect(rewritePrompt).toMatch(/deepen.*double meaning.*locked headline/i)
+    expect(rewritePrompt).toMatch(/deepen.*comic premise.*locked headline/i)
     expect(rewritePrompt).toContain('JSON schema (LOCKED DRAFT MODE)')
   })
 
@@ -537,7 +533,7 @@ describe('generateArticle final article-language guard', () => {
     expect(repairPrompt).toContain(`Exact locked headline: "${seedDraft.headline}"`)
     expect(repairPrompt).toContain(`Exact locked subheadline: "${seedDraft.subheadline}"`)
     expect(repairPrompt).toContain(`Exact locked excerpt: "${seedDraft.excerpt}"`)
-    expect(repairPrompt).toMatch(/body.*same.*(?:double meaning|concept)/i)
+    expect(repairPrompt).toMatch(/body.*same.*(?:comic premise|concept)/i)
     expect(repairPrompt).toContain('NEVER BREAK THE FOURTH WALL')
   })
 
@@ -612,7 +608,7 @@ describe('generateArticle final article-language guard', () => {
 
     expect(shortenPrompt).toContain('CONCEPTUAL SEXUAL INNUENDO')
     expect(shortenPrompt).toContain(`Exact locked headline: "${seedDraft.headline}"`)
-    expect(shortenPrompt).toMatch(/body.*same.*(?:double meaning|concept)/i)
+    expect(shortenPrompt).toMatch(/body.*same.*(?:comic premise|concept)/i)
     expect(shortenPrompt).toContain('NEVER BREAK THE FOURTH WALL')
   })
 

@@ -98,6 +98,6 @@ export function buildBatchStyleDirections(
   const offset = recentCoverage.length % EDITORIAL_QUESTIONS.length
   return Array.from({ length: count }, (_, index) => {
     const question = EDITORIAL_QUESTIONS[(offset + index) % EDITORIAL_QUESTIONS.length]
-    return `Reporting direction for this slot: investigate ${question} in the assigned subject. Derive the double meaning from its ordinary language; do not impose a sexual scenario. Keep the mechanism distinct from recent coverage and other slots.`
+    return `Reporting direction for this slot: investigate ${question} in the assigned subject. Find the contradiction in its ordinary language; do not impose a sexual scenario. Keep the mechanism distinct from recent coverage and other slots.`
   })
 }

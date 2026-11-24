@@ -62,7 +62,7 @@ const DraftToneSchema = z.object({
   surrealPataphysicsPass: z.boolean().default(false),
   metaCommentaryPass: z.boolean(),
   pass: z.boolean(),
-  reason: z.string().max(300),
+  reason: z.string().transform((reason) => reason.slice(0, 300)),
 })
 
 const DRAFT_STRONG_HEADLINE_STYLE_REQUIREMENTS = CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS
@@ -642,13 +642,14 @@ async function evaluateDraftTone(
     '',
     'JSON schema:',
     '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "supportingTextSatirePass": boolean, "innuendoEvidence": { "wording": string, "literalReading": string, "sexualReading": string }, "surrealPataphysicsPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
-    'Quote the exact innuendo wording and explain its literal and sexual readings in innuendoEvidence. If no coherent double meaning is recognizable, leave wording empty and explain what is missing in reason so an editor can revise the pitch.',
+    'Quote the exact innuendo wording and explain its literal and sexual readings in innuendoEvidence. If no coherent double meaning is recognizable, leave the evidence empty. This is descriptive only. Never reject or reduce scores for absent innuendo.',
     '',
     'Set conceptualInnuendoPass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
+    'Read all three fields in order. Ask what the reader newly understands about the same target after each supporting field. Fail supportingTextSatirePass if a field only supplies logistics, repeats the incentive in other words, or explains an already visible joke. If the strongest comic action is buried, tell the editor to move it into the headline and develop its consequences. Give specific feedback within 300 characters.',
     'Set supportingTextSatirePass=false if either supporting field is missing, merely paraphrases the headline, or reads like straight reporting without a distinct comic consequence or revealing detail. Identify the failing field and what it needs in reason. A funny headline cannot compensate for either field.',
     'Set surrealPataphysicsPass=false when no governing impossible mechanism is present. This field is descriptive only, not an acceptance requirement.',
     'Set metaCommentaryPass=false if any field contains meta-commentary, breaks the fourth wall, labels this current pitch as satire/comedy, explains its joke, premise, angle, genre, or intent, or directs how readers should react to it.',
-    'Set pass=true only when supportingTextSatirePass is true, conceptualInnuendoPass is true, metaCommentaryPass is true, all scores are >= 7, and the pitch has specific social bite. Do not penalize understated wording or demand explicit sexual vocabulary.',
+    'Set pass=true only when supportingTextSatirePass is true, metaCommentaryPass is true, all scores are >= 7, and the pitch has specific social bite. Do not penalize understated wording or demand explicit sexual vocabulary.',
   ].join('\n')
 
   const raw = await llm.invoke([
@@ -858,7 +859,6 @@ export async function evaluateDraftCandidate(params: {
   const tonePass =
     styleDiversity.pass &&
     tone.pass &&
-    tone.conceptualInnuendoPass &&
     tone.supportingTextSatirePass === true &&
     tone.metaCommentaryPass &&
     tone.funScore >= minFun &&

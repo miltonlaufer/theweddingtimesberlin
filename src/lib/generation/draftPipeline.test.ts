@@ -541,7 +541,7 @@ describe('generateDraftCandidate', () => {
     expect(combined).toMatch(/pass=false.*meta-commentary/i)
   })
 
-  it('keeps a surreal-only pitch available for fallback but flags it for innuendo revision', async () => {
+  it('accepts a strong surreal pitch without innuendo', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     mocks.invoke.mockResolvedValue({
       content: JSON.stringify({
@@ -568,7 +568,7 @@ describe('generateDraftCandidate', () => {
       acceptedDrafts: [],
     })
 
-    expect(evaluation.accepted).toBe(false)
+    expect(evaluation.accepted).toBe(true)
     expect(evaluation.safeForFallback).toBe(true)
     expect(evaluation.tone.surrealPataphysicsPass).toBe(true)
 

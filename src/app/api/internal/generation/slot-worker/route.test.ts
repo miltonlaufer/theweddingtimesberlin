@@ -105,7 +105,7 @@ describe('slot-worker route', () => {
     expect(forwarded.every((body) => body.slot.rssPoolIsExclusive === true)).toBe(true)
   })
 
-  it('keeps an earlier safe innuendo pitch instead of a weaker accepted third attempt', async () => {
+  it('selects the accepted third attempt regardless of innuendo', async () => {
     const update = vi.fn().mockResolvedValue({})
     mocks.getPayload.mockResolvedValue({ find: vi.fn().mockResolvedValue({ docs: [] }), update })
     let attempt = 0
@@ -149,14 +149,7 @@ describe('slot-worker route', () => {
     )
     await POST(makeRequest())
     await mocks.scheduledAfter?.()
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: 'draft-accepted',
-          headline: 'Permit Office Demands Submission',
-        }),
-      }),
-    )
+    expect(update).not.toHaveBeenCalled()
     expect(
       vi
         .mocked(globalThis.fetch)

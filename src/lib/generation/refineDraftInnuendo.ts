@@ -41,9 +41,8 @@ export function summarizeDraftInnuendo(evaluations: Array<DraftEvaluation | unde
 export function draftQualityScore(evaluation: DraftEvaluation): number {
   return (
     (evaluation.styleDiversity?.pass === false ? -2000 : 0) +
-    (evaluation.tone.conceptualInnuendoPass ? 1000 : 0) +
+    (evaluation.accepted ? 1000 : 0) +
     (evaluation.tone.supportingTextSatirePass === false ? -500 : 0) +
-    (evaluation.tone.surrealPataphysicsPass ? 100 : 0) +
     evaluation.tone.funScore +
     evaluation.tone.mercilessScore +
     evaluation.tone.specificityScore
@@ -60,7 +59,7 @@ export async function refineDraftInnuendo(params: {
   const maxRevisions = Math.max(0, Math.min(2, params.maxRevisions ?? 2))
   if (
     !params.evaluation.safeForFallback ||
-    (params.evaluation.tone.conceptualInnuendoPass &&
+    (params.evaluation.accepted &&
       params.evaluation.tone.supportingTextSatirePass !== false &&
       params.evaluation.styleDiversity?.pass !== false) ||
     maxRevisions === 0
@@ -84,7 +83,7 @@ export async function refineDraftInnuendo(params: {
         best = { draft, evaluation }
       }
       if (
-        best.evaluation.tone.conceptualInnuendoPass &&
+        best.evaluation.accepted &&
         best.evaluation.tone.supportingTextSatirePass !== false &&
         best.evaluation.styleDiversity?.pass !== false
       )

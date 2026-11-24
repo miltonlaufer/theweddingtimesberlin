@@ -329,7 +329,7 @@ Keep `OPENAI_API_KEY` configured: article bodies, pitch evaluators, translations
 and images still use OpenAI. Existing language, style, and quality checks also apply
 to Grok pitches. Missing xAI credentials or API errors do not silently switch to
 OpenAI. Set `HEADLINE_PROVIDER=openai` to switch back; existing `OPENAI_DRAFT_MODEL`
-settings retain their precedence. Keys stay on the server.
+settings apply unless overridden by `OPENAI_HEADLINE_MODEL`. For Terra pitches set `HEADLINE_PROVIDER=openai` and `OPENAI_HEADLINE_MODEL=gpt-6.1-terra`. Keys stay on the server.
 
 ### Storage (one provider required)
 
