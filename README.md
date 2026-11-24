@@ -316,20 +316,18 @@ To try Grok locally, add these settings to `.env`, then restart `npm run dev`:
 ```dotenv
 HEADLINE_PROVIDER=grok
 XAI_API_KEY=your-xai-api-key
-XAI_HEADLINE_MODEL=grok-4.20-0309-non-reasoning
 ```
 
 Use the existing admin headline/pitch generation workflow. Grok creates the
 headline, subheadline, and excerpt, handles pitch revisions, and shortens supporting
 text when necessary. The selected pitch is preserved by the article-writing stage.
-`XAI_HEADLINE_MODEL` is optional. The integration uses xAI's
+Use the optional `HEADLINE_MODEL` override for either provider. Without it, OpenAI uses `gpt-6.1-terra` and Grok uses `grok-4.20-0309-non-reasoning`. The integration uses xAI's
 [OpenAI-compatible chat endpoint](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions).
 
 Keep `OPENAI_API_KEY` configured: article bodies, pitch evaluators, translations,
 and images still use OpenAI. Existing language, style, and quality checks also apply
 to Grok pitches. Missing xAI credentials or API errors do not silently switch to
-OpenAI. Set `HEADLINE_PROVIDER=openai` to switch back; existing `OPENAI_DRAFT_MODEL`
-settings apply unless overridden by `OPENAI_HEADLINE_MODEL`. For Terra pitches set `HEADLINE_PROVIDER=openai` and `OPENAI_HEADLINE_MODEL=gpt-6.1-terra`. Keys stay on the server.
+OpenAI. Set `HEADLINE_PROVIDER=openai` to switch back. Clear any model override when switching to the other provider’s default. Keys stay on the server.
 
 ### Storage (one provider required)
 

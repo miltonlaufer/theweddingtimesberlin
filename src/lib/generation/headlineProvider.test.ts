@@ -10,10 +10,10 @@ describe('headline provider', () => {
     vi.clearAllMocks()
   })
 
-  it('preserves the OpenAI draft model precedence by default', () => {
+  it('uses the shared model override for OpenAI', () => {
     vi.stubEnv('HEADLINE_PROVIDER', '')
     vi.stubEnv('OPENAI_API_KEY', 'openai-test')
-    vi.stubEnv('OPENAI_DRAFT_MODEL', 'draft-model')
+    vi.stubEnv('HEADLINE_MODEL', 'draft-model')
     createHeadlineModel()
     expect(ChatOpenAI).toHaveBeenCalledWith({
       apiKey: 'openai-test',
@@ -25,7 +25,7 @@ describe('headline provider', () => {
   it('routes Grok to xAI with its own key and model', () => {
     vi.stubEnv('HEADLINE_PROVIDER', 'grok')
     vi.stubEnv('XAI_API_KEY', 'xai-test')
-    vi.stubEnv('XAI_HEADLINE_MODEL', 'grok-test')
+    vi.stubEnv('HEADLINE_MODEL', 'grok-test')
     vi.stubEnv('OPENAI_API_KEY', '')
     createHeadlineModel()
     expect(ChatOpenAI).toHaveBeenCalledWith({
@@ -40,7 +40,7 @@ describe('headline provider', () => {
   it('uses a default Grok model', () => {
     vi.stubEnv('HEADLINE_PROVIDER', 'grok')
     vi.stubEnv('XAI_API_KEY', 'xai-test')
-    vi.stubEnv('XAI_HEADLINE_MODEL', '')
+    vi.stubEnv('HEADLINE_MODEL', '')
     createHeadlineModel()
     expect(ChatOpenAI).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'grok-4.20-0309-non-reasoning' }),
