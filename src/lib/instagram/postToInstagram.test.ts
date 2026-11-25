@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => ({
   writeStoredInstagramAccessToken: vi.fn(),
 }))
 
+vi.mock('./articleHashtags', () => ({
+  appendArticleHashtags: async (caption: string) => caption + '\n\n#berlin #berlinwedding #news',
+}))
+
 vi.mock('./instagramTokenStore', () => ({
   readStoredInstagramAccessToken: mocks.readStoredInstagramAccessToken,
   refreshInstagramAccessToken: mocks.refreshInstagramAccessToken,

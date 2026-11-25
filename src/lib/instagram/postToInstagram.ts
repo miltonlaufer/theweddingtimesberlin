@@ -1,3 +1,4 @@
+import { appendArticleHashtags } from './articleHashtags'
 /**
  * Publish a single image with caption to Instagram using the Graph API.
  * Uses the Instagram API with Instagram Login token flow.
@@ -334,14 +335,15 @@ export async function postToInstagram(
   if (!imageUrl?.trim() || !caption?.trim()) {
     return { ok: false, error: 'imageUrl and caption are required' }
   }
+  const taggedPost = {
+    imageUrl,
+    caption: await appendArticleHashtags(caption),
+    altText,
+    locationId,
+  }
   const deadlineMs = Date.now() + CONTAINER_POLL_TIMEOUT_MS
 
-  const initial = await publishWithToken(
-    { imageUrl, caption, altText, locationId },
-    igUserId,
-    token.accessToken,
-    deadlineMs,
-  )
+  const initial = await publishWithToken(taggedPost, igUserId, token.accessToken, deadlineMs)
   if (initial.ok || !isTokenRejection(initial.error)) {
     return initial
   }
@@ -351,12 +353,7 @@ export async function postToInstagram(
     console.warn(
       '[Instagram] Access token was rejected; refreshed token and retrying publish once.',
     )
-    const retried = await publishWithToken(
-      { imageUrl, caption, altText, locationId },
-      igUserId,
-      refreshed.accessToken,
-      deadlineMs,
-    )
+    const retried = await publishWithToken(taggedPost, igUserId, refreshed.accessToken, deadlineMs)
     if (retried.ok || token.source === 'env') {
       return retried
     }
@@ -367,7 +364,7 @@ export async function postToInstagram(
     if (envToken && envToken.accessToken !== token.accessToken) {
       console.warn('[Instagram] Stored token was rejected; falling back to env token once.')
       const fallbackResult = await publishWithToken(
-        { imageUrl, caption, altText, locationId },
+        taggedPost,
         igUserId,
         envToken.accessToken,
         deadlineMs,
