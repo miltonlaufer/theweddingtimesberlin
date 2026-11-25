@@ -648,7 +648,7 @@ async function evaluateDraftTone(
     '',
     'JSON schema:',
     '{ "funScore": number, "mercilessScore": number, "specificityScore": number, "conceptualInnuendoPass": boolean, "supportingTextSatirePass": boolean, "innuendoEvidence": { "wording": string, "literalReading": string, "sexualReading": string }, "surrealPataphysicsPass": boolean, "metaCommentaryPass": boolean, "pass": boolean, "reason": string }',
-    'Quote the exact innuendo wording and explain its literal and sexual readings in innuendoEvidence. If no coherent double meaning is recognizable, omit the innuendoEvidence property. This is descriptive only. Never reject or reduce scores for absent innuendo.',
+    'Quote the exact innuendo wording and explain its literal and sexual readings in innuendoEvidence. If no coherent double meaning is recognizable, return empty strings in all three innuendoEvidence fields. This is descriptive only. Never reject or reduce scores for absent innuendo.',
     '',
     'Set conceptualInnuendoPass=false when the headline lacks the conceptual sexual double meaning or merely adds a dirty word or suggestive phrase.',
     'Read all three fields in order. Ask what the reader newly understands about the same target after each supporting field. Fail supportingTextSatirePass if a field only supplies logistics, repeats the incentive in other words, or explains an already visible joke. If the strongest comic action is buried, tell the editor to move it into the headline and develop its consequences. Give specific feedback within 300 characters.',
@@ -658,10 +658,50 @@ async function evaluateDraftTone(
     'Set pass=true only when supportingTextSatirePass is true, metaCommentaryPass is true, all scores are >= 7, and the pitch has specific social bite. Do not penalize understated wording or demand explicit sexual vocabulary.',
   ].join('\n')
 
-  const raw = await llm.invoke([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt },
-  ])
+  const score = { type: 'integer', minimum: 1, maximum: 10 }
+  const flag = { type: 'boolean' }
+  const properties = {
+    funScore: score,
+    mercilessScore: score,
+    specificityScore: score,
+    conceptualInnuendoPass: flag,
+    supportingTextSatirePass: flag,
+    surrealPataphysicsPass: flag,
+    metaCommentaryPass: flag,
+    pass: flag,
+    reason: { type: 'string' },
+    innuendoEvidence: {
+      type: 'object',
+      properties: {
+        wording: { type: 'string' },
+        literalReading: { type: 'string' },
+        sexualReading: { type: 'string' },
+      },
+      required: ['wording', 'literalReading', 'sexualReading'],
+      additionalProperties: false,
+    },
+  }
+  const raw = await llm.invoke(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    {
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'draft_tone',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties,
+            required: Object.keys(properties),
+            additionalProperties: false,
+          },
+        },
+      },
+    },
+  )
 
   const text = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content)
   const parsed = JSON.parse(extractFirstJsonObject(text)) as unknown
