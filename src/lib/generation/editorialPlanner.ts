@@ -1,3 +1,4 @@
+import { assignPataphysicalRules } from './pataphysicalRules'
 import type { RecentCoverageItem, SlotConfig } from './pipelineTypes'
 import { buildBatchStyleDirections } from './styleDiversity'
 
@@ -233,9 +234,13 @@ export function planEditorialSlots(args: PlanEditorialSlotsArgs): EditorialPlan 
 
   const limitedThemes = plannedThemes.slice(0, count)
   const styleDirections = buildBatchStyleDirections(count, args.recentCoverage)
+  const pataphysicalRules = assignPataphysicalRules(count)
   const slots = limitedThemes.map((theme, index) => {
     const slot = slotForTheme(theme, includeHumorPerspectiveMethod)
-    return { ...slot, editorDirection: `${slot.editorDirection} ${styleDirections[index]}` }
+    return {
+      ...slot,
+      editorDirection: `${slot.editorDirection} ${styleDirections[index]} ${pataphysicalRules[index]}`,
+    }
   })
 
   return {

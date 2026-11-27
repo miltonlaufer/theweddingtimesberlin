@@ -533,7 +533,7 @@ const AVOID_OVERUSED_THEMES = [
 
 export const CONCEPTUAL_SEXUAL_INNUENDO_REQUIREMENTS = [
   'CONCEPTUAL SEXUAL INNUENDO — NATURAL DOUBLE MEANING:',
-  '- Find what one party needs the other to do. Give that relationship one impossible property. Write the moment somebody has to act on it.',
+  '- Follow the assigned pataphysical rule in the editorial direction when present, preserving it through revisions. Without an assignment, find what one party needs the other to do. Give that relationship one impossible property. Write the moment somebody has to act on it.',
   '- Strongly favor an erotic undertone when it grows out of that dependence. Keep the participants entirely serious. Privately ask whether the joke could survive swapping in a different news story; if so, find another premise.',
   '- Put the funniest visible action in the headline. Advance the scene in the subheadline and end the excerpt on one further concrete action. Keep the imaginary rule implicit when the action makes it clear.',
   '- Only use a sexual double meaning when it emerges from the core comedic relationship rather than replacing the news event.',
